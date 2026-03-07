@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 27.9.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 24 24" style="enable-background:new 0 0 24 24;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:none;}
+	.st1{clip-path:url(#SVGID_00000172440134312384291460000013659709150657402270_);}
+	.st2{fill:#41BA77;}
+</style>
+<g id="banglow" transform="translate(-34 -333)">
+	<path id="Rectangle_1058" class="st0" d="M39,333h14c2.8,0,5,2.2,5,5v14c0,2.8-2.2,5-5,5H39c-2.8,0-5-2.2-5-5v-14
+		C34,335.2,36.2,333,39,333z"/>
+	<g>
+		<g>
+			<defs>
+				<rect id="SVGID_1_" x="36" y="335" width="20" height="20"/>
+			</defs>
+			<clipPath id="SVGID_00000109731081377850413750000003603001703855002541_">
+				<use xlink:href="#SVGID_1_"  style="overflow:visible;"/>
+			</clipPath>
+			<g id="Mask_Group_53" style="clip-path:url(#SVGID_00000109731081377850413750000003603001703855002541_);">
+				<g id="_03" transform="translate(-356 940)">
+					<path id="Path_11311" class="st2" d="M412-585h-20v-1.2h1.3v-0.3c0-4.7,0-9.4,0-14.1c0-0.2,0.1-0.3,0.3-0.3
+						c0.4,0,0.7-0.1,1.1-0.2v-3.9h6.5v2.8l1.3-0.2v2.8h8.1v13.5h1.3v1.1H412z M394.5-599.9v13.7h1.5v-2.7h3.9v2.7h1.5V-601
+						L394.5-599.9z M409.5-598.4h-6.9v12.3h6.9V-598.4z M395.9-601.3l4.2-0.7v-1.8h-4.2V-601.3z M398.7-586.2v-1.5h-1.5v1.5H398.7z"
+						/>
+					<path id="Path_11312" class="st2" d="M398.7-599.6h1.1v1.1h-1.1V-599.6z"/>
+					<path id="Path_11313" class="st2" d="M396-590.4v-1.1h1.1v1.1H396z"/>
+					<path id="Path_11314" class="st2" d="M398.7-591.5h1.1v1.1h-1.1V-591.5z"/>
+					<path id="Path_11315" class="st2" d="M396-595.8v-1.1h1.1v1.1H396z"/>
+					<path id="Path_11316" class="st2" d="M399.9-595.8h-1.1v-1.1h1.1V-595.8z"/>
+					<path id="Path_11317" class="st2" d="M397.2-593.1H396v-1.1h1.1v1.1H397.2z"/>
+					<path id="Path_11318" class="st2" d="M398.7-594.2h1.1v1.1h-1.1V-594.2z"/>
+					<path id="Path_11319" class="st2" d="M404.1-591.5h1.1v1.1h-1.1V-591.5z"/>
+					<path id="Path_11320" class="st2" d="M408-591.5v1.1h-1.2v-1.1H408z"/>
+					<path id="Path_11321" class="st2" d="M405.3-588.8v1.1h-1.1v-1.1H405.3z"/>
+					<path id="Path_11322" class="st2" d="M408-588.8v1.1h-1.1v-1.1H408z"/>
+					<path id="Path_11323" class="st2" d="M405.3-596.9v1.1h-1.2v-1.1H405.3z"/>
+					<path id="Path_11324" class="st2" d="M408-596.9v1.1h-1.1v-1.1H408z"/>
+					<path id="Path_11325" class="st2" d="M404.1-594.2h1.1v1.1h-1.1V-594.2z"/>
+					<path id="Path_11326" class="st2" d="M406.8-593.1v-1.1h1.2v1.1H406.8z"/>
+				</g>
+			</g>
+		</g>
+	</g>
+</g>
+</svg>
