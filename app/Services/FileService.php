@@ -127,10 +127,11 @@ class FileService
     public static function getAbsolutePath(string $disk, string $filePath): ?string
     {
         try {
-            $diskInstance = Storage::disk($disk);
-
-            if (method_exists($diskInstance, 'path')) {
-                $absolutePath = $diskInstance->path($filePath);
+            if ($disk === 'local') {
+                $absolutePath = storage_path('app') . '/' . ltrim($filePath, '/');
+                return file_exists($absolutePath) ? $absolutePath : null;
+            } elseif ($disk === 'public') {
+                $absolutePath = storage_path('app/public') . '/' . ltrim($filePath, '/');
                 return file_exists($absolutePath) ? $absolutePath : null;
             }
         } catch (Exception $e) {
@@ -236,7 +237,7 @@ class FileService
                 $storagePath = Cache::get($cacheKey);
             }
 
-            return Storage::disk($filesystem)->url($storagePath);
+            return Storage::url($storagePath);
 
         } catch (Exception $e) {
             Log::error("FileService getCachedBlurImageUrl error: " . $e->getMessage());
