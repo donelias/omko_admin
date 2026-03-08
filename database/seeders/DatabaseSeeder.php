@@ -198,6 +198,13 @@ class DatabaseSeeder extends Seeder
         foreach ($settingsData as $setting) {
             DB::table('settings')->insertOrIgnore($setting);
         }
+
+        // Register SVG icons for categories, facilities and places
+        $this->call([
+            CategoryIconsSeeder::class,
+            OutdoorFacilitiesIconsSeeder::class,
+            FacilitiesIconsSeeder::class,
+        ]);
     }
 }
 
