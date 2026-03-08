@@ -127,11 +127,14 @@ class FileService
     public static function getAbsolutePath(string $disk, string $filePath): ?string
     {
         try {
+            // Remove leading slash for consistency
+            $filePath = ltrim($filePath, '/');
+            
             if ($disk === 'local') {
-                $absolutePath = storage_path('app') . '/' . ltrim($filePath, '/');
+                $absolutePath = storage_path('app') . '/' . $filePath;
                 return file_exists($absolutePath) ? $absolutePath : null;
             } elseif ($disk === 'public') {
-                $absolutePath = storage_path('app/public') . '/' . ltrim($filePath, '/');
+                $absolutePath = storage_path('app/public') . '/' . $filePath;
                 return file_exists($absolutePath) ? $absolutePath : null;
             }
         } catch (Exception $e) {
@@ -146,6 +149,9 @@ class FileService
      */
     public static function getFileUrl(string $imagePath): ?string
     {
+        // Remove leading slash if present (Storage::url expects path without leading /)
+        $imagePath = ltrim($imagePath, '/');
+        
         if(self::fileExists($imagePath)){
             return Storage::url($imagePath);
         }

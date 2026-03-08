@@ -61,8 +61,9 @@ class VerifyCustomerValue extends Model
                     if (filter_var($value, FILTER_VALIDATE_URL)) {
                         // Extract the file name from the URL
                         $fileName = basename($value);
-                        // Regenerate the URL
-                        return url('') . config('global.IMG_PATH') . config('global.AGENT_VERIFICATION_DOC_PATH') . $fileName;
+                        // Regenerate the URL without double slashes
+                        $path = config('global.AGENT_VERIFICATION_DOC_PATH') . $fileName;
+                        return FileService::getFileUrl($path);
                     } else {
                         return FileService::getFileUrl(config('global.AGENT_VERIFICATION_DOC_PATH') . $value);
                     }
