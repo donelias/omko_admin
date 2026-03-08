@@ -25,11 +25,30 @@ return new class extends Migration
     public function up(): void
     {
 
-        // Clear all caches before running migration
-        Artisan::call('cache:clear');
-        Artisan::call('config:clear');
-        Artisan::call('route:clear');
-        Artisan::call('view:clear');
+        // Clear all caches before running migration - protect with try-catch
+        try {
+            Artisan::call('cache:clear');
+        } catch (\Exception $e) {
+            // Cache table might not exist yet, skip
+        }
+        
+        try {
+            Artisan::call('config:clear');
+        } catch (\Exception $e) {
+            // Ignore errors
+        }
+        
+        try {
+            Artisan::call('route:clear');
+        } catch (\Exception $e) {
+            // Ignore errors
+        }
+        
+        try {
+            Artisan::call('view:clear');
+        } catch (\Exception $e) {
+            // Ignore errors
+        }
 
         /**
          * Project Request Status
