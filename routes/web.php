@@ -76,10 +76,13 @@ Route::get('payment/success/web', [PaymentController::class, 'paymentSuccessWeb'
 Route::get('payment/cancel', [PaymentController::class, 'paymentCancel'])->name('payment.cancel');
 Route::get('payment/cancel/web', [PaymentController::class, 'paymentCancelWeb'])->name('payment.cancel.web');
 
-Route::group(['prefix' => 'install'], static function () {
-    Route::get('purchase-code', [InstallerController::class, 'purchaseCodeIndex'])->name('install.purchase-code.index');
-    Route::post('purchase-code', [InstallerController::class, 'checkPurchaseCode'])->name('install.purchase-code.post');
-});
+// Installer routes - disabled for production
+if (app()->isLocal() && env('ENABLE_INSTALLER', false)) {
+    Route::group(['prefix' => 'install'], static function () {
+        Route::get('purchase-code', [InstallerController::class, 'purchaseCodeIndex'])->name('install.purchase-code.index');
+        Route::post('purchase-code', [InstallerController::class, 'checkPurchaseCode'])->name('install.purchase-code.post');
+    });
+}
 
 // Redirect "property-details" links to app for mobile devices
 Route::get('property-details/{slug}', [DeepLinkController::class, 'handle']);

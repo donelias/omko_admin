@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('price_suggestions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('property_id')->constrained('properties')->onDelete('cascade');
+            $table->foreignId('property_id')->constrained('propertys')->onDelete('cascade');
             $table->decimal('suggested_price', 15, 2);
             $table->decimal('suggested_price_per_sqm', 10, 2)->nullable();
             $table->decimal('minimum_price', 15, 2);

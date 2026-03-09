@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('whatsapp')->nullable();
             
             // Relaciones
-            $table->foreignId('property_id')->nullable()->constrained('properties')->onDelete('set null');
+            $table->foreignId('property_id')->nullable()->constrained('propertys')->onDelete('set null');
             $table->foreignId('agent_id')->constrained('users')->onDelete('cascade');
             
             // Estado

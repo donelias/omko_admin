@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('price_history', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('property_id')->constrained('properties')->onDelete('cascade');
+            $table->foreignId('property_id')->constrained('propertys')->onDelete('cascade');
             $table->decimal('price', 15, 2);
             $table->decimal('price_per_sqm', 10, 2)->nullable();
             $table->enum('status', ['listed', 'sold', 'rented', 'price_changed', 'delisted'])->default('listed');
