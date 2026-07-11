@@ -375,6 +375,80 @@ class PropertyApiController extends Controller
         }
     }
 
+    public function getAddedProperties(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'offset' => 'nullable|numeric',
+                'limit' => 'nullable|numeric',
+                'slug_id' => 'nullable|string',
+                'is_promoted' => 'nullable|in:0,1',
+                'request_status' => 'nullable|string',
+                'property_type' => 'nullable|string',
+                'added_as' => 'nullable|string',
+            ]);
+            if ($validator->fails()) {
+                ApiResponseService::validationError($validator->errors()->first());
+            }
+
+            $user = Auth::user();
+            if (! $user) {
+                ApiResponseService::errorResponse('User is not authenticated');
+            }
+
+            $offset = $request->offset ?? 0;
+            $limit = $request->limit ?? 10;
+
+            $propertyQuery = Property::where('added_by', $user->id)
+                ->whereIn('propery_type', [0, 1]);
+
+            if (! empty($request->slug_id)) {
+                $propertyQuery = $propertyQuery->where('slug_id', $request->slug_id);
+            }
+
+            if (isset($request->is_promoted) && $request->is_promoted !== '') {
+                $propertyQuery = $propertyQuery->where('is_promoted', $request->is_promoted);
+            }
+
+            if (! empty($request->request_status)) {
+                $propertyQuery = $propertyQuery->where('request_status', $request->request_status);
+            }
+
+            if (isset($request->property_type) && $request->property_type !== '' && $request->property_type !== ' ') {
+                $propertyQuery = $propertyQuery->where('propery_type', $request->property_type);
+            }
+
+            if (! empty($request->added_as)) {
+                $propertyQuery = $propertyQuery->where('role_context', $request->added_as);
+            }
+
+            $total = $propertyQuery->count();
+            $result = $propertyQuery->orderBy('id', 'DESC')
+                ->skip($offset)
+                ->take($limit)
+                ->select('id', 'slug_id', 'category_id', 'title', 'added_by', 'role_context', 'address', 'city', 'country', 'state', 'propery_type', 'price', 'currency', 'created_at', 'title_image', 'request_status', 'is_premium')
+                ->get()
+                ->map(function ($item) {
+                    $item->currency = strtoupper($item->currency ?? 'USD');
+                    return $item;
+                });
+
+            return response()->json([
+                'error' => false,
+                'total' => $total,
+                'data' => $result,
+                'message' => 'Data Fetched Successfully',
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage(),
+                'details' => $e->getMessage(),
+                'code' => 500,
+            ], 500);
+        }
+    }
+
     // Get property advance filter data
     public function propertyAdvanceFilterData()
     {

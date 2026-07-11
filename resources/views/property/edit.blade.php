@@ -128,6 +128,12 @@
                         {{ Form::label('price', __('Price') . '(' . $currency_symbol . ')', ['class' => 'form-label col-12 ']) }}
                         {{ Form::number('price', isset($list->price) ? $list->price : '', ['class' => 'form-control ', 'placeholder' => __('Price'), 'required' => 'true', 'min' => '1', 'max' => '9223372036854775807', 'id' => 'price']) }}
                     </div>
+
+                    {{-- Currency --}}
+                    <div class="control-label col-12 form-group mandatory">
+                        {{ Form::label('currency', __('Currency'), ['class' => 'form-label col-12']) }}
+                        {{ Form::select('currency', ['USD' => 'USD', 'DOP' => 'RD$'], isset($list->currency) ? $list->currency : 'USD', ['class' => 'form-select', 'required' => true]) }}
+                    </div>
                 </div>
             </div>
         </div>

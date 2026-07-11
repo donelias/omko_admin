@@ -119,6 +119,7 @@ class PropertController extends Controller
                 $saveProperty->client_address = $request->client_address;
                 $saveProperty->propery_type = $request->property_type;
                 $saveProperty->price = $request->price;
+                $saveProperty->currency = $request->currency ?? 'USD';
                 $saveProperty->request_status = 'approved';
                 $saveProperty->status = 1;
                 $saveProperty->package_id = 0;
@@ -412,6 +413,7 @@ class PropertController extends Controller
                 $UpdateProperty->client_address = $request->client_address;
                 $UpdateProperty->propery_type = $request->property_type;
                 $UpdateProperty->price = $request->price;
+                $UpdateProperty->currency = $request->currency ?? $UpdateProperty->currency ?? 'USD';
                 $UpdateProperty->propery_type = $request->property_type;
                 $UpdateProperty->price = $request->price;
                 $UpdateProperty->state = (isset($request->state)) ? $request->state : '';
