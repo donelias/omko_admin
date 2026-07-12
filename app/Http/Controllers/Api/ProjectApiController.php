@@ -14,6 +14,7 @@ use App\Models\Property;
 use App\Models\User;
 use App\Rules\VideoUrlRule;
 use App\Services\ApiResponseService;
+use App\Services\BulkProjectUnitImportService;
 use App\Services\FileService;
 use App\Services\HelperService;
 use App\Services\ProjectUnitSyncService;
@@ -1515,6 +1516,120 @@ class ProjectApiController extends Controller
         }
 
         return $project;
+    }
+
+    public function previewImport(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'project_id' => 'required|integer|exists:projects,id',
+            'file' => 'required|file|mimes:csv,xlsx,xls|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+            ]);
+        }
+
+        try {
+            $project = Projects::findOrFail($request->project_id);
+            $service = app(BulkProjectUnitImportService::class);
+            $rows = $service->parse($request->file('file'));
+
+            if (empty($rows)) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'No valid rows found in the file.',
+                ]);
+            }
+
+            $errors = $service->validateRows($rows, $project);
+            $validRows = $rows;
+
+            if (! empty($errors)) {
+                $errorRowNums = collect($errors)->pluck('row')->toArray();
+                $validRows = array_values(array_filter($rows, function ($idx) use ($errorRowNums) {
+                    return ! in_array($idx + 2, $errorRowNums);
+                }, ARRAY_FILTER_USE_KEY));
+            }
+
+            $preview = $service->preview($validRows, $project);
+
+            return response()->json([
+                'error' => false,
+                'data' => [
+                    'total_rows' => count($rows),
+                    'valid_rows' => count($validRows),
+                    'errors' => $errors,
+                    'preview' => $preview,
+                    'columns' => ! empty($rows) ? array_keys($rows[0]) : [],
+                ],
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function bulkImportUnits(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'project_id' => 'required|integer|exists:projects,id',
+            'file' => 'required|file|mimes:csv,xlsx,xls|max:5120',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+            ]);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $project = Projects::findOrFail($request->project_id);
+            $service = app(BulkProjectUnitImportService::class);
+            $rows = $service->parse($request->file('file'));
+
+            if (empty($rows)) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'No valid rows found in the file.',
+                ]);
+            }
+
+            $errors = $service->validateRows($rows, $project);
+            if (! empty($errors)) {
+                DB::rollBack();
+
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Validation errors found. Please use preview first.',
+                    'errors' => $errors,
+                ]);
+            }
+
+            $result = $service->import($rows, $project);
+
+            DB::commit();
+
+            return response()->json([
+                'error' => false,
+                'message' => "{$result['created']} created, {$result['updated']} updated ({$result['total']} total).",
+                'data' => $result,
+            ]);
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function uploadProjectDocument(Request $request)

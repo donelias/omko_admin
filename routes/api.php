@@ -114,6 +114,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::get('get-added-projects', [ProjectApiController::class, 'getAddedProjects'])->name('get-added-projects');
     Route::post('change-project-status', [ProjectApiController::class, 'changeProjectStatus'])->name('change-project-status');
     Route::post('upload-project-document', [ProjectApiController::class, 'uploadProjectDocument'])->name('upload-project-document');
+    Route::post('preview-import-units', [ProjectApiController::class, 'previewImport'])->name('preview-import-units');
+    Route::post('bulk-import-units', [ProjectApiController::class, 'bulkImportUnits'])->name('bulk-import-units');
     /*********************************************************************** */
 
     /** Agent Specific Action APIs */
