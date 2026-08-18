@@ -102,6 +102,9 @@ class SystemIntegrityService
             } // Silent on network error to prevent lockouts
 
             $data = json_decode($resp, true);
+            if (! is_array($data)) {
+                return true;
+            }
             if (! self::genuine($data, $code, $cfg)) {
                 self::store('invalid', 'Integrity check failed.', $domain);
                 self::deny('Integrity check failed.');

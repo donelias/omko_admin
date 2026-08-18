@@ -15,6 +15,7 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class SettingsApiController extends Controller
@@ -309,12 +310,16 @@ class SettingsApiController extends Controller
 
             return response()->json($response);
         } catch (Exception $e) {
-            $response = [
+            Log::error('getWebSettings error: '.$e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
                 'error' => true,
                 'message' => trans('Something Went Wrong'),
-            ];
-
-            return response()->json($response, 500);
+            ], 500);
         }
     }
 

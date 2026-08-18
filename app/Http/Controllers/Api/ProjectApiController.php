@@ -1506,6 +1506,7 @@ class ProjectApiController extends Controller
             $plan->total_units = $unit->total_units;
             $plan->available_units = $unit->available_units;
             $plan->unit_status = $unit->unit_status;
+            $plan->property_id = $unit->id;
             $plan->category_id = $unit->category_id;
             $plan->country = $unit->country;
             $plan->state = $unit->state;
@@ -1578,7 +1579,10 @@ class ProjectApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'project_id' => 'required|integer|exists:projects,id',
-            'file' => 'required|file|mimes:csv,xlsx,xls|max:5120',
+            'rows' => 'required|json',
+            'same_as_previous' => 'nullable|json',
+            'images' => 'nullable|array',
+            'images.*' => 'file|mimes:jpeg,png,jpg,gif,webp|max:5120',
         ]);
 
         if ($validator->fails()) {
@@ -1593,27 +1597,21 @@ class ProjectApiController extends Controller
 
             $project = Projects::findOrFail($request->project_id);
             $service = app(BulkProjectUnitImportService::class);
-            $rows = $service->parse($request->file('file'));
 
+            $rows = json_decode($request->rows, true);
             if (empty($rows)) {
                 return response()->json([
                     'error' => true,
-                    'message' => 'No valid rows found in the file.',
+                    'message' => 'No valid rows provided.',
                 ]);
             }
 
-            $errors = $service->validateRows($rows, $project);
-            if (! empty($errors)) {
-                DB::rollBack();
+            $imageFiles = $request->file('images', []);
+            $sameAsPrev = $request->filled('same_as_previous')
+                ? json_decode($request->same_as_previous, true)
+                : [];
 
-                return response()->json([
-                    'error' => true,
-                    'message' => 'Validation errors found. Please use preview first.',
-                    'errors' => $errors,
-                ]);
-            }
-
-            $result = $service->import($rows, $project);
+            $result = $service->importWithImages($rows, $project, $imageFiles, $sameAsPrev);
 
             DB::commit();
 
@@ -1662,5 +1660,66 @@ class ProjectApiController extends Controller
             'filename' => $filename,
             'url' => FileService::getFileUrl(config('global.PROJECT_DOCUMENT_PATH') . $filename),
         ]);
+    }
+
+    public function updatePlanStatus(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'plan_id' => 'required|integer|exists:project_plans,id',
+            'unit_status' => 'required|in:available,low_stock,sold_out,inactive',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponseService::errorResponse($validator->errors()->first());
+        }
+
+        try {
+            $plan = ProjectPlans::findOrFail($request->plan_id);
+            $project = Projects::findOrFail($plan->project_id);
+
+            $unitCode = 'PLAN_'.$plan->id;
+
+            $property = Property::where('project_id', $project->id)
+                ->where('is_project_unit', true)
+                ->where(function ($q) use ($unitCode, $plan) {
+                    $q->where('unit_code', $unitCode)
+                      ->orWhere('title', $plan->title);
+                })
+                ->first();
+
+            if (! $property) {
+                return ApiResponseService::errorResponse('No unit found for this plan');
+            }
+
+            $unitStatus = $request->unit_status;
+            $property->unit_status = $unitStatus;
+
+            switch ($unitStatus) {
+                case 'sold_out':
+                    $property->available_units = 0;
+                    break;
+                case 'available':
+                    $property->available_units = $property->total_units ?? 1;
+                    break;
+                case 'low_stock':
+                    if (($property->available_units ?? 0) > 3) {
+                        $property->available_units = 3;
+                    } elseif ($property->available_units === null) {
+                        $property->available_units = 1;
+                    }
+                    break;
+            }
+
+            $property->save();
+
+            return ApiResponseService::successResponse('Plan status updated successfully', [
+                'property_id' => $property->id,
+                'unit_status' => $property->unit_status,
+                'available_units' => $property->available_units,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error updating plan status: '.$e->getMessage());
+            return ApiResponseService::errorResponse('Failed to update plan status');
+        }
     }
 }

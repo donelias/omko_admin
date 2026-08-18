@@ -58,6 +58,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::get('get_interested_users', [PropertyApiController::class, 'getInterestedUsers'])->name('get-interested-users');
     Route::post('remove_post_images', [PropertyApiController::class, 'remove_post_images'])->name('remove-post-images');
     Route::post('user_interested_property', [PropertyApiController::class, 'user_interested_property'])->name('user-interested-property');
+    Route::post('update-unit-status', [PropertyApiController::class, 'updateUnitStatus'])->name('update-unit-status');
+    Route::post('update-plan-status', [ProjectApiController::class, 'updatePlanStatus'])->name('update-plan-status');
 
     /*********************************************************************** */
 

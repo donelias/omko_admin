@@ -632,8 +632,8 @@ class HomepageApiController extends Controller
                 }
             } else {
                 $agentsQuery->withCount([
-                    'properties' => function ($query) { $query->where(['status' => 1, 'request_status' => 'approved']); },
-                    'projects' => function ($query) { $query->where(['status' => 1, 'request_status' => 'approved']); }
+                    'property' => function ($query) { $query->where(['status' => 1, 'request_status' => 'approved', 'role_context' => 'agent']); },
+                    'projects' => function ($query) { $query->where(['status' => 1, 'request_status' => 'approved', 'role_context' => 'agent']); }
                 ]);
             }
 
