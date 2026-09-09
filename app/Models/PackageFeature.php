@@ -2,29 +2,31 @@
 
 namespace App\Models;
 
+use App\Traits\HasAppTimezone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\HasAppTimezone;
+
 class PackageFeature extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
-    protected $hidden = array('created_at','updated_at','deleted_at');
-    protected $fillable = array(
+
+    protected $hidden = ['created_at', 'updated_at', 'deleted_at'];
+
+    protected $fillable = [
         'id',
         'package_id',
         'feature_id',
         'limit_type',
-        'limit'
-    );
-
+        'limit',
+    ];
 
     /** Relations */
 
     /**
      * Get the package that owns the PackageFeature
-     *
-    */
+     */
     public function package()
     {
         return $this->belongsTo(Package::class, 'package_id')->withTrashed();
@@ -32,8 +34,7 @@ class PackageFeature extends Model
 
     /**
      * Get the feature that owns the PackageFeature
-     *
-    */
+     */
     public function feature()
     {
         return $this->belongsTo(Feature::class, 'feature_id');
@@ -41,7 +42,6 @@ class PackageFeature extends Model
 
     /**
      * Get all of the user_package_limits for the PackageFeature
-     *
      */
     public function user_package_limits()
     {

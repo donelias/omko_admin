@@ -11,7 +11,7 @@
                 <h4>@yield('title')</h4>
             </div>
             <div class="col-12 col-md-6 order-md-2 order-first">
-                <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-lg-end">
+                <nav aria-label="breadcrumb" class="breadcrumb-header float-start float-md-end float-lg-end">
                     <ol class="breadcrumb">
                         <li class="breadcrumb-item">
                             <a href="{{ route('article.index') }}" id="subURL">{{ __('View Article') }}</a>
@@ -26,10 +26,11 @@
     </div>
 @endsection
 
+
 @section('content')
     <section class="section">
-        <div class="row">
-            <div class="col-md-7 col-sm-12">
+        <div class="row article-form-layout">
+            <div class="col-12 col-xxl-7 article-form-main">
                 <div class="card">
                     <div class="card-header add_article_header">
                         {{ __('New Article') }}
@@ -59,7 +60,7 @@
                                     @foreach ($category as $row)
                                         <option value="{{ $row->id }}"
                                             data-parametertypes='{{ $row->parameter_types }}'>
-                                            {{ $row->category }}
+                                            {{ $row->translated_name }}
                                         </option>
                                     @endforeach
                                 </select>
@@ -106,7 +107,7 @@
                                 <div class="card">
                                     <h3 class="card-header">{{ __('Translations for Article') }}</h3>
                                     <hr>
-                                    <div class="card-body">
+                                    <div class="card-body p-0">
                                         {{-- Fields for Translations --}}
                                         @foreach($languages as $key =>$language)
                                             <div class="bg-light p-3 mt-2 rounded">
@@ -138,7 +139,7 @@
                 </div>
             </div>
 
-            <div class="col-md-5 col-sm-12">
+            <div class="col-12 col-xxl-5 article-form-sidebar">
 
                 <div class="card">
                     <div class="card-header add_article_header">

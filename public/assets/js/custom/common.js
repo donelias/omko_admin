@@ -9,7 +9,7 @@ $('#edit-form,.edit-form,.edit-form-without-reset').on('submit', function (e) {
     let formElement = $(this);
     let submitButtonElement = $(this).find(':submit');
     let submitButtonText = submitButtonElement.val();
-    submitButtonElement.val(window.trans['Please Wait...']).attr('disabled', true);
+    submitButtonElement.data('original-text', submitButtonText).val(window.trans['Please Wait...']).attr('disabled', true);
     let data = new FormData(this);
     data.append("_method", "PUT");
     let url = ""
@@ -37,14 +37,14 @@ $('#edit-form,.edit-form,.edit-form-without-reset').on('submit', function (e) {
                     FilePond.find(document.querySelector('.filepond')).removeFiles();
                 }
             }
-            submitButtonElement.val(submitButtonText).attr('disabled', false);
         }, 1000)
         if (customSuccessFunction) {
             //If custom function name is set in the Form tag then call that function using eval
             eval(customSuccessFunction + "(response)");
         }
     }
-
+    
+    submitButtonElement.val(submitButtonText).attr('disabled', false);
     formAjaxRequest('POST', url, data, formElement, submitButtonElement, successCallback);
 })
 
@@ -96,7 +96,6 @@ $(document).on('click', '.delete-form', function (e) {
         successCallBack: function (response) {
             $('#table_list').bootstrapTable('refresh');
         }, errorCallBack: function (response) {
-            showErrorToast(response.message);
         }
     })
 })
@@ -108,7 +107,6 @@ $(document).on('click', '.update-status', function (e) {
         successCallBack: function () {
             // $('#table_list').bootstrapTable('refresh');
         }, errorCallBack: function (response) {
-            showErrorToast(response.message);
         }
     })
 })

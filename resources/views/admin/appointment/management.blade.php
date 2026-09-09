@@ -28,19 +28,11 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2">
-                            <div class="card-tools w-100 w-md-auto">
-                                <div class="d-flex flex-wrap gap-2" role="group" aria-label="Appointment filters">
-                                    <button type="button" class="btn btn-outline-primary filter-btn active" data-filter="all">
-                                        {{ __('All Appointments') }}
-                                    </button>
-                                    <button type="button" class="btn btn-outline-primary filter-btn" data-filter="admin">
-                                        {{ __('Admin Appointments') }}
-                                    </button>
-                                    <button type="button" class="btn btn-outline-primary filter-btn" data-filter="other">
-                                        {{ __('Other Appointments') }}
-                                    </button>
-                                </div>
+                        <div class="mb-3">
+                            <div class="btn-group" role="group" id="appointment-filter">
+                                <button type="button" class="btn btn-outline-primary filter-btn active" data-filter="all">{{ __('All Appointments') }}</button>
+                                <button type="button" class="btn btn-outline-primary filter-btn" data-filter="admin">{{ __('Admin Appointments') }}</button>
+                                <button type="button" class="btn btn-outline-primary filter-btn" data-filter="other">{{ __('Other Appointments') }}</button>
                             </div>
                         </div>
                     </div>
@@ -60,9 +52,9 @@
                                             <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
                                             <th scope="col" data-field="appointment_type" data-sortable="true" data-formatter="appointmentTypeFormatter">{{ __('Type') }}</th>
                                             <th scope="col" data-field="property_title" data-sortable="false">{{ __('Property') }}</th>
-                                            <th scope="col" data-field="agent_name" data-sortable="false">{{ __('Agent') }}</th>
+                                            <th scope="col" data-field="agent_name" data-sortable="false">{{ __('Verified User') }}</th>
                                             <th scope="col" data-field="user_name" data-sortable="false">{{ __('User') }}</th>
-                                            <th scope="col" data-field="agent_timezone" data-sortable="false">{{ __('Agent Timezone') }}</th>
+                                            <th scope="col" data-field="agent_timezone" data-sortable="false">{{ __('Verified User Timezone') }}</th>
                                             <th scope="col" data-field="meeting_type" data-sortable="true" data-formatter="appointmentMeetingTypeFormatter">{{ __('Meeting Type') }}</th>
                                             <th scope="col" data-field="start_at_formatted" data-sortable="true">{{ __('Start Time') }}</th>
                                             <th scope="col" data-field="end_at_formatted" data-sortable="true">{{ __('End Time') }}</th>
@@ -198,9 +190,9 @@
         // Appointment type formatter
         function appointmentTypeFormatter(value, row, index) {
             if (row.is_admin_appointment) {
-                return `<span class="badge bg-primary">${window.trans['Admin']}</span>`;
+                return `<span class="badge bg-primary">{{ __('Admin') }}</span>`;
             } else {
-                return `<span class="badge bg-info">${window.trans['Agent']}</span>`;
+                return `<span class="badge bg-info">{{ __('Verified User') }}</span>`;
             }
         }
 

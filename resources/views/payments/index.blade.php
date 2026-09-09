@@ -23,6 +23,14 @@
     <section class="section">
         <div class="card">
             <div class="card-body">
+                {{-- User/Agent Filter Tabs --}}
+                <div class="mb-3">
+                    <div class="btn-group" role="group" id="added-as-filter">
+                        <button type="button" class="btn btn-outline-primary active" data-value="">{{ __('All') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="user">{{ __('User') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="agent">{{ __('Agent') }}</button>
+                    </div>
+                </div>
                 <div class="row">
                     <div class="col-12">
                         <table class="table-light" aria-describedby="mydesc" class='table-striped' id="table_list"
@@ -36,6 +44,7 @@
                                 <tr>
                                     <th scope="col" data-field="id" data-sortable="true"> {{ __('ID') }}</th>
                                     <th scope="col" data-field="customer.name" data-align="center" data-sortable="false"> {{ __('Client Name') }}</th>
+                                    <th scope="col" data-field="customer_role" data-align="center" data-formatter="activeRoleFormatter"> {{ __('Role') }}</th>
                                     <th scope="col" data-field="package.name" data-align="center" data-sortable="false"> {{ __('Package Name') }} </th>
                                     <th scope="col" data-field="amount" data-align="center" data-sortable="true" data-formatter="paymentAmountFormatter"> {{ __('Amount') }} </th>
                                     <th scope="col" data-field="payment_type" data-align="center" data-sortable="true">{{ __('Payment Type') }} </th>
@@ -74,6 +83,12 @@
 @endsection
 @section('script')
     <script>
+        $('#added-as-filter button').on('click', function() {
+            $('#added-as-filter button').removeClass('active');
+            $(this).addClass('active');
+            $('#table_list').bootstrapTable('refresh');
+        });
+
         function queryParams(p) {
             return {
                 sort: p.sort,
@@ -84,6 +99,7 @@
                 status: $('#status').val(),
                 category: $('#category').val(),
                 customer_id: $('#customerid').val(),
+                role_filter: $('#added-as-filter button.active').data('value'),
             };
         }
 

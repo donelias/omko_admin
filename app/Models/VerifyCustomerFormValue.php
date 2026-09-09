@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
 use App\Traits\ManageTranslations;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class VerifyCustomerFormValue extends Model
 {
-    use HasFactory, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, ManageTranslations;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
     protected $fillable = [
@@ -20,17 +21,15 @@ class VerifyCustomerFormValue extends Model
         'updated_at',
     ];
 
-
     /**
      * Get the Form Field that owns the VerifyCustomerFormValue
-     *
      */
     public function verify_customer_form()
     {
         return $this->belongsTo(VerifyCustomerForm::class, 'verify_customer_form_id');
     }
 
-     /**
+    /**
      * Get all of the translations for the VerifyCustomerForm
      */
     public function translations()

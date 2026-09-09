@@ -2,9 +2,9 @@
 
 namespace App\Traits;
 
-use Exception;
-use Carbon\Carbon;
 use App\Services\HelperService;
+use Carbon\Carbon;
+use Exception;
 use Illuminate\Support\Facades\Log;
 
 trait HasAppTimezone
@@ -29,7 +29,7 @@ trait HasAppTimezone
         'start_at',
         'end_at',
         'blocked_at',
-        'unblocked_at'
+        'unblocked_at',
     ];
 
     /**
@@ -68,7 +68,7 @@ trait HasAppTimezone
                     }
                 } catch (Exception $e) {
                     // Log the error instead of silently returning true
-                    Log::error('Error converting date to app timezone: ' . $e->getMessage(), [
+                    Log::error('Error converting date to app timezone: '.$e->getMessage(), [
                         'field' => $field,
                         'model' => get_class($this),
                         'id' => $this->getKey(),
@@ -90,6 +90,7 @@ trait HasAppTimezone
                     if ($field === 'created_at' && $this->exists) {
                         // Remove created_at from dirty attributes to prevent it from being updated
                         unset($this->attributes[$field]);
+
                         continue;
                     }
 
@@ -102,14 +103,14 @@ trait HasAppTimezone
                             $this->attributes[$field] = $value->setTimezone('UTC')->format('Y-m-d H:i:s');
                         } elseif (is_string($value)) {
                             // Parse the value assuming it's in app timezone and convert to UTC
-                            $timezone = HelperService::getSettingData('timezone');
+                            $timezone = HelperService::toAppTimezoneValue();
                             $carbon = Carbon::parse($value, $timezone);
                             $this->attributes[$field] = $carbon->setTimezone('UTC')->format('Y-m-d H:i:s');
                         }
                     }
                 } catch (Exception $e) {
                     // Log the error
-                    Log::error('Error converting date to UTC: ' . $e->getMessage(), [
+                    Log::error('Error converting date to UTC: '.$e->getMessage(), [
                         'field' => $field,
                         'model' => get_class($this),
                         'id' => $this->getKey(),

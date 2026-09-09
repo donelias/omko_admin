@@ -1,4 +1,4 @@
-// FilePond Localization for ebroker-admin
+// FilePond Localization for omko-admin
 // This file handles dynamic localization of FilePond file upload components
 
 function initFilePondLocalization() {

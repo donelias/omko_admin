@@ -16,11 +16,10 @@ class OptimizeImageJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 300; // 5 minutes for optimization
+
     public $tries = 1; // Only try once
 
-    public function __construct(public string $imagePath)
-    {
-    }
+    public function __construct(public string $imagePath) {}
 
     public function handle(): void
     {
@@ -31,7 +30,7 @@ class OptimizeImageJob implements ShouldQueue
         } catch (Exception $e) {
             Log::warning('Image optimization job failed', [
                 'path' => $this->imagePath,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }

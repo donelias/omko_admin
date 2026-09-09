@@ -2,42 +2,43 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use Illuminate\Http\Request;
+use App\Models\AssignedOutdoorFacilities;
+use App\Models\OutdoorFacilities;
+use App\Services\BootstrapTableService;
 use App\Services\FileService;
 use App\Services\HelperService;
-use App\Models\OutdoorFacilities;
 use App\Services\ResponseService;
-use Illuminate\Support\Facades\DB;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
-use App\Services\BootstrapTableService;
-use App\Models\AssignedOutdoorFacilities;
+use Illuminate\Support\Facades\DB;
 
 class OutdoorFacilityController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function index()
     {
-        if (!has_permissions('read', 'near_by_places')) {
+        if (! has_permissions('read', 'near_by_places')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $languages = HelperService::getActiveLanguages();
+
         return view('OutdoorFacilities.index', compact('languages'));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function store(Request $request)
     {
-        if (!has_permissions('create', 'near_by_places')) {
+        if (! has_permissions('create', 'near_by_places')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         try {
@@ -48,16 +49,15 @@ class OutdoorFacilityController extends Controller
                 'image.required' => 'The image field is required.',
                 'image.image' => 'The uploaded file must be an image.',
                 'image.mimes' => 'The image must be a SVG file.',
-                'image.max' => 'The image size should not exceed 2MB.', // Adjust as needed
+                'image.max' => 'File size exceeds the :max limit. Please upload a smaller image.',
             ]);
 
-
-            $destinationPath = public_path('images') . config('global.FACILITY_IMAGE_PATH');
-            if (!is_dir($destinationPath)) {
+            $destinationPath = public_path('images').config('global.FACILITY_IMAGE_PATH');
+            if (! is_dir($destinationPath)) {
                 mkdir($destinationPath, 0777, true);
             }
 
-            $facility = new OutdoorFacilities();
+            $facility = new OutdoorFacilities;
             $facility->name = $request->facility;
             if ($request->hasFile('image')) {
                 $path = config('global.FACILITY_IMAGE_PATH');
@@ -67,18 +67,18 @@ class OutdoorFacilityController extends Controller
             $facility->save();
 
             // Add Translations
-            if(isset($request->translations) && !empty($request->translations)){
-                $translationData = array();
-                foreach($request->translations as $translation){
-                    $translationData[] = array(
-                        'translatable_id'   => $facility->id,
+            if (isset($request->translations) && ! empty($request->translations)) {
+                $translationData = [];
+                foreach ($request->translations as $translation) {
+                    $translationData[] = [
+                        'translatable_id' => $facility->id,
                         'translatable_type' => 'App\Models\OutdoorFacilities',
-                        'key'               => 'name',
-                        'value'             => $translation['value'],
-                        'language_id'       => $translation['language_id'],
-                    );
+                        'key' => 'name',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
-                if(!empty($translationData)){
+                if (! empty($translationData)) {
                     HelperService::storeTranslations($translationData);
                 }
             }
@@ -92,11 +92,11 @@ class OutdoorFacilityController extends Controller
      * Display the specified resource.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function show(Request $request)
     {
-        if (!has_permissions('read', 'near_by_places')) {
+        if (! has_permissions('read', 'near_by_places')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -107,7 +107,7 @@ class OutdoorFacilityController extends Controller
 
         $sql = OutdoorFacilities::orderBy($sort, $order)->with('translations');
 
-        if (isset($_GET['search']) && !empty($_GET['search'])) {
+        if (isset($_GET['search']) && ! empty($_GET['search'])) {
             $search = $_GET['search'];
             $sql->where('id', 'LIKE', "%$search%")->orwhere('name', 'LIKE', "%$search%");
         }
@@ -118,10 +118,10 @@ class OutdoorFacilityController extends Controller
         }
         $res = $sql->get();
 
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
-        $tempRow = array();
+        $rows = [];
+        $tempRow = [];
         $count = 1;
         $operate = '';
         foreach ($res as $row) {
@@ -131,7 +131,7 @@ class OutdoorFacilityController extends Controller
                 $operate = BootstrapTableService::editButton('', true, null, null, $row->id, null);
             }
             if (has_permissions('delete', 'near_by_places')) {
-                $operate .= BootstrapTableService::deleteButton(route('outdoor_facilities.destroy', $row->id));
+                $operate .= BootstrapTableService::deleteButton(route('outdoor_facilities.destroy.url', $row->id));
             }
             $tempRow['operate'] = $operate;
             $rows[] = $tempRow;
@@ -139,20 +139,20 @@ class OutdoorFacilityController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function update(Request $request)
     {
         try {
-            if (!has_permissions('update', 'near_by_places')) {
+            if (! has_permissions('update', 'near_by_places')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             } else {
                 DB::beginTransaction();
@@ -162,10 +162,10 @@ class OutdoorFacilityController extends Controller
                     'image.required' => 'The image field is required.',
                     'image.image' => 'The uploaded file must be an image.',
                     'image.mimes' => 'The image must be a SVG file.',
-                    'image.max' => 'The image size should not exceed 2MB.', // Adjust as needed
+                    'image.max' => 'File size exceeds the :max limit. Please upload a smaller image.',
                 ]);
 
-                $id =  $request->edit_id;
+                $id = $request->edit_id;
                 $facility = OutdoorFacilities::find($id);
                 $facility->name = ($request->edit_name) ? $request->edit_name : '';
 
@@ -178,21 +178,20 @@ class OutdoorFacilityController extends Controller
 
                 $facility->update();
 
-
                 // Add Translations
-                if(isset($request->translations) && !empty($request->translations)){
-                    $translationData = array();
-                    foreach($request->translations as $translation){
-                        $translationData[] = array(
-                            'id'                => $translation['id'] ?? null,
-                            'translatable_id'   => $facility->id,
+                if (isset($request->translations) && ! empty($request->translations)) {
+                    $translationData = [];
+                    foreach ($request->translations as $translation) {
+                        $translationData[] = [
+                            'id' => $translation['id'] ?? null,
+                            'translatable_id' => $facility->id,
                             'translatable_type' => 'App\Models\OutdoorFacilities',
-                            'key'               => 'name',
-                            'value'             => $translation['value'],
-                            'language_id'       => $translation['language_id'],
-                        );
+                            'key' => 'name',
+                            'value' => $translation['value'],
+                            'language_id' => $translation['language_id'],
+                        ];
                     }
-                    if(!empty($translationData)){
+                    if (! empty($translationData)) {
                         HelperService::storeTranslations($translationData);
                     }
                 }
@@ -202,7 +201,7 @@ class OutdoorFacilityController extends Controller
             }
         } catch (Exception $e) {
             DB::rollBack();
-            ResponseService::logErrorResponse($e, "Near by Place Update Error", "Something Went Wrong");
+            ResponseService::logErrorResponse($e, 'Near by Place Update Error', 'Something Went Wrong');
         }
     }
 
@@ -210,16 +209,15 @@ class OutdoorFacilityController extends Controller
      * Remove the specified resource from storage.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
-
     public function destroy($id)
     {
-        if (env('DEMO_MODE') && Auth::user()->email != "superadmin@gmail.com") {
+        if (env('DEMO_MODE') && Auth::user()->email != 'superadmin@gmail.com') {
             return redirect()->back()->with('error', trans('This is not allowed in the Demo Version'));
         }
 
-        if (!has_permissions('delete', 'near_by_places')) {
+        if (! has_permissions('delete', 'near_by_places')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         } else {
             $facility = OutdoorFacilities::find($id);

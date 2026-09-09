@@ -2,9 +2,6 @@
 
 namespace App\Traits;
 
-use Illuminate\Support\Facades\Log;
-
-
 trait XssProtection
 {
     /**
@@ -33,7 +30,7 @@ trait XssProtection
          */
         static::retrieved(function ($model) {
             foreach ($model->xssProtectedFields as $field) {
-                if(isset($model->attributes[$field]) && !empty($model->attributes[$field])){
+                if (isset($model->attributes[$field]) && ! empty($model->attributes[$field])) {
                     $model->attributes[$field] = $model->decodeXss($model->attributes[$field]);
                 }
             }
@@ -45,12 +42,12 @@ trait XssProtection
      */
     public function encodeXssFields()
     {
-        if (!isset($this->xssProtectedFields) || empty($this->xssProtectedFields)) {
+        if (! isset($this->xssProtectedFields) || empty($this->xssProtectedFields)) {
             return;
         }
 
         foreach ($this->xssProtectedFields as $field) {
-            if (isset($this->attributes[$field]) && !empty($this->attributes[$field])) {
+            if (isset($this->attributes[$field]) && ! empty($this->attributes[$field])) {
                 $this->attributes[$field] = $this->encodeXss($this->attributes[$field]);
             }
         }
@@ -61,12 +58,12 @@ trait XssProtection
      */
     public function decodeXssFields()
     {
-        if (!isset($this->xssProtectedFields) || empty($this->xssProtectedFields)) {
+        if (! isset($this->xssProtectedFields) || empty($this->xssProtectedFields)) {
             return;
         }
 
         foreach ($this->xssProtectedFields as $field) {
-            if (isset($this->attributes[$field]) && !empty($this->attributes[$field])) {
+            if (isset($this->attributes[$field]) && ! empty($this->attributes[$field])) {
                 $this->attributes[$field] = $this->decodeXss($this->attributes[$field]);
             }
         }
@@ -80,6 +77,7 @@ trait XssProtection
         if (is_string($value)) {
             return htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         }
+
         return $value;
     }
 
@@ -91,6 +89,7 @@ trait XssProtection
         if (is_string($value)) {
             return htmlspecialchars_decode($value, ENT_QUOTES | ENT_HTML5);
         }
+
         return $value;
     }
 
@@ -102,6 +101,7 @@ trait XssProtection
         if (isset($this->xssProtectedFields) && in_array($field, $this->xssProtectedFields)) {
             return htmlspecialchars_decode($this->getRawOriginal($field), ENT_QUOTES | ENT_HTML5);
         }
+
         return $this->getRawOriginal($field);
     }
 
@@ -113,6 +113,7 @@ trait XssProtection
         if (isset($this->xssProtectedFields) && in_array($field, $this->xssProtectedFields)) {
             return $this->encodeXss($value);
         }
+
         return $value;
     }
 
@@ -124,6 +125,7 @@ trait XssProtection
         if (isset($this->xssProtectedFields) && in_array($field, $this->xssProtectedFields)) {
             return $this->decodeXss($value);
         }
+
         return $value;
     }
 
@@ -137,8 +139,10 @@ trait XssProtection
             if (isset($this->xssProtectedFields) && in_array($field, $this->xssProtectedFields)) {
                 return $this->decodeXss($this->attributes[$field]);
             }
+
             return $this->attributes[$field];
         }
+
         return null;
     }
 
@@ -156,6 +160,7 @@ trait XssProtection
                 }
             }
         }
+
         return $safeData;
     }
-}   
+}

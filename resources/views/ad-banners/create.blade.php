@@ -15,8 +15,13 @@
     .ad-step.is-complete .badge-round{background:var(--bs-primary);color:#fff;opacity:.7}
     .ad-stepper .connector{flex:1 1 80px;height:4px;background:#e9ecef;border-radius:999px}
     .ad-stepper .connector.is-complete{background:var(--bs-primary)}
-    @media (max-width: 576px){.ad-stepper{gap:16px}.ad-step .label{display:none}}
-    .wizard-actions{display:flex;justify-content:flex-end;gap:10px}
+    @media (max-width: 576px){
+      .ad-stepper{gap:12px;justify-content:space-between;align-items:center;width:100%}
+      .ad-step{gap:8px;min-width:0}
+      .ad-step .label{display:none}
+      .ad-stepper .connector{min-width:40px;max-width:60px;height:4px}
+    }
+    .wizard-actions{display:flex;justify-content:flex-end;gap:10px;margin-block:1rem}
     .muted-help{color:#6c757d}
     .rounded-card{border-radius:14px}
     .header-actions .btn-link{color:#6c757d}
@@ -29,6 +34,23 @@
     .preview-item:last-child{border-bottom:none}
     .preview-label{font-weight:600;color:#495057}
     .preview-value{color:#6c757d}
+    .select2-container--bootstrap-5 .select2-selection--single .select2-selection__rendered {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1 1 auto;
+        min-width: 0;
+        padding-right: 20px;
+    }
+    .select2-container--bootstrap-5 .select2-selection--single {
+        display: flex;
+        align-items: center;
+    }
+    .select2-container--bootstrap-5 .select2-selection__clear {
+        flex-shrink: 0;
+        margin-left: auto;
+        margin-right: 0;
+    }
 </style>
 @endsection
 
@@ -99,7 +121,6 @@
                                 <select class="form-select" name="placement" id="placement" required>
                                     <option value="">{{ __('Select Placement') }}</option>
                                 </select>
-                                <small class="muted-help size-hint d-block mt-2"></small>
                             </div>
 
                             {{-- Next Step Button --}}
@@ -340,6 +361,11 @@ $(function(){
         } else {
             $platformSel.val('');
         }
+
+        // Force Select2 to refresh its display after changing options
+        if ($platformSel.hasClass('select2-hidden-accessible')) {
+            $platformSel.trigger('change.select2');
+        }
     }
 
     function updateSize(){
@@ -348,8 +374,26 @@ $(function(){
     }
 
     function toggleAdTypeFields(){
-        $externalWrap.toggleClass('d-none', $adType.val() !== 'external_link');
-        $propertyWrap.toggleClass('d-none', $adType.val() !== 'property');
+        var adType = $adType.val();
+        var showExternal = adType === 'external_link';
+        var showProperty = adType === 'property';
+
+        $externalWrap.toggleClass('d-none', !showExternal);
+        $propertyWrap.toggleClass('d-none', !showProperty);
+
+        if (!showExternal) {
+            $linkUrlInput.val('').prop('disabled', true);
+        } else {
+            $linkUrlInput.prop('disabled', false);
+        }
+
+        if (!showProperty) {
+            $categorySelect.val('').trigger('change');
+            $propertySelect.val('').trigger('change');
+            $propertySelect.prop('disabled', true);
+        } else {
+            $propertySelect.prop('disabled', false);
+        }
     }
 
     function loadPropertiesByCategory(categoryId) {

@@ -1,8 +1,10 @@
 @extends('layouts.main')
 
 @section('title')
-    {{ __('Assign Package') }}
+    {{ $type == 'agent' ? __('Assign Agent Package') : __('Assign Package') }}
 @endsection
+
+
 
 @section('page-title')
     <div class="page-title">
@@ -22,16 +24,25 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-12">
-                            <form method="POST" action="{{ route('assign-package.store') }}" class="create-form" data-success-function="formSuccessFunction">
+                                <form action="{{ $type == 'agent' ? route('assign-agent-package.store') : route('assign-package.store') }}" id="assign-package-form">
                                 @csrf
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <label for="assign_user_type" class="form-label">{{ __('Target Audience') }}</label>
+                                        <select id="assign_user_type" name="user_type" class="form-select">
+                                            <option value="user" {{ ($type ?? 'user') == 'user' ? 'selected' : '' }}>{{ __('User') }}</option>
+                                            <option value="agent" {{ ($type ?? 'agent') == 'agent' ? 'selected' : '' }}>{{ __('Agent') }}</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <div class="row">
                                     <div class="col-md-6 mb-3">
                                         <label for="customer_id" class="form-label">{{ __('Select User') }}</label>
-                                        <select id="customer_id" name="customer_id" class="form-control select2-ajax" style="width: 100%" required></select>
+                                        <select id="customer_id" name="customer_id" class="form-control select2-ajax pl-5" required></select>
                                     </div>
                                     <div class="col-md-6 mb-3">
                                         <label for="package_id" class="form-label">{{ __('Select Package') }}</label>
-                                        <select id="package_id" name="package_id" class="form-control select2-ajax" style="width: 100%" required></select>
+                                        <select id="package_id" name="package_id" class="form-control select2-ajax pl-5" required></select>
                                     </div>
                                 </div>
                                 <div class="row">
@@ -49,6 +60,14 @@
 <section class="section">
     <div class="card">
         <div class="card-body">
+            {{-- User/Agent Filter Tabs --}}
+            <div class="mb-3">
+                <div class="btn-group" role="group" id="payment-role-filter">
+                    <button type="button" class="btn btn-outline-primary active" data-value="">{{ __('All') }}</button>
+                    <button type="button" class="btn btn-outline-primary" data-value="user">{{ __('User') }}</button>
+                    <button type="button" class="btn btn-outline-primary" data-value="agent">{{ __('Agent') }}</button>
+                </div>
+            </div>
             <div class="row">
                 <div class="col-12">
                     <table class="table-light" aria-describedby="mydesc" class='table-striped' id="table_list"
@@ -62,6 +81,7 @@
                             <tr>
                                 <th scope="col" data-field="id" data-sortable="true"> {{ __('ID') }}</th>
                                 <th scope="col" data-field="customer.name" data-align="center" data-sortable="false"> {{ __('Client Name') }}</th>
+                                <th scope="col" data-field="customer_role" data-align="center" data-formatter="activeRoleFormatter"> {{ __('Role') }}</th>
                                 <th scope="col" data-field="package.name" data-align="center" data-sortable="false"> {{ __('Package Name') }} </th>
                                 <th scope="col" data-field="amount" data-align="center" data-sortable="true" data-formatter="paymentAmountFormatter"> {{ __('Amount') }} </th>
                                 <th scope="col" data-field="payment_type" data-align="center" data-sortable="true">{{ __('Payment Type') }} </th>
@@ -99,7 +119,8 @@
                             return {
                                 q: params.term || '',
                                 page: params.page || 1,
-                                per_page: 20
+                                per_page: 20,
+                                type : $('#assign_user_type').val()
                             };
                         },
                         processResults: function (data, params) {
@@ -118,46 +139,106 @@
 
             initSelect2('#customer_id', '{{ route('select2.customers') }}', '{{ __('Search users...') }}');
             initSelect2('#package_id', '{{ route('select2.packages') }}', '{{ __('Search packages...') }}');
+
+            $('#assign_user_type').on('change', function() {
+                // Destroy and reinitialize select2 to clear cached results
+                $('#customer_id').val(null).trigger('change').empty();
+                $('#package_id').val(null).trigger('change').empty();
+
+                $('#customer_id').select2('destroy');
+                $('#package_id').select2('destroy');
+
+                initSelect2('#customer_id', '{{ route('select2.customers') }}', '{{ __('Search users...') }}');
+                initSelect2('#package_id', '{{ route('select2.packages') }}', '{{ __('Search packages...') }}');
+
+                $('#table_list').bootstrapTable('refresh');
+            });
         });
 
-        function formSuccessFunction(response) {
-            if(!response.error){
-                if (response && response.warning && response.data && response.data.confirm_required) {
-                    Swal.fire({
-                        title: window.trans ? window.trans['Are you sure'] : 'Are you sure',
-                        text: window.trans ? window.trans['Selected user already has an active package. Do you want to assign anyway?'] : 'Selected user already has an active package. Do you want to assign anyway?',
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonColor: '#198754',
-                        cancelButtonColor: '#d33',
-                        confirmButtonText: window.trans ? window.trans['Yes'] : 'Yes',
-                        cancelButtonText: window.trans ? window.trans['No'] : 'No',
-                        reverseButtons: true,
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            const form = document.querySelector('.create-form');
-                            if (form) {
-                                // append / set force_assign flag and resubmit
-                                let forceInput = form.querySelector('input[name="force_assign"]');
-                                if (!forceInput) {
-                                    forceInput = document.createElement('input');
-                                    forceInput.type = 'hidden';
-                                    forceInput.name = 'force_assign';
-                                    form.appendChild(forceInput);
-                                }
-                                forceInput.value = '1';
-                                form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        $('#assign-package-form').on('submit', function(e) {
+            e.preventDefault();
+            var form = $(this);
+            var url = form.attr('action');
+            var submitBtn = form.find(':submit');
+            var data = new FormData(this);
+
+            submitBtn.val('{{ __("Please Wait...") }}').attr('disabled', true);
+
+            $.ajax({
+                type: 'POST',
+                url: url,
+                data: data,
+                processData: false,
+                contentType: false,
+                dataType: 'json',
+                success: function(response) {
+                    submitBtn.val('{{ __("Assign") }}').attr('disabled', false);
+                    if (response.error) {
+                        showErrorToast(response.message);
+                        return;
+                    }
+                    if (response.warning && response.data && response.data.confirm_required) {
+                        Swal.fire({
+                            title: window.trans['Are you sure'] || 'Are you sure',
+                            text: response.message,
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonColor: '#198754',
+                            cancelButtonColor: '#d33',
+                            confirmButtonText: window.trans['Yes'] || 'Yes',
+                            cancelButtonText: window.trans['No'] || 'No',
+                            reverseButtons: true,
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                data.append('force_assign', '1');
+                                submitBtn.val('{{ __("Please Wait...") }}').attr('disabled', true);
+                                $.ajax({
+                                    type: 'POST',
+                                    url: url,
+                                    data: data,
+                                    processData: false,
+                                    contentType: false,
+                                    dataType: 'json',
+                                    success: function(res) {
+                                        submitBtn.val('{{ __("Assign") }}').attr('disabled', false);
+                                        if (!res.error) {
+                                            showSuccessToast(res.message);
+                                            form[0].reset();
+                                            $('#customer_id').val(null).trigger('change');
+                                            $('#package_id').val(null).trigger('change');
+                                            $('#table_list').bootstrapTable('refresh');
+                                        } else {
+                                            showErrorToast(res.message);
+                                        }
+                                    },
+                                    error: function(jqXHR) {
+                                        submitBtn.val('{{ __("Assign") }}').attr('disabled', false);
+                                        if (jqXHR.responseJSON) showErrorToast(jqXHR.responseJSON.message);
+                                    }
+                                });
                             }
-                        }
-                    });
-                    return;
-                }else{
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
+                        });
+                        return;
+                    }
+                    showSuccessToast(response.message);
+                    form[0].reset();
+                    $('#customer_id').val(null).trigger('change');
+                    $('#package_id').val(null).trigger('change');
+                    $('#table_list').bootstrapTable('refresh');
+                },
+                error: function(jqXHR) {
+                    submitBtn.val('{{ __("Assign") }}').attr('disabled', false);
+                    if (jqXHR.responseJSON) showErrorToast(jqXHR.responseJSON.message);
                 }
-            }
-        }
+            });
+        });
+
+        $('#payment-role-filter button').on('click', function() {
+            $('#payment-role-filter button').removeClass('active');
+            $(this).addClass('active');
+            $('#table_list').bootstrapTable('refresh');
+        });
+
         function queryParams(p) {
             return {
                 sort: p.sort,
@@ -166,6 +247,7 @@
                 limit: p.limit,
                 search: p.search,
                 manual_payment_type_only: 1,
+                role_filter: $('#payment-role-filter button.active').data('value'),
             };
         }
     </script>

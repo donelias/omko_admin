@@ -1,11 +1,6 @@
 <?php
+
 ob_start();
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, DELETE, PUT, PATCH, OPTIONS');
-header('Access-Control-Allow-Headers: token, Content-Type, authorization');
-if ($_SERVER['REQUEST_METHOD'] != 'OPTIONS') {
-	header('Access-Control-Allow-Origin: *');
-}
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;
 

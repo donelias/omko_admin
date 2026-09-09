@@ -66,8 +66,8 @@ class GeminiService
      * Sends a prompt to Gemini 1.5 Pro model and returns the AI-generated response.
      * Supports optional tools parameter for function calling and structured outputs.
      *
-     * @param string $prompt The text prompt to send to the AI model
-     * @param array|null $tools Optional tools/functions for structured AI responses
+     * @param  string  $prompt  The text prompt to send to the AI model
+     * @param  array|null  $tools  Optional tools/functions for structured AI responses
      * @return array Response array with success status and data/error
      */
     public function generateContent($prompt, $tools = null)
@@ -76,6 +76,7 @@ class GeminiService
             // Validate API key
             if (empty($this->apiKey)) {
                 Log::error('Gemini API Error: Missing API key. Set GEMINI_API_KEY in environment.');
+
                 return [
                     'success' => false,
                     'error' => 'Missing Gemini API key',
@@ -122,6 +123,7 @@ class GeminiService
 
             if ($status < 200 || $status >= 300) {
                 Log::error('Gemini API HTTP Error', ['status' => $status, 'body' => $raw]);
+
                 return [
                     'success' => false,
                     'error' => 'Content Generation currently not available please try again later.',
@@ -159,21 +161,21 @@ class GeminiService
      * - Nearby places detection with optional distance mapping
      * - Result caching with 1-hour TTL for performance optimization
      *
-     * @param string $query Natural language property search query
-     * @param array $categories Available property categories with id/name pairs
-     * @param array $nearbyPlaces Available nearby places with id/name pairs
-     * @param array $facilities Available property facilities with id/name/type/values
+     * @param  string  $query  Natural language property search query
+     * @param  array  $categories  Available property categories with id/name pairs
+     * @param  array  $nearbyPlaces  Available nearby places with id/name pairs
+     * @param  array  $facilities  Available property facilities with id/name/type/values
      * @return array Extraction result with success status and structured parameters
      */
     public function extractSearchParameters($query, $categories = [], $nearbyPlaces = [], $facilities = [])
     {
-		// Translate incoming query to English to support multi-language inputs
-		$translatedQuery = $this->translateToEnglish($query);
-		Log::info('Translation result', ['original' => $query, 'translated' => $translatedQuery]);
+        // Translate incoming query to English to support multi-language inputs
+        $translatedQuery = $this->translateToEnglish($query);
+        Log::info('Translation result', ['original' => $query, 'translated' => $translatedQuery]);
 
         // Generate cache key based on query and parameters
         // Cache key includes all input parameters to ensure accurate cache hits
-		$cacheKey = 'gemini_search_'.md5($translatedQuery.serialize($categories).serialize($nearbyPlaces).serialize($facilities));
+        $cacheKey = 'gemini_search_'.md5($translatedQuery.serialize($categories).serialize($nearbyPlaces).serialize($facilities));
 
         // Try to get from cache first (cache for 1 hour)
         // Caching dramatically improves performance for repeated queries
@@ -218,8 +220,8 @@ class GeminiService
             $facilityMappings = [];
             foreach ($facilities as $facility) {
                 $facilityInfo = "{$facility['id']}={$facility['name']}({$facility['type_of_parameter']})";
-                if($facility['type_of_parameter'] == 'dropdown' || $facility['type_of_parameter'] == 'checkbox' || $facility['type_of_parameter'] == 'radiobutton'){
-                    if(!empty($facility['translated_option_value'])){
+                if ($facility['type_of_parameter'] == 'dropdown' || $facility['type_of_parameter'] == 'checkbox' || $facility['type_of_parameter'] == 'radiobutton') {
+                    if (! empty($facility['translated_option_value'])) {
                         $translatedOptionValue = $facility['translated_option_value'][0]['translated'] ?? $facility['translated_option_value'][0]['value'];
                         $facilityInfo .= '['.$translatedOptionValue.']';
                     } else {
@@ -236,8 +238,7 @@ class GeminiService
         // Build optimized AI prompt for parameter extraction
         // Prompt is carefully engineered for 70% token reduction while maintaining accuracy
         // Supports global currency formats and comprehensive parameter extraction
-		$prompt = "Extract real estate parameters from: \"{$translatedQuery}\"\n\nReturn JSON with: city, state, country, property_type(0=sell,1=rent), min_price, max_price, title{$categoriesText}{$nearbyPlacesText}{$facilitiesText}\n\nProperty Type Rules:\n- 0=sell: buy, purchase, for sale, selling, buyable\n- 1=rent: rent, rental, renting, rentable, lease, leasing, monthly rent\n- 2=sold: sold, already sold, not available\n- 3=rented: rented, already rented, occupied\n- If no property type mentioned, use null\n\nProperty Title: Extract any specific property name, title, or description mentioned in the query. Use null if no specific property title is mentioned.\n\nPrice: K=×1000, M=×1000000, lakh=×100000, crore=×10000000\nRules: Extract only from provided lists, match case-insensitive, use null/[] for missing. NEVER assign default category_id values.\n\nExamples:\n\"villa London rent\" → {\"city\":\"London\",\"state\":null,\"country\":\"UK\",\"property_type\":1,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"buy apartment Mumbai\" → {\"city\":\"Mumbai\",\"state\":null,\"country\":\"India\",\"property_type\":0,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"properties in india\" → {\"city\":null,\"state\":null,\"country\":\"India\",\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"3 bedroom furnished apartment with parking\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[{\"id\":7,\"name\":\"Bedrooms\",\"values\":\"3\"},{\"id\":11,\"name\":\"Furnishing Status\",\"values\":\"Fully Furnished\"},{\"id\":1,\"name\":\"Parking\",\"values\":\"Yes\"}]}\n\"properties in dubai\" → {\"city\":\"Dubai\",\"state\":null,\"country\":\"United Arab Emirates\",\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Sunrise Villa in Bangalore\" → {\"city\":\"Bangalore\",\"state\":null,\"country\":\"India\",\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Sunrise Villa\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Luxury Penthouse Ocean View\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Luxury Penthouse Ocean View\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Royal Gardens Apartment for sale\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":0,\"min_price\":null,\"max_price\":null,\"title\":\"Royal Gardens Apartment\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Marina Heights Tower rent in Dubai\" → {\"city\":\"Dubai\",\"state\":null,\"country\":\"United Arab Emirates\",\"property_type\":1,\"min_price\":null,\"max_price\":null,\"title\":\"Marina Heights Tower\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Green Valley Residency 2BHK\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Green Valley Residency\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[{\"id\":7,\"name\":\"Bedrooms\",\"values\":\"2\"}]}\n\"Palm Springs Villa with pool\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Palm Springs Villa\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[{\"id\":15,\"name\":\"Swimming Pool\",\"values\":\"Yes\"}]}\n\"Skyline Plaza commercial space\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Skyline Plaza\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Complex in bhuj\" → {\"city\":\"bhuj\",\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Complex\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\nJSON:";
-
+        $prompt = "Extract real estate parameters from: \"{$translatedQuery}\"\n\nReturn JSON with: city, state, country, property_type(0=sell,1=rent), min_price, max_price, title{$categoriesText}{$nearbyPlacesText}{$facilitiesText}\n\nProperty Type Rules:\n- 0=sell: buy, purchase, for sale, selling, buyable\n- 1=rent: rent, rental, renting, rentable, lease, leasing, monthly rent\n- 2=sold: sold, already sold, not available\n- 3=rented: rented, already rented, occupied\n- If no property type mentioned, use null\n\nProperty Title: Extract any specific property name, title, or description mentioned in the query. Use null if no specific property title is mentioned.\n\nPrice: K=×1000, M=×1000000, lakh=×100000, crore=×10000000\nRules: Extract only from provided lists, match case-insensitive, use null/[] for missing. NEVER assign default category_id values.\n\nExamples:\n\"villa London rent\" → {\"city\":\"London\",\"state\":null,\"country\":\"UK\",\"property_type\":1,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"buy apartment Mumbai\" → {\"city\":\"Mumbai\",\"state\":null,\"country\":\"India\",\"property_type\":0,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"properties in india\" → {\"city\":null,\"state\":null,\"country\":\"India\",\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"3 bedroom furnished apartment with parking\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[{\"id\":7,\"name\":\"Bedrooms\",\"values\":\"3\"},{\"id\":11,\"name\":\"Furnishing Status\",\"values\":\"Fully Furnished\"},{\"id\":1,\"name\":\"Parking\",\"values\":\"Yes\"}]}\n\"properties in dubai\" → {\"city\":\"Dubai\",\"state\":null,\"country\":\"United Arab Emirates\",\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":null,\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Sunrise Villa in Bangalore\" → {\"city\":\"Bangalore\",\"state\":null,\"country\":\"India\",\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Sunrise Villa\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Luxury Penthouse Ocean View\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Luxury Penthouse Ocean View\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Royal Gardens Apartment for sale\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":0,\"min_price\":null,\"max_price\":null,\"title\":\"Royal Gardens Apartment\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Marina Heights Tower rent in Dubai\" → {\"city\":\"Dubai\",\"state\":null,\"country\":\"United Arab Emirates\",\"property_type\":1,\"min_price\":null,\"max_price\":null,\"title\":\"Marina Heights Tower\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Green Valley Residency 2BHK\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Green Valley Residency\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[{\"id\":7,\"name\":\"Bedrooms\",\"values\":\"2\"}]}\n\"Palm Springs Villa with pool\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Palm Springs Villa\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[{\"id\":15,\"name\":\"Swimming Pool\",\"values\":\"Yes\"}]}\n\"Skyline Plaza commercial space\" → {\"city\":null,\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Skyline Plaza\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\"Complex in bhuj\" → {\"city\":\"bhuj\",\"state\":null,\"country\":null,\"property_type\":null,\"min_price\":null,\"max_price\":null,\"title\":\"Complex\",\"category_id\":null,\"nearbyplace\":[],\"facilities\":[]}\n\nJSON:";
 
         $result = $this->generateContent($prompt);
 
@@ -272,7 +273,7 @@ class GeminiService
             // Validate and structure the response data
             // Ensures consistent output format regardless of AI response variations
             $validatedData = [
-                'location' => array(
+                'location' => [
                     'city' => $extractedData['city'] ?? null,
                     'state' => $extractedData['state'] ?? null,
                     'country' => $extractedData['country'] ?? null,
@@ -280,11 +281,11 @@ class GeminiService
                     'latitude' => $extractedData['latitude'] ?? null,
                     'longitude' => $extractedData['longitude'] ?? null,
                     'range' => $extractedData['range'] ?? null,
-                ),
-                'price' => array(
+                ],
+                'price' => [
                     'min_price' => $extractedData['min_price'] ?? null,
                     'max_price' => $extractedData['max_price'] ?? null,
-                ),
+                ],
                 'property_type' => $extractedData['property_type'] ?? null,
                 'title' => $extractedData['title'] ?? null,
                 'category_id' => $extractedData['category_id'] ?? null,
@@ -320,51 +321,53 @@ class GeminiService
 
     }
 
-	/**
-	 * Translate any incoming query to English using Gemini for consistent extraction
-	 * Falls back to original text on any failure. Caches results for 1 hour.
-	 *
-	 * @param string $text
-	 * @return string
-	 */
-	private function translateToEnglish($text)
-	{
-		try {
-			$cacheKey = 'gemini_translate_'.md5($text);
-			$cached = Cache::store('gemini')->get($cacheKey);
-			if ($cached) {
-				return $cached;
-			}
+    /**
+     * Translate any incoming query to English using Gemini for consistent extraction
+     * Falls back to original text on any failure. Caches results for 1 hour.
+     *
+     * @param  string  $text
+     * @return string
+     */
+    private function translateToEnglish($text)
+    {
+        try {
+            $cacheKey = 'gemini_translate_'.md5($text);
+            $cached = Cache::store('gemini')->get($cacheKey);
+            if ($cached) {
+                return $cached;
+            }
 
-			$prompt = "Translate the following real estate search query into natural, fluent English. Only return the translated query text without quotes, code blocks, or explanations.\n\n".$text;
-			$response = $this->generateContent($prompt);
-			if (! $response['success']) {
-				return $text;
-			}
+            $prompt = "Translate the following real estate search query into natural, fluent English. Only return the translated query text without quotes, code blocks, or explanations.\n\n".$text;
+            $response = $this->generateContent($prompt);
+            if (! $response['success']) {
+                return $text;
+            }
 
-			$content = $response['data']['candidates'][0]['content']['parts'][0]['text'] ?? '';
-			$content = trim($content);
-			$content = preg_replace('/```json\s*/', '', $content);
-			$content = preg_replace('/```\s*$/', '', $content);
-			$content = trim($content, " \t\n\r\0\x0B\"'");
+            $content = $response['data']['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            $content = trim($content);
+            $content = preg_replace('/```json\s*/', '', $content);
+            $content = preg_replace('/```\s*$/', '', $content);
+            $content = trim($content, " \t\n\r\0\x0B\"'");
 
-			if ($content === '') {
-				return $text;
-			}
+            if ($content === '') {
+                return $text;
+            }
 
-			Cache::store('gemini')->put($cacheKey, $content, 3600);
-			return $content;
-		} catch (\Exception $e) {
-			Log::warning('Translation failed, using original query: '.$e->getMessage());
-			return $text;
-		}
-	}
+            Cache::store('gemini')->put($cacheKey, $content, 3600);
+
+            return $content;
+        } catch (\Exception $e) {
+            Log::warning('Translation failed, using original query: '.$e->getMessage());
+
+            return $text;
+        }
+    }
 
     /**
      * Generate property/project description using Gemini AI
      *
-     * @param array $data Property/Project data (title, location, price, etc.)
-     * @param string $entityType 'property' or 'project'
+     * @param  array  $data  Property/Project data (title, location, price, etc.)
+     * @param  string  $entityType  'property' or 'project'
      * @return array Response with success status and generated description
      */
     public function generateDescription(array $data, string $entityType = 'property')
@@ -376,10 +379,10 @@ class GeminiService
 
             // Include language in cache key if provided
             $languageSuffix = '';
-            if (!empty($data['language_code'])) {
-                $languageSuffix = '_' . $data['language_code'];
-            } elseif (!empty($data['language_name'])) {
-                $languageSuffix = '_' . md5($data['language_name']);
+            if (! empty($data['language_code'])) {
+                $languageSuffix = '_'.$data['language_code'];
+            } elseif (! empty($data['language_name'])) {
+                $languageSuffix = '_'.md5($data['language_name']);
             }
 
             // Check cache first
@@ -396,7 +399,7 @@ class GeminiService
             // Generate content
             $result = $this->generateContent($prompt);
 
-            if (!$result['success']) {
+            if (! $result['success']) {
                 return $result;
             }
 
@@ -410,14 +413,15 @@ class GeminiService
                 'success' => true,
                 'data' => $content,
                 'cached' => false,
-                'tokens_used' => $this->estimateTokens($prompt . $content),
+                'tokens_used' => $this->estimateTokens($prompt.$content),
             ];
 
         } catch (\Exception $e) {
-            Log::error('Gemini Description Generation Error: ' . $e->getMessage());
+            Log::error('Gemini Description Generation Error: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'error' => 'Failed to generate description: ' . $e->getMessage(),
+                'error' => 'Failed to generate description: '.$e->getMessage(),
             ];
         }
     }
@@ -425,8 +429,8 @@ class GeminiService
     /**
      * Generate meta details (title, description, keywords) using Gemini AI
      *
-     * @param array $data Property/Project data
-     * @param string $entityType 'property' or 'project'
+     * @param  array  $data  Property/Project data
+     * @param  string  $entityType  'property' or 'project'
      * @return array Response with success status and generated meta details
      */
     public function generateMetaDetails(array $data, string $entityType = 'property')
@@ -437,10 +441,10 @@ class GeminiService
 
             // Include language in cache key if provided
             $languageSuffix = '';
-            if (!empty($data['language_code'])) {
-                $languageSuffix = '_' . $data['language_code'];
-            } elseif (!empty($data['language_name'])) {
-                $languageSuffix = '_' . md5($data['language_name']);
+            if (! empty($data['language_code'])) {
+                $languageSuffix = '_'.$data['language_code'];
+            } elseif (! empty($data['language_name'])) {
+                $languageSuffix = '_'.md5($data['language_name']);
             }
 
             // Check cache
@@ -457,7 +461,7 @@ class GeminiService
             // Simple generateContent call, no tools
             $result = $this->generateContent($prompt);
 
-            if (!$result['success']) {
+            if (! $result['success']) {
                 return $result;
             }
 
@@ -470,9 +474,9 @@ class GeminiService
 
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                 $response = [
-                    'meta_title'       => $decoded['meta_title']       ?? '',
+                    'meta_title' => $decoded['meta_title'] ?? '',
                     'meta_description' => $decoded['meta_description'] ?? '',
-                    'meta_keywords'    => $decoded['meta_keywords']    ?? '',
+                    'meta_keywords' => $decoded['meta_keywords'] ?? '',
                 ];
             } else {
                 // Fallback to text parsing
@@ -484,16 +488,17 @@ class GeminiService
 
             return [
                 'success' => true,
-                'data'    => $response,
-                'cached'  => false,
-                'tokens_used' => $this->estimateTokens($prompt . json_encode($response)),
+                'data' => $response,
+                'cached' => false,
+                'tokens_used' => $this->estimateTokens($prompt.json_encode($response)),
             ];
 
         } catch (\Exception $e) {
-            Log::error('Gemini Meta Generation Error: ' . $e->getMessage());
+            Log::error('Gemini Meta Generation Error: '.$e->getMessage());
+
             return [
                 'success' => false,
-                'error'   => 'Failed to generate meta details: ' . $e->getMessage(),
+                'error' => 'Failed to generate meta details: '.$e->getMessage(),
             ];
         }
     }
@@ -507,31 +512,41 @@ class GeminiService
 
         // More concise prompt
         $prompt = "Write SEO-friendly {$entityName} description (200-300 words):\n";
-        $prompt .= "Title: " . ($data['title'] ?? 'N/A');
+        $prompt .= 'Title: '.($data['title'] ?? 'N/A');
 
         // Only add non-empty fields
         $fields = [];
-        if (!empty($data['location'])) $fields[] = "Location: {$data['location']}";
-        if (!empty($data['city'])) $fields[] = "City: {$data['city']}";
-        if (!empty($data['state'])) $fields[] = "State: {$data['state']}";
-        if (!empty($data['country'])) $fields[] = "Country: {$data['country']}";
-        if (!empty($data['price'])) $fields[] = "Price: {$data['price']}";
-        if (!empty($data['propery_type']) || !empty($data['type'])) {
+        if (! empty($data['location'])) {
+            $fields[] = "Location: {$data['location']}";
+        }
+        if (! empty($data['city'])) {
+            $fields[] = "City: {$data['city']}";
+        }
+        if (! empty($data['state'])) {
+            $fields[] = "State: {$data['state']}";
+        }
+        if (! empty($data['country'])) {
+            $fields[] = "Country: {$data['country']}";
+        }
+        if (! empty($data['price'])) {
+            $fields[] = "Price: {$data['price']}";
+        }
+        if (! empty($data['propery_type']) || ! empty($data['type'])) {
             $type = $data['propery_type'] ?? $data['type'] ?? '';
             $fields[] = "Type: {$type}";
         }
-        if (!empty($data['category_name'])) {
+        if (! empty($data['category_name'])) {
             $fields[] = "Category: {$data['category_name']}";
         }
 
-        if (!empty($fields)) {
-            $prompt .= "\n" . implode("\n", $fields);
+        if (! empty($fields)) {
+            $prompt .= "\n".implode("\n", $fields);
         }
 
         $prompt .= "\n\nRequirements: Engaging, professional, highlight features, location benefits. Text only.";
 
         // Add language instruction if language is specified
-        if (!empty($data['language_name']) || !empty($data['language_code'])) {
+        if (! empty($data['language_name']) || ! empty($data['language_code'])) {
             $language = $data['language_name'] ?? $data['language_code'];
             $prompt .= "\n\nIMPORTANT: Write the description in {$language} language. The entire description must be in {$language}.";
         }
@@ -549,13 +564,14 @@ class GeminiService
 
         // Include language in cache key if provided
         $languageSuffix = '';
-        if (!empty($data['language_code'])) {
-            $languageSuffix = '_' . $data['language_code'];
-        } elseif (!empty($data['language_name'])) {
-            $languageSuffix = '_' . md5($data['language_name']);
+        if (! empty($data['language_code'])) {
+            $languageSuffix = '_'.$data['language_code'];
+        } elseif (! empty($data['language_name'])) {
+            $languageSuffix = '_'.md5($data['language_name']);
         }
 
         $cacheKey = "gemini_description_{$promptHash}{$languageSuffix}";
+
         return Cache::store('gemini')->has($cacheKey);
     }
 
@@ -569,13 +585,14 @@ class GeminiService
 
         // Include language in cache key if provided
         $languageSuffix = '';
-        if (!empty($data['language_code'])) {
-            $languageSuffix = '_' . $data['language_code'];
-        } elseif (!empty($data['language_name'])) {
-            $languageSuffix = '_' . md5($data['language_name']);
+        if (! empty($data['language_code'])) {
+            $languageSuffix = '_'.$data['language_code'];
+        } elseif (! empty($data['language_name'])) {
+            $languageSuffix = '_'.md5($data['language_name']);
         }
 
         $cacheKey = "gemini_meta_{$promptHash}{$languageSuffix}";
+
         return Cache::store('gemini')->has($cacheKey);
     }
 
@@ -590,26 +607,26 @@ class GeminiService
                   "generate SEO meta details.\n\n";
 
         // Add language instruction if language is specified
-        if (!empty($data['language_name']) || !empty($data['language_code'])) {
+        if (! empty($data['language_name']) || ! empty($data['language_code'])) {
             $language = $data['language_name'] ?? $data['language_code'];
             $prompt .= "\n\nIMPORTANT: Write the meta details in {$language} language. The entire meta details must be in {$language}.";
         }
 
-        $prompt .= "Title: " . ($data['title'] ?? 'N/A') . "\n";
+        $prompt .= 'Title: '.($data['title'] ?? 'N/A')."\n";
 
-        if (!empty($data['location'])) {
+        if (! empty($data['location'])) {
             $prompt .= "Location: {$data['location']}\n";
         }
-        if (!empty($data['city'])) {
+        if (! empty($data['city'])) {
             $prompt .= "City: {$data['city']}\n";
         }
-        if (!empty($data['state'])) {
+        if (! empty($data['state'])) {
             $prompt .= "State: {$data['state']}\n";
         }
-        if (!empty($data['country'])) {
+        if (! empty($data['country'])) {
             $prompt .= "Country: {$data['country']}\n";
         }
-        if (!empty($data['price'])) {
+        if (! empty($data['price'])) {
             $prompt .= "Price: {$data['price']}\n";
         }
 
@@ -623,7 +640,7 @@ class GeminiService
         $prompt .= "- meta_title: 50-60 characters, include location and key feature\n";
         $prompt .= "- meta_description: 150-160 characters, compelling and clear\n";
         $prompt .= "- meta_keywords: 10-15 comma-separated keywords\n";
-        $prompt .= "- Do NOT add any explanation, markdown, or extra text. JSON ONLY.";
+        $prompt .= '- Do NOT add any explanation, markdown, or extra text. JSON ONLY.';
 
         return $prompt;
     }
@@ -656,7 +673,8 @@ class GeminiService
 
             return null;
         } catch (\Exception $e) {
-            Log::warning('Failed to extract structured response: ' . $e->getMessage());
+            Log::warning('Failed to extract structured response: '.$e->getMessage());
+
             return null;
         }
     }
@@ -710,6 +728,7 @@ class GeminiService
         $content = preg_replace('/```json\s*/', '', $content);
         $content = preg_replace('/```\s*$/', '', $content);
         $content = trim($content, " \t\n\r\0\x0B\"'");
+
         return $content;
     }
 
@@ -719,5 +738,115 @@ class GeminiService
     private function estimateTokens(string $text): int
     {
         return (int) ceil(strlen($text) / 4);
+    }
+
+    /**
+     * FASE 7 (T1) — Calificación automática de un lead por IA (en español).
+     *
+     * Analiza el mensaje/notas del cliente, la propiedad de interés y su precio
+     * para devolver un score (0-100), un nivel de prioridad y una sugerencia de
+     * acción comercial. Se usa como fuente de verdad del campo `score` de
+     * `crm_leads` y se guarda en `metadata['ia']`.
+     *
+     * @param  array  $data  Datos del lead: nombre, notas/mensaje, propiedad,
+     *                       precio y tipo de propiedad.
+     * @return array ['success' => bool, 'data' => [score, nivel, resumen, sugerencia]|null, 'error' => string|null]
+     */
+    public function scoreLead(array $data): array
+    {
+        try {
+            $prompt = $this->buildLeadScorePrompt($data);
+            $cacheKey = 'gemini_lead_score_'.md5($prompt);
+
+            $cached = Cache::store('gemini')->get($cacheKey);
+            if ($cached) {
+                return [
+                    'success' => true,
+                    'data' => $cached,
+                    'cached' => true,
+                ];
+            }
+
+            $result = $this->generateContent($prompt);
+
+            if (! is_array($result) || empty($result['success'])) {
+                return $result;
+            }
+
+            $text = $this->getGeminiText($result['data'] ?? []);
+            $text = $this->cleanResponse($text);
+            $parsed = json_decode($text, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE || ! is_array($parsed)) {
+                if (preg_match('/\{[^}]+\}/s', $text, $matches)) {
+                    $parsed = json_decode($matches[0], true);
+                }
+            }
+
+            if (! is_array($parsed)) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to parse lead score from Gemini response',
+                ];
+            }
+
+            $score = (int) ($parsed['score'] ?? 0);
+            $score = max(0, min(100, $score));
+
+            $payload = [
+                'score' => $score,
+                'nivel' => (string) ($parsed['nivel'] ?? 'desconocido'),
+                'resumen' => (string) ($parsed['resumen'] ?? ''),
+                'sugerencia' => (string) ($parsed['sugerencia'] ?? ''),
+            ];
+
+            Cache::store('gemini')->put($cacheKey, $payload, 86400);
+
+            return [
+                'success' => true,
+                'data' => $payload,
+                'cached' => false,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Gemini Lead Scoring Error: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'error' => 'Failed to score lead: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Construye el prompt de calificación de leads en español.
+     */
+    public function buildLeadScorePrompt(array $data): string
+    {
+        $nombre = $data['nombre'] ?? 'Cliente';
+        $mensaje = $data['notas'] ?? $data['mensaje'] ?? '';
+        $propiedad = $data['property_title'] ?? 'N/A';
+        $precio = $data['price'] ?? 'N/A';
+        $tipo = $data['property_type'] ?? 'propiedad';
+        $ciudad = $data['city'] ?? '';
+
+        $prompt = "Eres un asistente inmobiliario experto. Califica la intención de compra/alquiler de un cliente potencial (lead) en español.\n\n";
+        $prompt .= "Nombre del cliente: {$nombre}\n";
+        $prompt .= "Propiedad de interés: {$propiedad} ({$tipo})".($ciudad ? " en {$ciudad}" : '')."\n";
+        $prompt .= "Precio de la propiedad: {$precio}\n";
+        $prompt .= "Mensaje del cliente: \"{$mensaje}\"\n\n";
+        $prompt .= "Analiza: urgencia, presupuesto implícito/explícito, intención de compra real vs curiosidad, y calidad de la información aportada.\n";
+        $prompt .= "Responde ÚNICAMENTE con JSON válido, sin markdown ni explicaciones, con esta estructura exacta:\n";
+        $prompt .= "{\n  \"score\": 0-100,\n  \"nivel\": \"alto\"|\"medio\"|\"bajo\",\n  \"resumen\": \"2 frases cortas en español\",\n  \"sugerencia\": \"1 acción de seguimiento concreta en español\"\n}\n";
+        $prompt .= "Reglas: score alto (80-100) si hay presupuesto claro/urgencia; medio (50-79) si hay interés real pero falta dato; bajo (0-49) si es curiosidad sin intención. Sé estricto y objetivo.";
+
+        return $prompt;
+    }
+
+    /**
+     * Extrae el texto del primer candidato de una respuesta de Gemini.
+     */
+    private function getGeminiText(array $data): string
+    {
+        return $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
     }
 }

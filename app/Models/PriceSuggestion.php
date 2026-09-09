@@ -3,15 +3,17 @@
 namespace App\Models;
 
 use App\Traits\HasAppTimezone;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class PriceSuggestion extends Model
 {
-    use HasFactory, SoftDeletes, HasAppTimezone;
+    use HasAppTimezone, HasFactory, SoftDeletes;
 
     protected $table = 'price_suggestions';
+
+    protected $dates = ['created_at', 'updated_at', 'deleted_at', 'expires_at'];
 
     protected $fillable = [
         'property_id',
@@ -33,6 +35,17 @@ class PriceSuggestion extends Model
         'expires_at',
     ];
 
+    protected $hidden = [
+        'updated_at',
+        'deleted_at',
+    ];
+
+    protected $appends = [
+        'price_change_percentage',
+        'is_expired',
+        'is_valid',
+    ];
+
     protected $casts = [
         'suggested_price' => 'decimal:2',
         'suggested_price_per_sqm' => 'decimal:2',
@@ -43,122 +56,105 @@ class PriceSuggestion extends Model
         'confidence_score' => 'decimal:2',
         'estimated_sales_probability' => 'decimal:2',
         'comparable_properties' => 'array',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
+        'is_ai_generated' => 'boolean',
         'expires_at' => 'datetime',
     ];
 
-    protected $appends = [
-        'price_change_percentage',
-        'is_expired',
-        'is_valid',
-    ];
-
     /**
-     * Get property relationship
+     * Relaciones
      */
     public function property()
     {
         return $this->belongsTo(Property::class, 'property_id');
     }
 
-    /**
-     * Get user who generated the suggestion
-     */
     public function generatedBy()
     {
         return $this->belongsTo(User::class, 'generated_by');
     }
 
     /**
-     * Calculate price change percentage
-     */
-    public function getPriceChangePercentageAttribute(): float
-    {
-        if ($this->current_price == 0) {
-            return 0;
-        }
-        return (($this->suggested_price - $this->current_price) / $this->current_price) * 100;
-    }
-
-    /**
-     * Check if suggestion is expired
-     */
-    public function getIsExpiredAttribute(): bool
-    {
-        if (!$this->expires_at) {
-            return false;
-        }
-        return $this->expires_at->isPast();
-    }
-
-    /**
-     * Check if suggestion is still valid
-     */
-    public function getIsValidAttribute(): bool
-    {
-        return !$this->is_expired && $this->confidence_score >= 50;
-    }
-
-    /**
-     * Get comparable properties
-     */
-    public function getComparablePropertiesData()
-    {
-        if (!$this->comparable_properties) {
-            return collect();
-        }
-
-        return Property::whereIn('id', $this->comparable_properties)
-            ->select('id', 'title', 'price', 'location', 'area', 'bedrooms', 'bathrooms')
-            ->get();
-    }
-
-    /**
-     * Scope: Get valid suggestions
+     * Scopes
      */
     public function scopeValid($query)
     {
-        return $query->where('confidence_score', '>=', 50)
-            ->where(function ($q) {
-                $q->whereNull('expires_at')
-                    ->orWhere('expires_at', '>', now());
-            });
+        return $query->where('expires_at', '>', now())
+            ->whereNotNull('suggested_price');
     }
 
-    /**
-     * Scope: Get by recommendation
-     */
     public function scopeByRecommendation($query, $recommendation)
     {
         return $query->where('recommendation', $recommendation);
     }
 
-    /**
-     * Scope: Get high confidence
-     */
     public function scopeHighConfidence($query, $minScore = 75)
     {
         return $query->where('confidence_score', '>=', $minScore);
     }
 
     /**
-     * Mark suggestion as reviewed
+     * ID de las propiedades comparables
      */
+    public function getComparablePropertiesIds()
+    {
+        $data = $this->comparable_properties;
+
+        return is_array($data) ? array_map('intval', $data) : [];
+    }
+
+    public function getComparablePropertiesData()
+    {
+        $ids = $this->getComparablePropertiesIds();
+        if (empty($ids)) {
+            return collect();
+        }
+
+        return Property::whereIn('id', $ids)
+            ->get()
+            ->map(fn ($property) => [
+                'id' => $property->id,
+                'title' => $property->title,
+                'price' => $property->price,
+                'currency' => $property->currency ?: 'DOP',
+                'city' => $property->city,
+                'state' => $property->state,
+            ]);
+    }
+
     public function markAsReviewed()
     {
-        return $this->update([
-            'expires_at' => now()->addDays(7),
-        ]);
+        return $this->update(['is_ai_generated' => false]);
+    }
+
+    public function refresh()
+    {
+        if ($this->is_expired) {
+            return app(\App\Services\PriceIntelligenceService::class)
+                ->generatePriceSuggestion($this->property, true);
+        }
+
+        return $this;
     }
 
     /**
-     * Refresh suggestion
+     * Atributos computados
      */
-    public function refresh()
+    public function getPriceChangePercentageAttribute()
     {
-        $this->delete();
-        return true;
+        if (empty($this->current_price) || empty($this->suggested_price)) {
+            return 0.0;
+        }
+
+        return round((($this->suggested_price - $this->current_price) / $this->current_price) * 100, 2);
+    }
+
+    public function getIsExpiredAttribute()
+    {
+        return $this->expires_at ? $this->expires_at->isPast() : false;
+    }
+
+    public function getIsValidAttribute()
+    {
+        return ! $this->is_expired && $this->confidence_score >= 50;
     }
 }

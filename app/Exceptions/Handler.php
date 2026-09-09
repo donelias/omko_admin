@@ -2,16 +2,19 @@
 
 namespace App\Exceptions;
 
-use Throwable;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Psr\Log\LogLevel;
+use Throwable;
 
 class Handler extends ExceptionHandler
 {
     /**
      * A list of exception types with their corresponding custom log levels.
      *
-     * @var array<class-string<\Throwable>, \Psr\Log\LogLevel::*>
+     * @var array<class-string<Throwable>, LogLevel::*>
      */
     protected $levels = [
         //
@@ -20,7 +23,7 @@ class Handler extends ExceptionHandler
     /**
      * A list of the exception types that are not reported.
      *
-     * @var array<int, class-string<\Throwable>>
+     * @var array<int, class-string<Throwable>>
      */
     protected $dontReport = [
         //
@@ -49,19 +52,61 @@ class Handler extends ExceptionHandler
         });
     }
 
+    /**
+     * Render an exception into an HTTP response.
+     *
+     * @param  Request  $request
+     * @return \Symfony\Component\HttpFoundation\Response
+     *
+     * @throws Throwable
+     */
+    public function render($request, Throwable $exception)
+    {
+        if ($request->expectsJson()) {
+            // Deja que el método unauthenticated() maneje los 401 correctamente.
+            if ($exception instanceof AuthenticationException) {
+                return parent::render($request, $exception);
+            }
+
+            $details = '';
+
+            if (method_exists($exception, 'getMessages')) {
+                // For validation exceptions
+                $details = json_encode($exception->getMessages());
+            } else {
+                $details = $exception->getMessage();
+            }
+
+            return response()->json([
+                'error' => true,
+                'message' => $exception->getMessage(),
+                'details' => $details,
+                'code' => 500,
+            ], 500);
+        }
+
+        return parent::render($request, $exception);
+    }
 
     /**
      * Convert an authentication exception into a response.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Illuminate\Auth\AuthenticationException  $exception
-     * @return \Illuminate\Http\Response
+     * @param  Request  $request
+     * @return Response
      */
     protected function unauthenticated($request, AuthenticationException $exception)
     {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'error' => true,
+                'message' => 'User is not authenticated',
+                'details' => 'Authentication required',
+                'code' => 401,
+            ], 401);
+        }
+
         return $request->expectsJson()
             ? response()->json(['error' => true, 'message' => 'User is not authenticated'], 401)
             : redirect()->guest($exception->redirectTo() ?? route('login'));
     }
-
 }

@@ -1,63 +1,65 @@
 <?php
 
-use Google\Client;
-use App\Models\User;
-use GuzzleHttp\Pool;
-use App\Models\Setting;
-use App\Models\Category;
+use App\Models\Appointment;
+use App\Models\BlockedChatUser;
 use App\Models\Customer;
+use App\Models\Favourite;
+use App\Models\InterestedUser;
 use App\Models\Language;
+use App\Models\OldUserPurchasedPackage;
+use App\Models\parameter;
 use App\Models\Projects;
 use App\Models\Property;
-use App\Models\Favourite;
-use App\Models\parameter;
-use App\Models\Usertokens;
-use App\Models\Appointment;
-use Illuminate\Support\Str;
-use App\Models\user_reports;
-use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Promise\Utils;
-use App\Models\InterestedUser;
-use Illuminate\Support\Carbon;
-use App\Models\BlockedChatUser;
-use App\Services\HelperService;
 use App\Models\PropertysInquiry;
-use kornrunner\Blurhash\Blurhash;
+use App\Models\Setting;
+use App\Models\User;
+use App\Models\user_reports;
+use App\Models\Usertokens;
+use App\Services\ApiResponseService;
+use App\Services\HelperService;
+use App\Services\NotificationTranslationService;
+use Google\Client;
+use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Pool;
+use GuzzleHttp\Psr7\Request;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Services\ApiResponseService;
-use Illuminate\Support\Facades\Auth;
-use GuzzleHttp\Client as GuzzleClient;
-use App\Models\OldUserPurchasedPackage;
-use App\Services\NotificationTranslationService;
+use Illuminate\Support\Str;
 use Intervention\Image\ImageManagerStatic as Image;
+use kornrunner\Blurhash\Blurhash;
 
-
-if (!function_exists('system_setting')) {
+if (! function_exists('system_setting')) {
 
     function system_setting($type)
     {
 
         $db = Setting::where('type', $type)->first();
-        if(isset($db)){
-            if($db->type == 'default_language'){
+        if (isset($db)) {
+            if ($db->type == 'default_language') {
                 return $db->getRawOriginal('data');
             }
+
             return $db->data;
         }
+
         return '';
     }
 }
 
 function form_submit($data = '', $value = '', $extra = '')
 {
-    $defaults = array(
+    $defaults = [
         'type' => 'submit',
         'name' => is_array($data) ? '' : $data,
-        'value' => $value
-    );
+        'value' => $value,
+    ];
 
-    return '<input ' . _parse_form_attributes($data, $defaults) . _attributes_to_string($extra) . " />\n";
+    return '<input '._parse_form_attributes($data, $defaults)._attributes_to_string($extra)." />\n";
 }
 function _parse_form_attributes($attributes, $default)
 {
@@ -79,27 +81,26 @@ function _parse_form_attributes($attributes, $default)
     foreach ($default as $key => $val) {
         if ($key === 'value') {
             $val = ($val);
-        } elseif ($key === 'name' && !strlen($default['name'])) {
+        } elseif ($key === 'name' && ! strlen($default['name'])) {
             continue;
         }
 
-        $att .= $key . '="' . $val . '" ';
+        $att .= $key.'="'.$val.'" ';
     }
 
     return $att;
 }
 
-
 // ------------------------------------------------------------------------
 
-if (!function_exists('_attributes_to_string')) {
+if (! function_exists('_attributes_to_string')) {
     /**
      * Attributes To String
      *
      * Helper function used by some of the form helpers
      *
      * @param	mixed
-     * @return	string
+     * @return string
      */
     function _attributes_to_string($attributes)
     {
@@ -115,33 +116,42 @@ if (!function_exists('_attributes_to_string')) {
             $atts = '';
 
             foreach ($attributes as $key => $val) {
-                $atts .= ' ' . $key . '="' . $val . '"';
+                $atts .= ' '.$key.'="'.$val.'"';
             }
 
             return $atts;
         }
 
         if (is_string($attributes)) {
-            return ' ' . $attributes;
+            return ' '.$attributes;
         }
 
-        return FALSE;
+        return false;
     }
 }
 
-function send_push_notification($registrationIDs = array(), $fcmMsg = '') {
+function send_push_notification($registrationIDs = [], $fcmMsg = '')
+{
     try {
-        if (!count($registrationIDs)) {
+        file_put_contents(storage_path('logs/laravel.log'), 'Helper: send_push_notification ENTRY with count: '.count($registrationIDs).' at '.now()."\n", FILE_APPEND);
+        Log::info('Helper Send Push Notification ENTRY : ', [
+            'registrationIDs' => $registrationIDs,
+            'fcmMsg' => $fcmMsg,
+        ]);
+
+        if (! count($registrationIDs)) {
+            Log::info('Helper Send Push Notification : No IDs found, returning false.');
+
             return false;
         }
-        $client = new GuzzleClient();
+        $client = new GuzzleClient;
         $access_token = getAccessToken(); // Get Access Token
         $projectId = system_setting('firebase_project_id'); // Get Project Id
-        $url = 'https://fcm.googleapis.com/v1/projects/' . $projectId . '/messages:send'; // Create URL
+        $url = 'https://fcm.googleapis.com/v1/projects/'.$projectId.'/messages:send'; // Create URL
         // Headers
         $headers = [
-            'Authorization' => 'Bearer ' . $access_token,
-            'Content-Type' => 'application/json'
+            'Authorization' => 'Bearer '.$access_token,
+            'Content-Type' => 'application/json',
         ];
 
         // Map FCM tokens to customer IDs and group by language
@@ -159,7 +169,7 @@ function send_push_notification($registrationIDs = array(), $fcmMsg = '') {
                 $customerId = $tokenToCustomerMap[$token];
                 $languageCode = NotificationTranslationService::getCustomerLanguage($customerId);
 
-                if (!isset($tokensByLanguage[$languageCode])) {
+                if (! isset($tokensByLanguage[$languageCode])) {
                     $tokensByLanguage[$languageCode] = [];
                 }
                 $tokensByLanguage[$languageCode][] = $token;
@@ -170,9 +180,9 @@ function send_push_notification($registrationIDs = array(), $fcmMsg = '') {
         }
 
         // Add tokens without customer to default language group
-        if (!empty($tokensWithoutCustomer)) {
+        if (! empty($tokensWithoutCustomer)) {
             $defaultLanguage = HelperService::getSettingData('default_language') ?? 'en';
-            if (!isset($tokensByLanguage[$defaultLanguage])) {
+            if (! isset($tokensByLanguage[$defaultLanguage])) {
                 $tokensByLanguage[$defaultLanguage] = [];
             }
             $tokensByLanguage[$defaultLanguage] = array_merge(
@@ -182,69 +192,70 @@ function send_push_notification($registrationIDs = array(), $fcmMsg = '') {
         }
 
         // Create Requests - grouped by language
-        $allRequests = [];
+        // Create a generator for requests
+        $requests = function ($tokensByLanguage) use ($url, $headers, $fcmMsg) {
+            foreach ($tokensByLanguage as $languageCode => $tokens) {
+                $replace = isset($fcmMsg['replace']) && is_array($fcmMsg['replace']) ? $fcmMsg['replace'] : [];
 
-        foreach ($tokensByLanguage as $languageCode => $tokens) {
-            $replace = isset($fcmMsg['replace']) && is_array($fcmMsg['replace']) ? $fcmMsg['replace'] : [];
+                $translated = NotificationTranslationService::translateNotification(
+                    $fcmMsg['title'] ?? '',
+                    $fcmMsg['body'] ?? $fcmMsg['message'] ?? '',
+                    $languageCode,
+                    $replace
+                );
 
+                $translatedFcmMsg = $fcmMsg;
+                $translatedFcmMsg['title'] = $translated['title'];
+                $translatedFcmMsg['body'] = $translated['body'];
 
-            $translated = NotificationTranslationService::translateNotification(
-                $fcmMsg['title'] ?? '',
-                $fcmMsg['body'] ?? $fcmMsg['message'] ?? '',
-                $languageCode,
-                $replace
-            );
+                if (isset($fcmMsg['message'])) {
+                    $translatedFcmMsg['message'] = $translated['body'];
+                }
+                unset($translatedFcmMsg['replace']);
+                $translatedFcmMsg['data'] = json_encode($translatedFcmMsg['data'] ?? []);
 
-            $translatedFcmMsg = $fcmMsg;
-            $translatedFcmMsg['title'] = $translated['title'];
-            $translatedFcmMsg['body'] = $translated['body'];
-
-            if (isset($fcmMsg['message'])) {
-                $translatedFcmMsg['message'] = $translated['body'];
-            }
-            unset($translatedFcmMsg['replace']);
-            $translatedFcmMsg['data'] = json_encode($translatedFcmMsg['data'] ?? []);
-
-            foreach ($tokens as $registrationID) {
-                $fcmFields = [
-                    'json' => [
+                foreach ($tokens as $registrationID) {
+                    $payload = [
                         'message' => [
                             'token' => $registrationID,
                             'notification' => [
                                 'title' => $translatedFcmMsg['title'],
-                                'body'  => $translatedFcmMsg['body'],
-                                'image' => $translatedFcmMsg['image'] ?? null,
+                                'body' => $translatedFcmMsg['body'],
                             ],
-                            'data' => $translatedFcmMsg
-                        ]
-                    ]
-                ];
-                $allRequests[] = new Request('POST', $url, $headers, json_encode($fcmFields['json']));
-            }
-        }
+                            'data' => $translatedFcmMsg,
+                        ],
+                    ];
 
-        // This is used to Process multiple Request at a same time
-        $pool = new Pool($client, $allRequests, [
-            'concurrency' => 10, // Adjust based on your server capability
-            'fulfilled' => function ($response, $index) {
-                // Code after fulfilled Request
+                    // Yield the request with the registration ID as the key
+                    yield $registrationID => new Request('POST', $url, $headers, json_encode($payload));
+                }
+            }
+        };
+
+        $pool = new Pool($client, $requests($tokensByLanguage), [
+            'concurrency' => 10,
+            'fulfilled' => function ($response, $registrationID) {
+                Log::info("FCM Success Response for token {$registrationID}: ", [$response->getBody()->getContents()]);
+                file_put_contents(storage_path('logs/laravel.log'), "FCM Success for token {$registrationID}"."\n", FILE_APPEND);
+
             },
-            'rejected' => function ($reason, $index) use (&$unregisteredIDsNested, $registrationIDs) {
-                $response = $reason->getResponse();
-                if ($response) {
+            'rejected' => function ($reason, $registrationID) use (&$unregisteredIDsNested) {
+                file_put_contents(storage_path('logs/laravel.log'), "FCM Rejected for token {$registrationID}: ".$reason->getMessage()."\n", FILE_APPEND);
+                Log::error("FCM Error for token {$registrationID}: ".$reason->getMessage());
+
+                if ($reason instanceof RequestException && $reason->hasResponse()) {
+                    $response = $reason->getResponse();
                     $decodedResult = json_decode($response->getBody(), true);
-                    // Only consider token-specific errors
+
                     $errorMessage = strtolower($decodedResult['error']['message'] ?? '');
-                    $isInvalidToken = str_contains($errorMessage, 'invalid registration token') || str_contains($errorMessage, 'registration token is not a valid');
-                    if($decodedResult['error']['status'] == 'NOT_FOUND'){
-                        $isInvalidToken = true;
-                    }
+                    $isInvalidToken = str_contains($errorMessage, 'invalid registration token') ||
+                                    str_contains($errorMessage, 'registration token is not a valid') ||
+                                    ($decodedResult['error']['status'] ?? '') == 'NOT_FOUND';
 
                     if ($isInvalidToken) {
-                        $unregisteredIDsNested[] = $registrationIDs[$index] ?? null;
+                        $unregisteredIDsNested[] = $registrationID;
                     }
                 }
-                Log::error($reason->getMessage());
             },
         ]);
 
@@ -252,43 +263,42 @@ function send_push_notification($registrationIDs = array(), $fcmMsg = '') {
         $promise->wait();
 
         // Flatten the nested array if it exists
-        $unregisteredIDs = !empty($unregisteredIDsNested) ? (is_array($unregisteredIDsNested[0]) ? array_merge(...$unregisteredIDsNested) : $unregisteredIDsNested) : [];
+        $unregisteredIDs = ! empty($unregisteredIDsNested) ? (is_array($unregisteredIDsNested[0]) ? array_merge(...$unregisteredIDsNested) : $unregisteredIDsNested) : [];
         $unregisteredIDs = array_filter($unregisteredIDs); // Remove null values
 
-        if (!empty($unregisteredIDs)) {
+        if (! empty($unregisteredIDs)) {
             Usertokens::whereIn('fcm_id', $unregisteredIDs)->delete();
         }
 
         return true;
     } catch (Exception $e) {
-        Log::error("Error in Notification Sending :- ".$e->getMessage());
+        Log::error('Error in Notification Sending :- '.$e->getMessage());
+
         return false;
     }
 }
 
-
-
-if (!function_exists('get_countries_from_json')) {
+if (! function_exists('get_countries_from_json')) {
     function get_countries_from_json()
     {
-        $country =  json_decode(file_get_contents(public_path('json') . "/cities.json"), true);
+        $country = json_decode(file_get_contents(public_path('json').'/cities.json'), true);
 
-        $tempRow = array();
+        $tempRow = [];
         foreach ($country['countries'] as $row) {
             $tempRow[] = $row['country'];
         }
+
         return $tempRow;
     }
 }
 
-if (!function_exists('get_states_from_json')) {
+if (! function_exists('get_states_from_json')) {
     function get_states_from_json($country)
     {
 
+        $state = json_decode(file_get_contents(public_path('json').'/cities.json'), true);
 
-        $state =  json_decode(file_get_contents(public_path('json') . "/cities.json"), true);
-
-        $tempRow = array();
+        $tempRow = [];
         foreach ($state['countries'] as $row) {
             // echo $row;
             if ($row['country'] == $country) {
@@ -300,25 +310,24 @@ if (!function_exists('get_states_from_json')) {
     }
 }
 
-
 function update_subscription($userId)
 {
     // Array Initialize
-    $updateUserPackage = array();
+    $updateUserPackage = [];
     // User Package Query
-    $userPackages = OldUserPurchasedPackage::with('package','customer')->where('modal_id', $userId);
+    $userPackages = OldUserPurchasedPackage::with('package', 'customer')->where('modal_id', $userId);
     // Result Data
-    $result = $userPackages->clone()->with('package','customer')->get();
+    $result = $userPackages->clone()->with('package', 'customer')->get();
 
     // Get Package Count
-    $packageCount = $userPackages->clone()->where(function($query){
-        $query->where(function($subQuery){
+    $packageCount = $userPackages->clone()->where(function ($query) {
+        $query->where(function ($subQuery) {
             $subQuery->where('prop_status', 1)->orWhere('adv_status', 1);
         });
     })->count();
 
     // loop on result data
-    if(collect($result)->isNotEmpty()){
+    if (collect($result)->isNotEmpty()) {
         foreach ($result as $key => $row) {
             // Get end date of current looped data
             $endDate = Carbon::parse($row->end_date, 'UTC')->startOfDay(); // Parse the date with UTC time zone and set time to start of the day
@@ -329,22 +338,21 @@ function update_subscription($userId)
 
             // If days are zero or in negative
             if ($diffInDays < 0) {
-                $updateUserPackage[] = array(
+                $updateUserPackage[] = [
                     'id' => $row->id,
                     'prop_status' => 0,
-                    'adv_status' => 0
-                );
-                if (!empty($row->package) && $row->package->type == "premium_user"){
+                    'adv_status' => 0,
+                ];
+                if (! empty($row->package) && $row->package->type == 'premium_user') {
                     $customerPremiumStatus = 0;
                 }
             }
-
         }
     }
 
     // Bulk Update the user packages limits to zero
-    if(!empty($updateUserPackage)){
-        OldUserPurchasedPackage::upsert($updateUserPackage,['id'],['prop_status','adv_status']);
+    if (! empty($updateUserPackage)) {
+        OldUserPurchasedPackage::upsert($updateUserPackage, ['id'], ['prop_status', 'adv_status']);
     }
 
     // if package count is 0 then update the customer's subscription to 0 and is_premium according to $customerPremiumStatus
@@ -352,7 +360,7 @@ function update_subscription($userId)
         $customer = Customer::find($userId);
         $customer->subscription = 0;
         // if there is customerPremiumStatus and its zero then only update
-        if(isset($customerPremiumStatus) && $customerPremiumStatus == 0){
+        if (isset($customerPremiumStatus) && $customerPremiumStatus == 0) {
             $customer->is_premium = 0;
         }
         $customer->update();
@@ -366,9 +374,9 @@ function get_hash($img)
     $height = $image_make->height();
 
     $pixels = [];
-    for ($y = 0; $y < $height; ++$y) {
+    for ($y = 0; $y < $height; $y++) {
         $row = [];
-        for ($x = 0; $x < $width; ++$x) {
+        for ($x = 0; $x < $width; $x++) {
             $colors = $image_make->pickColor($x, $y);
 
             $row[] = [$colors[0], $colors[1], $colors[2]];
@@ -378,76 +386,80 @@ function get_hash($img)
 
     $components_x = 4;
     $components_y = 3;
-    $hash =  Blurhash::encode($pixels, $components_x, $components_y);
+    $hash = Blurhash::encode($pixels, $components_x, $components_y);
+
     //  "ll";
     return $hash;
 }
-if (!function_exists('form_hidden')) {
+if (! function_exists('form_hidden')) {
     /**
      * Hidden Input Field
      *
      * Generates hidden fields. You can pass a simple key/value string or
      * an associative array with multiple values.
      *
-     * @param	mixed	$name		Field name
-     * @param	string	$value		Field value
-     * @param	bool	$recursing
-     * @return	string
+     * @param  mixed  $name  Field name
+     * @param  string  $value  Field value
+     * @param  bool  $recursing
+     * @return string
      */
-    function form_hidden($name, $value = '', $recursing = FALSE)
+    function form_hidden($name, $value = '', $recursing = false)
     {
         static $form;
 
-        if ($recursing === FALSE) {
+        if ($recursing === false) {
             $form = "\n";
         }
 
         if (is_array($name)) {
             foreach ($name as $key => $val) {
-                form_hidden($key, $val, TRUE);
+                form_hidden($key, $val, true);
             }
 
             return $form;
         }
 
-        if (!is_array($value)) {
-            $form .= '<input type="hidden" name="' . $name . '" value="' . ($value) . "\" />\n";
+        if (! is_array($value)) {
+            $form .= '<input type="hidden" name="'.$name.'" value="'.($value)."\" />\n";
         } else {
             foreach ($value as $k => $v) {
                 $k = is_int($k) ? '' : $k;
-                form_hidden($name . '[' . $k . ']', $v, TRUE);
+                form_hidden($name.'['.$k.']', $v, true);
             }
         }
 
         return $form;
     }
 }
-if (!function_exists('form_close')) {
+if (! function_exists('form_close')) {
     /**
      * Form Close Tag
      *
      * @param	string
-     * @return	string
+     * @return string
      */
     function form_close($extra = '')
     {
-        return '</form>' . $extra;
+        return '</form>'.$extra;
     }
 }
-function get_property_details($result, $current_user = NULL, $skipLimitCheck = false)
+function get_property_details($result, $current_user = null, $skipLimitCheck = false)
 {
-    $rows = array();
-    $tempRow = array();
+    if ($result instanceof Model) {
+        $result = collect([$result]);
+    }
+    $rows = [];
+    $tempRow = [];
     $count = 1;
     foreach ($result as $row) {
         if ($row->is_premium == 1 && $skipLimitCheck == false) {
-            if(Auth::guard('sanctum')->check()){
+            if (Auth::guard('sanctum')->check()) {
                 // Check if the user has a premium property list feature in package
-                $response = HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'),true);
-                if($response['package_available'] == false || $response['feature_available'] == false){
-                    return ApiResponseService::validationError('Cannot Access Premium Property, Feature Not Available',$response);
+                $response = HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'), true);
+                if ($response['package_available'] == false || $response['feature_available'] == false) {
+                    return ApiResponseService::validationError('Cannot Access Premium Property, Feature Not Available', $response);
                 }
-            }else{
+            } else {
                 return ApiResponseService::validationError('Cannot Access Premium Property, Feature Not Available');
             }
         }
@@ -458,7 +470,7 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
         if ($customer && $row->added_by != 0) {
             $isBlockedByMe = false;
             $isBlockedByUser = false;
-            if($current_user){
+            if ($current_user) {
 
                 $isBlockedByMe = BlockedChatUser::where('by_user_id', $current_user)
                     ->where('user_id', $row->added_by)
@@ -467,7 +479,6 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
                 $isBlockedByUser = BlockedChatUser::where('by_user_id', $row->added_by)
                     ->where('user_id', $current_user)
                     ->exists();
-
             }
             $tempRow['is_blocked_by_me'] = $isBlockedByMe;
             $tempRow['is_blocked_by_user'] = $isBlockedByUser;
@@ -476,18 +487,37 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
             $tempRow['customer_id'] = $customer->id;
             $tempRow['customer_slug_id'] = $customer->slug_id;
             $tempRow['email'] = $customer->email;
-            $tempRow['mobile'] = '+'.$customer->country_code . ' '.$customer->mobile;
+            $tempRow['mobile'] = '+'.$customer->country_code.' '.$customer->mobile;
             $tempRow['profile'] = $customer->profile;
             $tempRow['client_address'] = $customer->address;
-            $tempRow['customer_total_projects'] = $row->customer->projects_count;
-            $tempRow['customer_total_properties'] = $row->customer->property_count;
+
+            $roleContext = $row->role_context ?? 'user';
+
+            // Check if eager-loaded counts exist (useful for APIs where we load it dynamically, but here we enforce role_context)
+            $tempRow['total_projects'] = Projects::where('added_by', $customer->id)
+                ->where('status', 1)
+                ->where('request_status', 'approved')
+                ->where('role_context', $roleContext)
+                ->count();
+
+            $tempRow['total_properties'] = Property::where('added_by', $customer->id)
+                ->where('status', 1)
+                ->where('request_status', 'approved')
+                ->where('role_context', $roleContext)
+                ->count();
+
             $tempRow['is_admin'] = false;
+            $tempRow['is_agent'] = $customer->is_agent;
+            $tempRow['is_agent_verified'] = $customer->is_agent_verified;
+            $tempRow['is_user_verified'] = $customer->verifyCustomer?->status === 'approved';
+            $tempRow['agent_profile'] = $customer->agent_profile;
+            $tempRow['has_active_story'] = $customer->is_agent ? (bool) ($customer->has_active_story ?? false) : false;
             $isAppointmentAvailable = $customer->is_appointment_available;
-        } else if ($row->added_by == 0) {
+        } elseif ($row->added_by == 0) {
             $isBlockedByMe = false;
             $isBlockedByAdmin = false;
 
-            if($current_user){
+            if ($current_user) {
 
                 $isBlockedByMe = BlockedChatUser::where('by_user_id', $current_user)
                     ->where('admin', 1)
@@ -496,25 +526,24 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
                 $isBlockedByUser = BlockedChatUser::where('by_admin', 1)
                     ->where('user_id', $current_user)
                     ->exists();
-
             }
             $tempRow['is_blocked_by_me'] = $isBlockedByMe;
             $tempRow['is_blocked_by_user'] = $isBlockedByAdmin;
 
-            $adminData = User::where('type',0)->select('id','name','slug_id','profile')->first();
+            $adminData = User::where('type', 0)->select('id', 'name', 'slug_id', 'profile')->first();
 
             $adminCompanyTel1 = system_setting('company_tel1');
             $adminEmail = system_setting('company_email');
-            $tempRow['customer_name'] = "Admin";
+            $tempRow['customer_name'] = $adminData->name ?? 'Admin';
             $tempRow['customer_slug_id'] = $adminData->slug_id;
-            $tempRow['mobile'] = !empty($adminCompanyTel1) ? $adminCompanyTel1 : "";
-            $tempRow['email'] = !empty($adminEmail) ? $adminEmail : "";
-            $tempRow['profile'] = !empty($adminData->getRawOriginal('profile')) ? $adminData->profile : url('assets/images/faces/2.jpg');
+            $tempRow['mobile'] = ! empty($adminCompanyTel1) ? $adminCompanyTel1 : '';
+            $tempRow['email'] = ! empty($adminEmail) ? $adminEmail : '';
+            $tempRow['profile'] = ! empty($adminData->getRawOriginal('profile')) ? $adminData->profile : url('assets/images/faces/2.jpg');
             $tempRow['client_address'] = $row->client_address;
             $totalPropertiesOfAdmin = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->count();
             $totalProjectsOfAdmin = Projects::where(['is_admin_listing' => 1, 'status' => 1, 'request_status' => 'approved'])->count();
-            $tempRow['customer_total_projects'] =  $totalProjectsOfAdmin;
-            $tempRow['customer_total_properties'] =$totalPropertiesOfAdmin;
+            $tempRow['total_projects'] = $totalProjectsOfAdmin;
+            $tempRow['total_properties'] = $totalPropertiesOfAdmin;
             $tempRow['is_admin'] = true;
             $isAppointmentAvailable = $adminData->is_appointment_available;
         }
@@ -523,6 +552,7 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
         $tempRow['slug_id'] = $row->slug_id;
         $tempRow['title'] = $row->title;
         $tempRow['price'] = $row->price;
+        $tempRow['currency'] = $row->currency;
         $tempRow['category'] = $row->category;
         $tempRow['description'] = $row->description;
         $tempRow['address'] = $row->address;
@@ -545,18 +575,21 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
         $tempRow['latitude'] = $row->latitude;
         $tempRow['longitude'] = $row->longitude;
         $tempRow['added_by'] = $row->added_by;
+        $tempRow['role_context'] = $row->role_context ?? 'user';
         $tempRow['video_link'] = $row->video_link;
-        $tempRow['rentduration'] = ($row->rentduration != '') ? $row->rentduration : "Monthly";
-        $tempRow['meta_title'] = !empty($row->meta_title) ? $row->meta_title : $row->title;
-        $tempRow['meta_description'] = !empty($row->meta_description) ? $row->meta_description : $row->description;
+        $tempRow['rentduration'] = ($row->rentduration != '') ? $row->rentduration : 'Monthly';
+        $tempRow['meta_title'] = ! empty($row->meta_title) ? $row->meta_title : $row->title;
+        $tempRow['meta_description'] = ! empty($row->meta_description) ? $row->meta_description : $row->description;
         $tempRow['meta_keywords'] = $row->meta_keywords;
-        $tempRow['meta_image'] = !empty($row->meta_image) ? $row->meta_image : $row->title_image;
+        $tempRow['meta_image'] = ! empty($row->meta_image) ? $row->meta_image : $row->title_image;
         $tempRow['is_premium'] = $row->is_premium == 1 ? true : false;
         $tempRow['assign_facilities'] = $row->assign_facilities;
-        $tempRow['is_verified'] = $row->is_user_verified;
+        // $tempRow['is_verified'] = $row->is_user_verified;
+        // $tempRow['is_verified_user'] = $row->is_user_verified;
+        $tempRow['is_agent_verified'] = $row?->customer?->is_agent_verified ?? false;
         $tempRow['is_appointment_available'] = $isAppointmentAvailable;
         $tempRow['low_quality_title_image'] = $row->low_quality_title_image;
-        if($current_user){
+        if ($current_user) {
             $appointmentStatus = Appointment::where(['property_id' => $row->id, 'user_id' => $current_user])->whereNotIn('status', ['cancelled', 'completed', 'auto_cancelled'])->exists();
             $tempRow['is_appointment_available'] = $isAppointmentAvailable && $appointmentStatus == false ? true : false;
         }
@@ -573,8 +606,8 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
         }
         $tempRow['promoted'] = $row->is_promoted;
 
-        $interested_users = array();
-        $favourite_users = array();
+        $interested_users = [];
+        $favourite_users = [];
         foreach ($row->favourite as $favourite_user) {
             if ($favourite_user->property_id == $row->id) {
                 array_push($favourite_users, $favourite_user->user_id);
@@ -622,19 +655,18 @@ function get_property_details($result, $current_user = NULL, $skipLimitCheck = f
         $rows[] = $tempRow;
         $count++;
     }
+
     return $rows;
 }
 function get_language()
 {
     return Language::get();
 }
-function get_unregistered_fcm_ids($registeredIDs = array())
+function get_unregistered_fcm_ids($registeredIDs = [])
 {
 
     // Convert the arrays to lowercase for case-insensitive comparison
     $registeredIDsLower = array_map('strtolower', $registeredIDs);
-
-
 
     // Retrieve the FCM IDs from the 'usertoken' table
     $fcmIDs = Usertokens::pluck('fcm_id')->toArray();
@@ -643,10 +675,8 @@ function get_unregistered_fcm_ids($registeredIDs = array())
 
     $allIDsLower = array_map('strtolower', $fcmIDs);
 
-
     // Use array_diff to find the FCM IDs that are not registered
     $unregisteredIDsLower = array_diff($allIDsLower, $registeredIDsLower);
-
 
     // Convert the IDs back to their original case
     $unregisteredIDs = array_map('strtoupper', $unregisteredIDsLower);
@@ -655,19 +685,23 @@ function get_unregistered_fcm_ids($registeredIDs = array())
 function handleFileUpload($request, $key, $destinationPath, $filename, $databaseData = null)
 {
     if ($request->hasFile($key)) {
-        if(!empty($databaseData)){
+        if (! empty($databaseData)) {
             // Delete the old file if it exists
-            $oldFilePath = $destinationPath . '/' . $databaseData;
+            $oldFilePath = $destinationPath.'/'.$databaseData;
             if (file_exists($oldFilePath)) {
                 unlink($oldFilePath);
             }
         }
         $extension = $request->file($key)->getClientOriginalExtension();
         // Change the file name
-        if(empty($filename)){
+        if (empty($filename)) {
             $filename = microtime(true).'.'.$extension;
-        }else{
+        } else {
             $filename = $filename;
+        }
+
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
         }
 
         $profile = $request->file($key);
@@ -690,6 +724,7 @@ function get_url_contents($url)
 
     $ret = curl_exec($crl);
     curl_close($crl);
+
     return $ret;
 }
 
@@ -710,20 +745,21 @@ function check_subscription($user, $type, $status)
 }
 function store_image($file, $path)
 {
-    $destinationPath = public_path('images') . config('global.' . $path);
-    if (!is_dir($destinationPath)) {
+    $destinationPath = public_path('images').config('global.'.$path);
+    if (! is_dir($destinationPath)) {
         mkdir($destinationPath, 0777, true);
     }
 
     // Check if the file is an instance of UploadedFile
-    if ($file instanceof \Illuminate\Http\UploadedFile) {
+    if ($file instanceof UploadedFile) {
         $extension = $file->getClientOriginalExtension();
 
         // Initialize the filename
         // $filename = $originalName . '.' . $extension;
-        $filename = microtime(true). '.' . $extension;
+        $filename = microtime(true).'.'.$extension;
 
         $file->move($destinationPath, $filename);
+
         return $filename;
     } else {
         // Handle the case when the file is not an instance of UploadedFile
@@ -734,25 +770,26 @@ function store_image($file, $path)
 }
 function unlink_image($url)
 {
-    if(!empty($url)){
+    if (! empty($url)) {
         $relativePath = parse_url($url, PHP_URL_PATH);
-        if (file_exists(public_path()  . $relativePath)) {
-            unlink(public_path()  . $relativePath);
+        if (file_exists(public_path().$relativePath)) {
+            unlink(public_path().$relativePath);
         }
     }
 }
 
 /** Generate Slugs Functions */
-if (!function_exists('generateUniqueSlug')) {
-    function generateUniqueSlug($title, $type, $originalSlug = null, $exceptId = null) {
-        if (!$originalSlug) {
+if (! function_exists('generateUniqueSlug')) {
+    function generateUniqueSlug($title, $type, $originalSlug = null, $exceptId = null)
+    {
+        if (! $originalSlug) {
             $originalSlug = unicodeSlug($title);
         } else {
             $originalSlug = unicodeSlug($originalSlug);
         }
 
         if (empty($originalSlug)) {
-            $originalSlug = "slug";
+            $originalSlug = 'slug';
         }
 
         $tableNames = [
@@ -761,7 +798,8 @@ if (!function_exists('generateUniqueSlug')) {
             3 => 'categories',
             4 => 'projects',
             5 => 'customers',
-            6 => 'users'
+            6 => 'users',
+            7 => 'custom_pages',
         ];
 
         $tableName = $tableNames[$type] ?? null;
@@ -770,29 +808,32 @@ if (!function_exists('generateUniqueSlug')) {
     }
 }
 
-if (!function_exists('generateSlug')) {
-    function generateSlug($originalSlug, $tableName, $exceptId) {
+if (! function_exists('generateSlug')) {
+    function generateSlug($originalSlug, $tableName, $exceptId)
+    {
         $counter = 1;
         $slug = $originalSlug;
 
         if (empty($exceptId)) {
             while (DB::table($tableName)->where('slug_id', $slug)->exists()) {
-                $slug = $originalSlug . '-' . $counter;
+                $slug = $originalSlug.'-'.$counter;
                 $counter++;
             }
         } else {
             while (DB::table($tableName)->whereNot('id', $exceptId)->where('slug_id', $slug)->exists()) {
-                $slug = $originalSlug . '-' . $counter;
+                $slug = $originalSlug.'-'.$counter;
                 $counter++;
             }
         }
+
         return $slug;
     }
 }
 
 /** Unicode-friendly slug generator */
-if (!function_exists('unicodeSlug')) {
-    function unicodeSlug($string) {
+if (! function_exists('unicodeSlug')) {
+    function unicodeSlug($string)
+    {
         $slug = Str::slug($string);
         // // Replace spaces with hyphen
         // $slug = preg_replace('/\s+/u', '-', trim($string));
@@ -809,16 +850,15 @@ if (!function_exists('unicodeSlug')) {
     }
 }
 
-
-
-if (!function_exists('getAccessToken')) {
-    function getAccessToken(){
+if (! function_exists('getAccessToken')) {
+    function getAccessToken()
+    {
         $file_name = system_setting('firebase_service_json_file');
 
         // Check if file exists in storage private, otherwise fallback to public/assets for backward compatibility
-        if (!empty($file_name)) {
-            $privatePath = storage_path('app/private/' . $file_name);
-            $publicPath = public_path('assets/' . $file_name);
+        if (! empty($file_name)) {
+            $privatePath = storage_path('app/private/'.$file_name);
+            $publicPath = public_path('assets/'.$file_name);
 
             // Prioritize storage private, fallback to public for migration period
             if (file_exists($privatePath)) {
@@ -826,23 +866,63 @@ if (!function_exists('getAccessToken')) {
             } elseif (file_exists($publicPath)) {
                 $file_path = $publicPath;
             } else {
-                throw new \Exception('Firebase service JSON file not found');
+                throw new Exception('Firebase service JSON file not found');
             }
         } else {
-            throw new \Exception('Firebase service JSON file name not configured');
+            throw new Exception('Firebase service JSON file name not configured');
         }
 
-        $client = new Client();
+        $client = new Client;
         $client->setAuthConfig($file_path);
         $client->setScopes(['https://www.googleapis.com/auth/firebase.messaging']);
-        $accessToken=$client->fetchAccessTokenWithAssertion()['access_token'];
-
+        $accessToken = $client->fetchAccessTokenWithAssertion()['access_token'];
 
         return $accessToken;
     }
 }
-if (!function_exists('updateEnv')) {
-    function updateEnv($envUpdates){
+if (! function_exists('format_price')) {
+    /**
+     * Format a price with the currency symbol from system settings.
+     *
+     * When "Number With Suffix" is enabled, uses Indian short-form:
+     *   >= 1 Crore  (1,00,00,000)  →  Cr
+     *   >= 1 Lakh   (1,00,000)     →  Lac
+     *   < 1 Lakh                   →  plain number
+     */
+    function format_price($price, int $decimals = 2): string
+    {
+        if ($price === null || $price === '') {
+            return '';
+        }
+
+        $price  = (float) $price;
+        $symbol = system_setting('currency_symbol') ?? '';
+        $suffix = (bool) (system_setting('number_with_suffix') ?? false);
+
+        if ($suffix) {
+            $crore = 10_000_000;
+            $lakh  = 100_000;
+
+            if ($price >= $crore) {
+                $value     = $price / $crore;
+                $formatted = rtrim(rtrim(number_format($value, 2), '0'), '.') . 'Cr';
+            } elseif ($price >= $lakh) {
+                $value     = $price / $lakh;
+                $formatted = rtrim(rtrim(number_format($value, 2), '0'), '.') . 'Lac';
+            } else {
+                $formatted = number_format($price, 0);
+            }
+        } else {
+            $formatted = number_format($price, $decimals);
+        }
+
+        return $symbol . $formatted;
+    }
+}
+
+if (! function_exists('updateEnv')) {
+    function updateEnv($envUpdates)
+    {
         $envFile = file_get_contents(base_path('.env'));
 
         foreach ($envUpdates as $key => $value) {

@@ -1,14 +1,18 @@
 <?php
 
 namespace App\Models;
-use Illuminate\Database\Eloquent\Model;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Appointment extends Model
 {
     use HasFactory;
+
     protected $table = 'appointments';
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at', 'start_at', 'end_at'];
+
     protected $fillable = [
         'is_admin_appointment',
         'admin_id',
@@ -21,7 +25,7 @@ class Appointment extends Model
         'status',
         'is_auto_confirmed',
         'last_status_updated_by',
-        'notes'
+        'notes',
     ];
 
     protected $casts = [

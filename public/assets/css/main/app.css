@@ -381,7 +381,7 @@ screen and (-ms-high-contrast: active) {
    * Licensed under MIT (https://github.com/twbs/bootstrap/blob/main/LICENSE)
    */
 :root {
-    --bs-blue: var(--bs-primary);
+    --bs-blue: var(--bs-);
     --bs-indigo: #6610f2;
     --bs-purple: #6f42c1;
     --bs-pink: #d63384;
@@ -3686,10 +3686,10 @@ textarea.form-control.is-invalid {
     }
 }
 
-.btn:hover {
+/* .btn:hover {
     background-color: var(--bs-primary);
     color: white !important;
-}
+} */
 
 .btn-check:focus-visible+.btn,
 .btn:focus-visible {
@@ -21568,11 +21568,11 @@ body .bi:before {
 .sidebar-wrapper .menu .sidebar-link span {
     margin-left: 1rem;
     flex: 1;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .sidebar-wrapper .menu .sidebar-item.has-sub .sidebar-link span {
-    padding-right: 2.2rem;
+    padding-right: 0;
 }
 
 .sidebar-wrapper .menu .sidebar-link:hover {
@@ -22504,9 +22504,9 @@ a {
         padding: 1rem 1rem;
     }
 
-    .btn-primary {
+    /* .btn-primary {
         margin-top: 10px;
-    }
+    } */
 
     .card-body #toolbar #category {
         margin-bottom: 10px;
@@ -22708,4 +22708,8 @@ a {
     justify-content: space-around;
     flex-wrap: wrap;
     flex-direction: row;
+}
+
+@media (min-width: 768px) {
+    .breadcrumb-header { float: right !important; }
 }

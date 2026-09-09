@@ -37,7 +37,11 @@
                                                 <option {{env('MAIL_MAILER')=='smtp' ?'selected':''}} value="smtp">SMTP</option>
                                                 <option {{env('MAIL_MAILER')=='sendmail' ?'selected':''}} value="sendmail">sendmail</option>
                                                 <option {{env('MAIL_MAILER')=='amazon_ses' ?'selected':''}} value="amazon_ses">Amazon SES</option>
+                                                <option {{env('MAIL_MAILER')=='godaddy' ?'selected':''}} value="godaddy">Godaddy</option>
                                             </select>
+                                            <div id="godaddy-warning" class="text-danger mt-2" style="display: none;">
+                                                <small>{{ __('This will works only if hosting server and mail server both on godaddy') }}</small>
+                                            </div>
                                         </div>
 
                                         {{-- Mail Host --}}
@@ -210,6 +214,39 @@
         } else {
             input.attr("type", "password");
         }
+    });
+
+    $(document).ready(function() {
+        function checkMailer() {
+            if ($('#mail-mailer').val() == 'godaddy') {
+                $('#godaddy-warning').show();
+                $('#mail-host').closest('.form-group').hide();
+                $('#mail-port').closest('.form-group').hide();
+                $('#mail-username').closest('.form-group').hide();
+                $('#pwd').hide();
+                $('#mail-encryption').closest('.form-group').hide();
+
+                // Remove required attributes for validation
+                $('#mail-host, #mail-port, #mail-username, #mail-password, #mail-encryption').removeAttr('required');
+            } else {
+                $('#godaddy-warning').hide();
+                $('#mail-host').closest('.form-group').show();
+                $('#mail-port').closest('.form-group').show();
+                $('#mail-username').closest('.form-group').show();
+                $('#pwd').show();
+                $('#mail-encryption').closest('.form-group').show();
+
+                // Restore required attributes
+                $('#mail-host, #mail-port, #mail-username, #mail-password, #mail-encryption').attr('required', true);
+            }
+        }
+
+        $('#mail-mailer').on('change', function() {
+            checkMailer();
+        });
+
+        // Check on page load
+        checkMailer();
     });
 
     function formSuccessFunction(response) {

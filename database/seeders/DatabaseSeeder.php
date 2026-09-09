@@ -16,27 +16,20 @@ class DatabaseSeeder extends Seeder
      */
     public function run()
     {
-        // Duplicate the file (only if destination doesn't exist)
+        // Duplicate the file
         $sourceFile = resource_path('lang/en.json');
         $destinationFile = resource_path('lang/en-new.json');
-        if (File::exists($sourceFile) && !File::exists($destinationFile)) {
-            File::copy($sourceFile, $destinationFile);
-        }
+        File::copy($sourceFile, $destinationFile);
 
         $sourceFile = public_path('languages/en.json');
         $destinationFile = public_path('languages/en-new.json');
-        if (File::exists($sourceFile) && !File::exists($destinationFile)) {
-            File::copy($sourceFile, $destinationFile);
-        };
+        File::copy($sourceFile, $destinationFile);
 
         $sourceFile = public_path('web_languages/en.json');
         $destinationFile = public_path('web_languages/en-new.json');
-        if (File::exists($sourceFile) && !File::exists($destinationFile)) {
-            File::copy($sourceFile, $destinationFile);
-        }
+        File::copy($sourceFile, $destinationFile);
 
-        // Use insertOrIgnore to avoid duplicate entry error
-        DB::table('languages')->insertOrIgnore(
+        DB::table('languages')->insert(
             [
                 'name' => 'English',
                 'code' => 'en-new',
@@ -45,36 +38,35 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
-
-        // Use insertOrIgnore to avoid duplicate entry error for settings
-        $settingsData = [
+        DB::table('settings')->insert(
+            [
                 [
                     'type' => 'company_name',
-                    'data' => 'OMKO'
+                    'data' => 'omko',
                 ],
                 [
                     'type' => 'currency_symbol',
-                    'data' => '$'
+                    'data' => '$',
                 ],
                 [
                     'type' => 'ios_version',
-                    'data' => '1.0.0'
+                    'data' => '1.0.0',
                 ],
                 [
                     'type' => 'default_language',
-                    'data' => 'en-new'
+                    'data' => 'en-new',
                 ],
                 [
                     'type' => 'force_update',
-                    'data' => '0'
+                    'data' => '0',
                 ],
                 [
                     'type' => 'android_version',
-                    'data' => '1.0.0'
+                    'data' => '1.0.0',
                 ],
                 [
                     'type' => 'number_with_suffix',
-                    'data' => '0'
+                    'data' => '0',
                 ],
                 [
                     'type' => 'maintenance_mode',
@@ -90,11 +82,11 @@ class DatabaseSeeder extends Seeder
                 ],
                 [
                     'type' => 'company_tel1',
-                    'data' => '+1 809 555 0100',
+                    'data' => '+91 97124 45459',
                 ],
                 [
                     'type' => 'company_tel2',
-                    'data' => '+1 809 555 0101',
+                    'data' => '+91 97124 45459',
                 ],
                 [
                     'type' => 'razorpay_gateway',
@@ -110,7 +102,7 @@ class DatabaseSeeder extends Seeder
                 ],
                 [
                     'type' => 'system_version',
-                    'data' => '1.3.0',
+                    'data' => '1.6.0',
                 ],
                 [
                     'type' => 'company_logo',
@@ -150,61 +142,49 @@ class DatabaseSeeder extends Seeder
                 ],
                 [
                     'type' => 'facebook_id',
-                    'data' => 'https://www.facebook.com/omko.do',
+                    'data' => 'https://www.facebook.com/wrteam.in/',
                 ],
                 [
                     'type' => 'instagram_id',
-                    'data' => 'https://www.instagram.com/omko.do',
+                    'data' => 'https://www.instagram.com/wrteam.in/',
                 ],
                 [
                     'type' => 'twitter_id',
-                    'data' => 'https://twitter.com/omko_do',
+                    'data' => 'https://twitter.com/wrteamin',
                 ],
                 [
                     'type' => 'youtube_id',
-                    'data' => 'https://www.youtube.com/@OmkoRD',
+                    'data' => 'https://www.youtube.com/@WRTeam',
                 ],
                 [
                     'type' => 'iframe_link',
-                    'data' => 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3784.5754!2d-69.9312!3d18.4861!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sSanto%20Domingo!5e0!3m2!1ses!2sdo',
+                    'data' => 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3666.2870572691577!2d69.6415340756824!3d23.232638979027072!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39511e5b00000001%3A0xc42d67c61628af6d!2sWRTeam%20Pvt.%20Ltd.!5e0!3m2!1sen!2sin!4v1741677094972!5m2!1sen!2sin',
                 ],
                 [
                     'type' => 'latitude',
-                    'data' => '18.4861',
+                    'data' => '23.2419997',
                 ],
                 [
                     'type' => 'longitude',
-                    'data' => '-69.9312',
+                    'data' => '69.6669324',
                 ],
                 [
                     'type' => 'company_address',
-                    'data' => 'Santo Domingo, República Dominicana',
+                    'data' => '#262-263, Time Square Empire, SH 42 Mirjapar highway,Bhuj - Kutch 370001 Gujarat India.',
                 ],
                 [
                     'type' => 'company_email',
-                    'data' => 'info@omko.do',
+                    'data' => 'support@wrteam.in',
                 ],
                 [
                     'type' => 'playstore_id',
-                    'data' => 'https://play.google.com/store/apps/details?id=com.omko.android',
+                    'data' => 'https://play.google.com/store/apps/details?id=com.omko.wrteam',
                 ],
                 [
                     'type' => 'appstore_id',
-                    'data' => 'https://apps.apple.com/app/omko',
+                    'data' => 'https://testflight.apple.com/join/nrmIds1a',
                 ],
-            ];
-        
-        // Insert each setting only if it doesn't exist
-        foreach ($settingsData as $setting) {
-            DB::table('settings')->insertOrIgnore($setting);
-        }
-
-        // Register SVG icons for categories, facilities and places
-        $this->call([
-            CategoryIconsSeeder::class,
-            OutdoorFacilitiesIconsSeeder::class,
-            FacilitiesIconsSeeder::class,
-        ]);
+            ]
+        );
     }
 }
-

@@ -51,7 +51,7 @@
 }
 
 /* Mobile sidebar overlay */
-@media (max-width: 767.98px) {
+@media (max-width: 1199.98px) {
     /* Ensure sidebar-wrapper uses smooth transition on mobile */
     /* Override the default 0.5s transition for faster, smoother mobile experience */
     html:not([dir="rtl"]) .sidebar-wrapper {
@@ -140,7 +140,7 @@
 /* Animation for smooth transitions - handled by sidebar-wrapper */
 
 /* Mobile-specific adjustments */
-@media (max-width: 767.98px) {
+@media (max-width: 1199.98px) {
     .sidebar-wrapper {
         height: 100vh;
         overflow-y: auto;

@@ -2,12 +2,11 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Usertokens;
 use App\Models\UserPackage;
+use App\Models\Usertokens;
 use App\Services\HelperService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 
 class NotifyExpiringSubscriptions extends Command
 {
@@ -31,18 +30,18 @@ class NotifyExpiringSubscriptions extends Command
     public function handle()
     {
         Log::info('NotifyExpiringSubscriptions command started');
-        $settingsData = array(
+        $settingsData = [
             'notify_user_for_subscription_expiry',
-            'days_before_subscription_expiry'
-        );
+            'days_before_subscription_expiry',
+        ];
         $settingsQuery = HelperService::getMultipleSettingData($settingsData);
         $notifyUserForSubscriptionExpiry = $settingsQuery['notify_user_for_subscription_expiry'];
         $daysBeforeSubscriptionExpiry = $settingsQuery['days_before_subscription_expiry'];
 
-        if(empty($notifyUserForSubscriptionExpiry)){
+        if (empty($notifyUserForSubscriptionExpiry)) {
             return;
         }
-        if(empty($daysBeforeSubscriptionExpiry)){
+        if (empty($daysBeforeSubscriptionExpiry)) {
             $daysBeforeSubscriptionExpiry = 5;
         }
 
@@ -52,39 +51,38 @@ class NotifyExpiringSubscriptions extends Command
         $userPackages = $userPackagesQuery->clone()->with('customer')->get();
 
         // Get Data of email type
-        $emailTypeData = HelperService::getEmailTemplatesTypes("subscription_expiring_soon");
-        $appName = env("APP_NAME") ?? "eBroker";
+        $emailTypeData = HelperService::getEmailTemplatesTypes('subscription_expiring_soon');
+        $appName = env('APP_NAME') ?? 'omko';
         foreach ($userPackages as $userPackage) {
-            $variables = array(
+            $variables = [
                 'app_name' => $appName,
-                'user_name' => !empty($userPackage->customer->name) ? $userPackage->customer->name : "$appName User",
+                'user_name' => ! empty($userPackage->customer->name) ? $userPackage->customer->name : "$appName User",
                 'email' => $userPackage->customer->email,
                 'package_name' => $userPackage->package->name,
                 'subscription_end_date' => $userPackage->end_date,
-            );
+            ];
             $subscriptionExpiringSoonTemplateData = HelperService::getSettingData($emailTypeData['type']);
-            $subscriptionExpiringSoonTemplate = HelperService::replaceEmailVariables($subscriptionExpiringSoonTemplateData,$variables);
+            $subscriptionExpiringSoonTemplate = HelperService::replaceEmailVariables($subscriptionExpiringSoonTemplateData, $variables);
 
-            $data = array(
+            $data = [
                 'email_template' => $subscriptionExpiringSoonTemplate,
                 'email' => $userPackage->customer->email,
                 'title' => $emailTypeData['title'],
-            );
+            ];
             HelperService::sendMail($data);
         }
 
-
         $userIds = $userPackagesQuery->clone()->pluck('user_id');
         $userFCMTokens = Usertokens::whereIn('customer_id', $userIds)->pluck('fcm_id');
-        if(!empty($userFCMTokens)){
-            $fcmMsg = array(
+        if (! empty($userFCMTokens)) {
+            $fcmMsg = [
                 'title' => 'Subscription Expiring Soon',
                 'message' => 'Your subscription is expiring soon',
                 'type' => 'subscription_expiring_soon',
                 'body' => 'Your subscription is expiring soon',
                 'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                'sound' => 'default'
-            );
+                'sound' => 'default',
+            ];
             send_push_notification($userFCMTokens, $fcmMsg);
         }
 

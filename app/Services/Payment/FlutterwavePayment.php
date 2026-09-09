@@ -2,33 +2,35 @@
 
 namespace App\Services\Payment;
 
-use Throwable;
-use RuntimeException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use KingFlamez\Rave\Facades\Rave as Flutterwave;
+use RuntimeException;
+use Throwable;
 
-class FlutterwavePayment implements PaymentInterface {
+class FlutterwavePayment implements PaymentInterface
+{
     private string $currencyCode;
+
     private string $publicKey;
+
     private string $secretKey;
 
     /**
      * FlutterwavePayment constructor.
-     * @param $paymentData
      */
-    public function __construct($paymentData) {
+    public function __construct($paymentData)
+    {
         $this->publicKey = $paymentData['flutterwave_public_key'];
         $this->secretKey = $paymentData['flutterwave_secret_key'];
         $this->currencyCode = $paymentData['flutterwave_currency'] ?? 'NGN';
     }
 
     /**
-     * @param $amount
-     * @param $customMetaData
      * @return array
      */
-    public function createPaymentIntent($amount, $customMetaData) {
+    public function createPaymentIntent($amount, $customMetaData)
+    {
         try {
             $amount = $this->minimumAmountValidation($this->currencyCode, $amount);
 
@@ -38,10 +40,10 @@ class FlutterwavePayment implements PaymentInterface {
             $reference = Flutterwave::generateReference();
 
             // Determine redirect URL based on platform type
-            if($customMetaData['platform_type'] == 'app') {
+            if ($customMetaData['platform_type'] == 'app') {
                 $redirectUrl = URL::to('api/flutterwave-payment-status');
             } else {
-                $redirectUrl = URL::to('api/flutterwave-payment-status-web');
+                $redirectUrl = route('payment.success.web', ['gateway' => 'flutterwave']);
             }
 
             $data = [
@@ -72,31 +74,27 @@ class FlutterwavePayment implements PaymentInterface {
                     'link' => $payment['data']['link'],
                     'reference' => $reference,
                 ],
-                'payment_gateway_response' => $payment
+                'payment_gateway_response' => $payment,
             ];
 
         } catch (Throwable $e) {
-            Log::error('Flutterwave createPaymentIntent failed: ' . $e->getMessage());
+            Log::error('Flutterwave createPaymentIntent failed: '.$e->getMessage());
             throw new RuntimeException($e->getMessage());
         }
     }
 
-    /**
-     * @param $amount
-     * @param $customMetaData
-     * @return array
-     */
-    public function createAndFormatPaymentIntent($amount, $customMetaData): array {
+    public function createAndFormatPaymentIntent($amount, $customMetaData): array
+    {
         $response = $this->createPaymentIntent($amount, $customMetaData);
+
         return $this->format($response, $amount, $this->currencyCode, $customMetaData);
     }
 
     /**
-     * @param $paymentId
-     * @return array
      * @throws Throwable
      */
-    public function retrievePaymentIntent($paymentId): array {
+    public function retrievePaymentIntent($paymentId): array
+    {
         try {
             $verificationData = Flutterwave::verifyTransaction($paymentId);
             if ($verificationData['status'] === 'success') {
@@ -104,6 +102,7 @@ class FlutterwavePayment implements PaymentInterface {
                 // Amount from Flutterwave is already in base currency (package handles conversion)
                 $amount = $data['amount'];
                 $metadata = $data['meta'] ?? [];
+
                 return $this->format($verificationData, $amount, $data['currency'], $metadata);
             }
             throw new RuntimeException('Payment verification failed');
@@ -113,11 +112,10 @@ class FlutterwavePayment implements PaymentInterface {
     }
 
     /**
-     * @param $currency
-     * @param $amount
      * @return float|int
      */
-    public function minimumAmountValidation($currency, $amount) {
+    public function minimumAmountValidation($currency, $amount)
+    {
         // Flutterwave minimum amounts (in base currency, not smallest unit)
         $minimumAmount = match ($currency) {
             'NGN' => 100, // 100 Naira
@@ -136,13 +134,10 @@ class FlutterwavePayment implements PaymentInterface {
     }
 
     /**
-     * @param $paymentIntent
-     * @param $amount
-     * @param $currencyCode
-     * @param $metadata
      * @return array
      */
-    public function format($paymentIntent, $amount, $currencyCode, $metadata) {
+    public function format($paymentIntent, $amount, $currencyCode, $metadata)
+    {
         $id = $paymentIntent['id'] ?? $paymentIntent['data']['reference'] ?? null;
         $status = $paymentIntent['status'] ?? 'pending';
         $paymentUrl = $paymentIntent['data']['link'] ?? null;
@@ -150,20 +145,11 @@ class FlutterwavePayment implements PaymentInterface {
         return $this->formatPaymentIntent($id, $amount, $currencyCode, $status, $metadata, $paymentIntent);
     }
 
-    /**
-     * @param $id
-     * @param $amount
-     * @param $currency
-     * @param $status
-     * @param $metadata
-     * @param $paymentIntent
-     * @return array
-     */
-    public function formatPaymentIntent($id, $amount, $currency, $status, $metadata, $paymentIntent): array {
+    public function formatPaymentIntent($id, $amount, $currency, $status, $metadata, $paymentIntent): array
+    {
         return [
-            'id'                       => $id,
-            'payment_url'              => $paymentIntent['data']['link'] ?? null,
+            'id' => $id,
+            'payment_url' => $paymentIntent['data']['link'] ?? null,
         ];
     }
 }
-

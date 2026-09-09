@@ -2,17 +2,23 @@
 
 namespace App\Services\Payment;
 
-use Throwable;
-use RuntimeException;
-use Illuminate\Support\Facades\Log;
+use App\Models\Setting;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
+use Throwable;
 
 class CashfreePayment implements PaymentInterface
 {
     private string $clientId;
+
     private string $clientSecret;
+
     private string $currencyCode;
+
     private bool $isSandbox;
+
     private string $baseUrl;
 
     public function __construct($paymentData)
@@ -38,24 +44,46 @@ class CashfreePayment implements PaymentInterface
             }
 
             $amount = $this->minimumAmountValidation($this->currencyCode, $amount);
-            $return_url = $customMetaData['platform_type'] == 'app' ? route('payment.success') : route('payment.success.web');
+            $return_url = $customMetaData['platform_type'] == 'app' ? route('payment.success') : route('payment.success.web', ['gateway' => 'cashfree']);
             $notify_url = url('/webhook/cashfree');
 
-            $linkId = 'link_' . ($customMetaData['payment_transaction_id'] ?? uniqid());
+            // Cashfree production API requires HTTPS for all URLs
+            if (! $this->isSandbox) {
+                $return_url = str_replace('http://', 'https://', $return_url);
+                $notify_url = str_replace('http://', 'https://', $notify_url);
+            }
+
+            $linkId = 'link_'.($customMetaData['payment_transaction_id'] ?? uniqid());
 
             // Sanitize customer name to only allow Latin characters
             $customerName = $this->sanitizeCustomerName($customMetaData['user_name'] ?? '');
+
+            $customerPhone = trim($customMetaData['phone'] ?? '');
+
+            if (env('DEMO_MODE') && Auth::user()->email != 'superadmin@gmail.com') {
+                // $customerPhone = Setting::where('type', 'company_tel1')->value('data') ?? $customerPhone;
+                $customerPhone = '+919999999999';
+            }
+            // Reject masked numbers
+            if (strpos($customerPhone, '*') !== false) {
+                throw new RuntimeException('Masked phone numbers are not allowed.');
+            }
+
+            // Validate E.164 format
+            if (! preg_match('/^\+[1-9]\d{1,14}$/', $customerPhone)) {
+                throw new RuntimeException('Invalid phone number. Use international format like +1234567890');
+            }
 
             // Prepare payment link data
             $linkData = [
                 'link_id' => $linkId,
                 'link_amount' => round($amount, 2),
                 'link_currency' => $this->currencyCode,
-                'link_purpose' => $customMetaData['description'] ?? 'Payment',
+                'link_purpose' => strlen($customMetaData['description'] ?? '') >= 3 ? $customMetaData['description'] : 'Payment',
                 'customer_details' => [
                     'customer_name' => $customerName,
                     'customer_email' => $customMetaData['email'] ?? '',
-                    'customer_phone' => $customMetaData['phone'] ?? '',
+                    'customer_phone' => $customerPhone,
                 ],
                 'link_notify' => [
                     'send_email' => false,
@@ -73,7 +101,7 @@ class CashfreePayment implements PaymentInterface
             }
 
             Log::info('Cashfree Payment Link Request: ', [
-                'url' => $this->baseUrl . '/links',
+                'url' => $this->baseUrl.'/links',
                 'client_id' => $this->clientId,
                 'is_sandbox' => $this->isSandbox,
                 'link_data' => $linkData,
@@ -85,9 +113,9 @@ class CashfreePayment implements PaymentInterface
                 'x-api-version' => '2023-08-01',
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
-            ])->post($this->baseUrl . '/links', $linkData);
+            ])->post($this->baseUrl.'/links', $linkData);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $errorBody = $response->body();
                 $statusCode = $response->status();
                 Log::error('Cashfree createPaymentLink failed', [
@@ -95,20 +123,23 @@ class CashfreePayment implements PaymentInterface
                     'response' => $errorBody,
                     'headers' => $response->headers(),
                 ]);
-                throw new RuntimeException("Failed to create Cashfree payment link (Status: {$statusCode}): {$errorBody}");
+                $errorJson = $response->json();
+                $errorMessage = $errorJson['message'] ?? $errorJson['code'] ?? $errorBody;
+                throw new RuntimeException('Cashfree Error ('.$statusCode.'): '.$errorMessage);
             }
 
             $responseData = $response->json();
 
             // Log the response to debug
-            Log::info('Cashfree Payment Link Response: ' . json_encode($responseData));
+            Log::info('Cashfree Payment Link Response: '.json_encode($responseData));
 
             // Extract the payment link URL
             $paymentUrl = $responseData['link_url'] ?? null;
 
-            if (!$paymentUrl) {
-                Log::error('Cashfree createPaymentLink missing link_url: ' . $response->body());
-                throw new RuntimeException('Failed to create Cashfree payment link: Missing link_url');
+            if (! $paymentUrl) {
+                Log::error('Cashfree createPaymentLink miss
+                ing link_url: '.$response->body());
+                throw new RuntimeException('Somthing Went Wrong');
             }
 
             return [
@@ -122,7 +153,8 @@ class CashfreePayment implements PaymentInterface
             ];
 
         } catch (Throwable $e) {
-            Log::error('Cashfree createPaymentIntent failed: ' . $e->getMessage());
+            Log::error('Cashfree createPaymentIntent failed: '.$e);
+
             throw new RuntimeException($e->getMessage());
         }
     }
@@ -134,9 +166,10 @@ class CashfreePayment implements PaymentInterface
     public function createAndFormatPaymentIntent($amount, $customMetaData): array
     {
         $paymentIntent = $this->createPaymentIntent($amount, $customMetaData);
-        if (!$paymentIntent) {
-            return [];
+        if (! $paymentIntent) {
+            throw new RuntimeException('Cashfree payment intent creation returned an empty response.');
         }
+
         return $this->format($paymentIntent, $amount, $this->currencyCode, $customMetaData);
     }
 
@@ -153,13 +186,13 @@ class CashfreePayment implements PaymentInterface
                 'x-client-secret' => $this->clientSecret,
                 'x-api-version' => '2023-08-01',
                 'Content-Type' => 'application/json',
-            ])->get($this->baseUrl . '/links/' . $paymentId);
+            ])->get($this->baseUrl.'/links/'.$paymentId);
 
             if ($response->successful()) {
                 return $response->json();
             }
         } catch (Throwable $e) {
-            Log::error('Cashfree retrievePaymentIntent failed: ' . $e->getMessage());
+            Log::error('Cashfree retrievePaymentIntent failed: '.$e->getMessage());
         }
 
         return [];

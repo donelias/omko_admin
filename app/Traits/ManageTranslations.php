@@ -2,13 +2,12 @@
 
 namespace App\Traits;
 
-use App\Models\Translation;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 trait ManageTranslations
 {
     use HasTranslationScopes;
+
     /**
      * Boot the trait.
      */
@@ -18,7 +17,7 @@ trait ManageTranslations
         static::deleting(function ($model) {
             // Only clean up translations if this is a hard delete
             // or if the model doesn't use soft deletes
-            if (!$model->usesSoftDeletes() || $model->isForceDeleting()) {
+            if (! $model->usesSoftDeletes() || $model->isForceDeleting()) {
                 $model->translations()->delete();
             }
         });
@@ -39,4 +38,4 @@ trait ManageTranslations
     {
         return in_array(SoftDeletes::class, class_uses_recursive(get_class($this)));
     }
-} 
+}

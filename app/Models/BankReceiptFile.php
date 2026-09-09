@@ -4,12 +4,13 @@ namespace App\Models;
 
 use App\Services\FileService;
 use App\Traits\HasAppTimezone;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class BankReceiptFile extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
     protected $fillable = [
@@ -32,7 +33,8 @@ class BankReceiptFile extends Model
 
     public function getFileAttribute($file)
     {
-        $path = $file ? config('global.BANK_RECEIPT_FILE_PATH') . $file : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
+        $path = $file ? config('global.BANK_RECEIPT_FILE_PATH').$file : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
     }
 }

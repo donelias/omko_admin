@@ -2,27 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use Carbon\Carbon;
+use App\Models\AgentAvailability;
+use App\Models\AgentBookingPreference;
+use App\Models\AgentExtraTimeSlot;
+use App\Models\AgentUnavailability;
+use App\Models\Appointment;
+use App\Models\AppointmentCancellation;
+use App\Models\AppointmentReschedule;
+use App\Models\Notifications;
 use App\Models\User;
 use App\Models\Usertokens;
-use App\Models\Appointment;
-use Illuminate\Http\Request;
-use App\Models\Notifications;
-use App\Services\HelperService;
-use App\Models\AgentAvailability;
-use App\Services\ResponseService;
-use App\Models\AgentExtraTimeSlot;
-use Illuminate\Support\Facades\DB;
-use App\Models\AgentUnavailability;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use App\Models\AppointmentReschedule;
-use App\Models\AgentBookingPreference;
-use App\Models\AppointmentCancellation;
-use App\Services\BootstrapTableService;
-use Illuminate\Support\Facades\Validator;
 use App\Services\AppointmentNotificationService;
+use App\Services\BootstrapTableService;
+use App\Services\HelperService;
+use App\Services\ResponseService;
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class AdminAppointmentController extends Controller
 {
@@ -31,7 +31,7 @@ class AdminAppointmentController extends Controller
      */
     public function index()
     {
-        if (!has_permissions('read', 'admin_appointment_preferences')) {
+        if (! has_permissions('read', 'admin_appointment_preferences')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -43,7 +43,7 @@ class AdminAppointmentController extends Controller
      */
     public function preferencesIndex()
     {
-        if (!has_permissions('read', 'admin_appointment_preferences')) {
+        if (! has_permissions('read', 'admin_appointment_preferences')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $adminId = User::where('type', 0)->firstOrFail()->id;
@@ -57,24 +57,24 @@ class AdminAppointmentController extends Controller
      */
     public function storePreferences(Request $request)
     {
-        if (!has_permissions('update', 'admin_appointment_preferences')) {
+        if (! has_permissions('update', 'admin_appointment_preferences')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
         try {
             $validator = Validator::make($request->all(), [
-                'meeting_duration_minutes'          => 'required|integer|min:15|max:480',
-                'lead_time_minutes'                 => 'required|integer|min:0|max:10080',
-                'buffer_time_minutes'               => 'required|integer|min:0|max:120',
-                'auto_confirm'                      => 'nullable|boolean',
-                'cancel_reschedule_buffer_minutes'  => 'nullable|integer|min:0|max:1440',
-                'auto_cancel_after_minutes'         => 'required|integer|min:0|max:10080',
-                'auto_cancel_message'               => 'nullable|string|max:500',
-                'daily_booking_limit'               => 'nullable|integer|min:1|max:100',
-                'availability_types'                => 'nullable|array',
-                'availability_types.*'              => 'in:phone,virtual,in_person',
-                'anti_spam_enabled'                 => 'nullable|boolean',
-                'timezone'                          => 'nullable|string|max:100',
+                'meeting_duration_minutes' => 'required|integer|min:15|max:480',
+                'lead_time_minutes' => 'required|integer|min:0|max:10080',
+                'buffer_time_minutes' => 'required|integer|min:0|max:120',
+                'auto_confirm' => 'nullable|boolean',
+                'cancel_reschedule_buffer_minutes' => 'nullable|integer|min:0|max:1440',
+                'auto_cancel_after_minutes' => 'required|integer|min:0|max:10080',
+                'auto_cancel_message' => 'nullable|string|max:500',
+                'daily_booking_limit' => 'nullable|integer|min:1|max:100',
+                'availability_types' => 'nullable|array',
+                'availability_types.*' => 'in:phone,virtual,in_person',
+                'anti_spam_enabled' => 'nullable|boolean',
+                'timezone' => 'nullable|string|max:100',
             ]);
 
             if ($validator->fails()) {
@@ -109,7 +109,7 @@ class AdminAppointmentController extends Controller
      */
     public function timeScheduleIndex()
     {
-        if (!has_permissions('read', 'admin_appointment_schedules')) {
+        if (! has_permissions('read', 'admin_appointment_schedules')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -120,9 +120,10 @@ class AdminAppointmentController extends Controller
         $schedules = AgentAvailability::where(['admin_id' => $adminId, 'is_admin_data' => 1])
             ->orderBy('day_of_week')
             ->get()
-            ->map(function($item) use ($adminTimezone) {
+            ->map(function ($item) use ($adminTimezone) {
                 $item->start_time = Carbon::parse($item->start_time, 'UTC')->setTimezone($adminTimezone)->format('H:i');
                 $item->end_time = Carbon::parse($item->end_time, 'UTC')->setTimezone($adminTimezone)->format('H:i');
+
                 return $item;
             })
             ->groupBy('day_of_week');
@@ -137,7 +138,7 @@ class AdminAppointmentController extends Controller
      */
     public function storeTimeSchedule(Request $request)
     {
-        if (!has_permissions('update', 'admin_appointment_schedules')) {
+        if (! has_permissions('update', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -166,7 +167,9 @@ class AdminAppointmentController extends Controller
             // Process only the days that have slots (active days)
             foreach ($request->schedule as $dayItem) {
                 $day = $dayItem['day'] ?? null;
-                if (!$day) { continue; }
+                if (! $day) {
+                    continue;
+                }
 
                 $processedDays[] = $day;
                 $slots = $dayItem['slots'] ?? [];
@@ -174,7 +177,9 @@ class AdminAppointmentController extends Controller
                 foreach ($slots as $slot) {
                     $start = $slot['start_time'] ?? null;
                     $end = $slot['end_time'] ?? null;
-                    if (!$start || !$end) { continue; }
+                    if (! $start || ! $end) {
+                        continue;
+                    }
                     if (strtotime($end) <= strtotime($start)) {
                         ResponseService::validationError('End time must be greater than start time for '.ucfirst($day));
                     }
@@ -188,7 +193,7 @@ class AdminAppointmentController extends Controller
                         'day_of_week' => $day,
                         'start_time' => $startUtc,
                         'end_time' => $endUtc,
-                        'is_active' => 1
+                        'is_active' => 1,
                     ];
                 }
             }
@@ -202,7 +207,9 @@ class AdminAppointmentController extends Controller
             }
             foreach ($byDay as $day => $rows) {
                 // Sort by start time
-                usort($rows, function ($a, $b) { return strcmp($a['start_time'], $b['start_time']); });
+                usort($rows, function ($a, $b) {
+                    return strcmp($a['start_time'], $b['start_time']);
+                });
 
                 $seen = [];
                 $prevEnd = null;
@@ -221,8 +228,8 @@ class AdminAppointmentController extends Controller
             }
 
             // Update or create slots for active days
-            if (!empty($scheduleData)) {
-                AgentAvailability::upsert($scheduleData, ['id'], ['day_of_week','start_time','end_time','is_active']);
+            if (! empty($scheduleData)) {
+                AgentAvailability::upsert($scheduleData, ['id'], ['day_of_week', 'start_time', 'end_time', 'is_active']);
             }
 
             // For days not in the processed list, we don't touch their existing slots
@@ -233,13 +240,13 @@ class AdminAppointmentController extends Controller
             ResponseService::successResponse('Time schedule updated successfully');
         } catch (Exception $e) {
             DB::rollBack();
-            ResponseService::errorResponse('Something went wrong: ' . $e->getMessage());
+            ResponseService::errorResponse('Something went wrong: '.$e->getMessage());
         }
     }
 
     public function removeTimeSchedule($id)
     {
-        if (!has_permissions('update', 'admin_appointment_schedules')) {
+        if (! has_permissions('update', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
@@ -255,7 +262,7 @@ class AdminAppointmentController extends Controller
                 ->where(['admin_id' => $adminId, 'is_admin_data' => 1])
                 ->first();
 
-            if (!$slot) {
+            if (! $slot) {
                 ResponseService::errorResponse('Time slot not found');
             }
 
@@ -266,7 +273,7 @@ class AdminAppointmentController extends Controller
 
             // Fetch candidate future appointments once to minimize queries
             $candidateAppointments = Appointment::where(['is_admin_appointment' => 1, 'admin_id' => $adminId])
-                ->whereIn('status', ['pending','confirmed','rescheduled'])
+                ->whereIn('status', ['pending', 'confirmed', 'rescheduled'])
                 ->where('start_at', '>=', $slotStart)
                 ->where('end_at', '<=', $slotEnd)
                 ->get();
@@ -274,12 +281,16 @@ class AdminAppointmentController extends Controller
             foreach ($candidateAppointments as $appointment) {
                 // Convert appointment times to admin timezone for day/time comparison
                 $apptDay = strtolower($appointment->start_at->format('l')); // e.g., monday
-                if ($apptDay !== $slotDay) { continue; }
+                if ($apptDay !== $slotDay) {
+                    continue;
+                }
 
                 // Overlap check: start < slotEnd AND end > slotStart
                 if ($appointment->start_at < $slotEnd && $appointment->end_at > $slotStart) {
                     // Idempotency: skip if already cancelled
-                    if ($appointment->status === 'cancelled') { continue; }
+                    if ($appointment->status === 'cancelled') {
+                        continue;
+                    }
 
                     // Record cancellation
                     AppointmentCancellation::create([
@@ -302,7 +313,7 @@ class AdminAppointmentController extends Controller
                             $cancelReason,
                             'admin'
                         );
-                    } catch (\Exception $e) {
+                    } catch (Exception $e) {
                         // Do not interrupt the flow on notification errors
                         Log::error('Failed to send cancellation notification on slot removal', [
                             'appointment_id' => $appointment->id,
@@ -325,7 +336,7 @@ class AdminAppointmentController extends Controller
      */
     public function extraTimeSlotsIndex()
     {
-        if (!has_permissions('read', 'admin_appointment_schedules')) {
+        if (! has_permissions('read', 'admin_appointment_schedules')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -337,7 +348,7 @@ class AdminAppointmentController extends Controller
      */
     public function storeExtraTimeSlot(Request $request)
     {
-        if (!has_permissions('update', 'admin_appointment_schedules')) {
+        if (! has_permissions('update', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -367,9 +378,9 @@ class AdminAppointmentController extends Controller
             $adminAvailability = AgentAvailability::where(['admin_id' => $adminId, 'is_admin_data' => 1])
                 ->where('day_of_week', $dayName)
                 ->where('is_active', 1)
-                ->where(function($q) use ($startUTC, $endUTC) {
+                ->where(function ($q) use ($startUTC, $endUTC) {
                     $q->where('start_time', '<', $endUTC)
-                      ->where('end_time', '>', $startUTC);
+                        ->where('end_time', '>', $startUTC);
                 })
                 ->exists();
             if ($adminAvailability) {
@@ -379,9 +390,9 @@ class AdminAppointmentController extends Controller
             // Check for overlapping slots
             $overlaps = AgentExtraTimeSlot::where(['admin_id' => $adminId, 'is_admin_data' => 1])
                 ->where('date', $request->date)
-                ->where(function($q) use ($startUTC, $endUTC) {
+                ->where(function ($q) use ($startUTC, $endUTC) {
                     $q->where('start_time', '<', $endUTC)
-                      ->where('end_time', '>', $startUTC);
+                        ->where('end_time', '>', $startUTC);
                 })
                 ->exists();
 
@@ -409,7 +420,7 @@ class AdminAppointmentController extends Controller
      */
     public function deleteExtraTimeSlot($id)
     {
-        if (!has_permissions('update', 'admin_appointment_schedules')) {
+        if (! has_permissions('update', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -419,7 +430,7 @@ class AdminAppointmentController extends Controller
                 ->where(['admin_id' => $adminId, 'is_admin_data' => 1])
                 ->first();
 
-            if (!$slot) {
+            if (! $slot) {
                 ResponseService::errorResponse(trans('Time slot not found'));
             }
 
@@ -435,7 +446,7 @@ class AdminAppointmentController extends Controller
      */
     public function toggleDayActive(Request $request)
     {
-        if (!has_permissions('update', 'admin_appointment_schedules')) {
+        if (! has_permissions('update', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -458,7 +469,7 @@ class AdminAppointmentController extends Controller
                 ->where('day_of_week', $day)
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 ResponseService::successResponse(trans('No schedules found for this day. Nothing to update.'));
             }
 
@@ -477,7 +488,7 @@ class AdminAppointmentController extends Controller
      */
     public function getExtraTimeSlotsList(Request $request)
     {
-        if (!has_permissions('read', 'admin_appointment_schedules')) {
+        if (! has_permissions('read', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -490,7 +501,7 @@ class AdminAppointmentController extends Controller
         $adminId = User::where('type', 0)->firstOrFail()->id;
 
         $sql = AgentExtraTimeSlot::where(['admin_id' => $adminId, 'is_admin_data' => 1])
-            ->when($request->has('search') && !empty($search), function ($query) use ($search) {
+            ->when($request->has('search') && ! empty($search), function ($query) use ($search) {
                 $query->where('date', 'LIKE', "%$search%")
                     ->orWhere('start_time', 'LIKE', "%$search%")
                     ->orWhere('end_time', 'LIKE', "%$search%")
@@ -508,7 +519,7 @@ class AdminAppointmentController extends Controller
             $end = Carbon::parse($row->end_time, 'UTC')->setTimezone($adminTimezone);
             try {
                 $durationMinutes = $start->diffInMinutes($end);
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 $durationMinutes = 0;
             }
 
@@ -522,7 +533,7 @@ class AdminAppointmentController extends Controller
                 'date' => Carbon::parse($row->date)->format('d-m-Y'),
                 'start_time' => $start->format('H:i'),
                 'end_time' => $end->format('H:i'),
-                'duration' => $durationMinutes . ' ' . trans('minutes'),
+                'duration' => $durationMinutes.' '.trans('minutes'),
                 'operate' => $operate,
             ];
         }
@@ -538,7 +549,7 @@ class AdminAppointmentController extends Controller
      */
     public function unavailabilityIndex()
     {
-        if (!has_permissions('read', 'admin_appointment_schedules')) {
+        if (! has_permissions('read', 'admin_appointment_schedules')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -557,7 +568,7 @@ class AdminAppointmentController extends Controller
      */
     public function storeUnavailability(Request $request)
     {
-        if (!has_permissions('update', 'admin_appointment_schedules')) {
+        if (! has_permissions('update', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -597,7 +608,7 @@ class AdminAppointmentController extends Controller
      */
     public function deleteUnavailability($id)
     {
-        if (!has_permissions('update', 'admin_appointment_schedules')) {
+        if (! has_permissions('update', 'admin_appointment_schedules')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -607,7 +618,7 @@ class AdminAppointmentController extends Controller
                 ->where(['admin_id' => $adminId, 'is_admin_data' => 1])
                 ->first();
 
-            if (!$unavailability) {
+            if (! $unavailability) {
                 ResponseService::errorResponse(trans('Unavailability not found'));
             }
 
@@ -623,7 +634,7 @@ class AdminAppointmentController extends Controller
      */
     public function appointmentManagementIndex()
     {
-        if (!has_permissions('read', 'appointment_management')) {
+        if (! has_permissions('read', 'appointment_management')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -635,7 +646,7 @@ class AdminAppointmentController extends Controller
      */
     public function getAppointmentsList(Request $request)
     {
-        if (!has_permissions('read', 'appointment_management')) {
+        if (! has_permissions('read', 'appointment_management')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -646,27 +657,26 @@ class AdminAppointmentController extends Controller
         $search = $request->input('search');
         $filter = $request->input('filter', 'all'); // all, admin, other
 
-        if($sort == 'appointment_type'){
+        if ($sort == 'appointment_type') {
             $sort = 'is_admin_appointment';
         }
-        if($sort == 'start_at_formatted'){
+        if ($sort == 'start_at_formatted') {
             $sort = 'start_at';
         }
-        if($sort == 'end_at_formatted'){
+        if ($sort == 'end_at_formatted') {
             $sort = 'end_at';
         }
 
-
         $sql = Appointment::with(['property', 'agent', 'user', 'cancellations', 'reschedules', 'admin'])
-            ->when($filter === 'admin', function($query) {
+            ->when($filter === 'admin', function ($query) {
                 $query->where('is_admin_appointment', 1);
             })
-            ->when($filter === 'other', function($query) {
+            ->when($filter === 'other', function ($query) {
                 $query->where('is_admin_appointment', 0);
             })
-            ->when($request->has('search') && !empty($search), function($query) use($search){
-                $query->where(function($query) use ($search){
-                        $query->where('id', 'LIKE', "%$search%")
+            ->when($request->has('search') && ! empty($search), function ($query) use ($search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('id', 'LIKE', "%$search%")
                         ->orWhere('meeting_type', 'LIKE', "%$search%")
                         ->orWhere('status', 'LIKE', "%$search%")
                         ->orWhere('notes', 'LIKE', "%$search%")
@@ -679,16 +689,16 @@ class AdminAppointmentController extends Controller
                         ->orWhereHas('user', function ($q) use ($search) {
                             $q->where('name', 'LIKE', "%$search%");
                         });
-                    });
+                });
             });
 
         $total = $sql->count();
         $res = $sql->orderBy($sort, $order)->skip($offset)->take($limit)->get();
 
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
-        $tempRow = array();
+        $rows = [];
+        $tempRow = [];
         $count = 1;
         $adminTimezone = HelperService::getSettingData('timezone') ?? 'UTC';
 
@@ -703,11 +713,11 @@ class AdminAppointmentController extends Controller
                 $operate .= BootstrapTableService::deleteAjaxButton(route('appointment-management.destroy', $row->id));
             }
 
-            if($row->status == 'cancelled' || $row->status == 'auto_cancelled'){
+            if ($row->status == 'cancelled' || $row->status == 'auto_cancelled') {
                 $tempRow['reason'] = $row->cancellations->last()->reason;
-            }else if($row->status == 'rescheduled'){
+            } elseif ($row->status == 'rescheduled') {
                 $tempRow['reason'] = $row->reschedules->last()->reason;
-            }else{
+            } else {
                 $tempRow['reason'] = null;
             }
             $tempRow['operate'] = $operate;
@@ -727,6 +737,7 @@ class AdminAppointmentController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
@@ -735,7 +746,7 @@ class AdminAppointmentController extends Controller
      */
     public function appointmentManagementUpdateStatus(Request $request)
     {
-        if (!has_permissions('update', 'appointment_management')) {
+        if (! has_permissions('update', 'appointment_management')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -761,7 +772,7 @@ class AdminAppointmentController extends Controller
             }
 
             $appointment = Appointment::find($request->id);
-            if (!$appointment) {
+            if (! $appointment) {
                 ResponseService::errorResponse(trans('Appointment not found'));
             }
 
@@ -769,10 +780,10 @@ class AdminAppointmentController extends Controller
             $newStatus = $request->status;
             $isAdminAppointment = $appointment->is_admin_appointment ? true : false;
             $adminTimezone = HelperService::getSettingData('timezone') ?: 'UTC';
-            if($isAdminAppointment){
-                $preferences = AgentBookingPreference::where(['is_admin_data' => 1,'admin_id' => Auth::id()])->first();
+            if ($isAdminAppointment) {
+                $preferences = AgentBookingPreference::where(['is_admin_data' => 1, 'admin_id' => Auth::id()])->first();
                 $agentTimezone = $adminTimezone;
-            }else{
+            } else {
                 $preferences = AgentBookingPreference::where('agent_id', $appointment->agent_id)->first();
                 $agentTimezone = $preferences?->timezone ?: (config('app.timezone') ?? 'UTC');
             }
@@ -797,14 +808,14 @@ class AdminAppointmentController extends Controller
                     $appointmentStart = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($agentTimezone);
                     $nowAgent = Carbon::now($agentTimezone);
                     $appointmentDate = Carbon::parse($appointment->start_at, 'UTC');
-                    if($nowAgent >= $appointmentDate){
+                    if ($nowAgent >= $appointmentDate) {
                         $diffInMinutes = $appointmentStart->diffInMinutes($nowAgent, false);
-                    }else{
+                    } else {
                         $diffInMinutes = $nowAgent->diffInMinutes($appointmentStart, false);
                     }
                     if ($diffInMinutes <= $cancelRescheduleBuffer) {
                         ResponseService::validationError(
-                            'You cannot ' . ($newStatus === 'rescheduled' ? 'reschedule' : 'cancel') . ' this appointment within ' . $cancelRescheduleBuffer . ' minutes of its start time.'
+                            'You cannot '.($newStatus === 'rescheduled' ? 'reschedule' : 'cancel').' this appointment within '.$cancelRescheduleBuffer.' minutes of its start time.'
                         );
                     }
                 }
@@ -816,7 +827,7 @@ class AdminAppointmentController extends Controller
                 // Handle reschedule
                 if ($newStatus === 'rescheduled') {
                     // Validate required fields for reschedule
-                    if (!$request->has('new_date') || !$request->has('new_start_time') || !$request->has('new_end_time')) {
+                    if (! $request->has('new_date') || ! $request->has('new_start_time') || ! $request->has('new_end_time')) {
                         DB::rollBack();
                         ResponseService::validationError(trans('Date, start time, and end time are required for rescheduling'));
                     }
@@ -826,18 +837,18 @@ class AdminAppointmentController extends Controller
                     $newEndTime = $request->input('new_end_time');
 
                     // Check if agent has reached daily limit
-                    if($dailyLimit > 0){
+                    if ($dailyLimit > 0) {
                         $startOfDay = Carbon::parse($newDate.' '.'00:00:00', $adminTimezone)->setTimezone('UTC');
                         $endOfDay = Carbon::parse($newDate.' '.'23:59:59', $adminTimezone)->setTimezone('UTC');
                         $dailyAppointmentCount = Appointment::where('id', '!=', $appointment->id)->whereBetween('start_at', [$startOfDay, $endOfDay])
-                        ->when($isAdminAppointment, function ($query) use ($appointment) {
-                            $query->where('admin_id', $appointment->admin_id)
-                            ->where('is_admin_appointment', 1)
-                            ->whereNotIn('status', ['auto_cancelled','cancelled','pending','completed']);
-                        }, function ($query) use ($appointment) {
-                            $query->where('agent_id', $appointment->agent_id);
-                        })
-                        ->count();
+                            ->when($isAdminAppointment, function ($query) use ($appointment) {
+                                $query->where('admin_id', $appointment->admin_id)
+                                    ->where('is_admin_appointment', 1)
+                                    ->whereNotIn('status', ['auto_cancelled', 'cancelled', 'pending', 'completed']);
+                            }, function ($query) use ($appointment) {
+                                $query->where('agent_id', $appointment->agent_id);
+                            })
+                            ->count();
                         // If daily appointment count is greater than or equal to daily limit, return error
                         if ($dailyAppointmentCount >= $dailyLimit) {
                             DB::rollBack();
@@ -848,8 +859,8 @@ class AdminAppointmentController extends Controller
                     }
 
                     // Create new datetime objects with proper timezone handling
-                    $newStartAdmin = Carbon::parse($newDate . ' ' . $newStartTime, $adminTimezone);
-                    $newEndAdmin = Carbon::parse($newDate . ' ' . $newEndTime, $adminTimezone);
+                    $newStartAdmin = Carbon::parse($newDate.' '.$newStartTime, $adminTimezone);
+                    $newEndAdmin = Carbon::parse($newDate.' '.$newEndTime, $adminTimezone);
                     $newStartAgent = (clone $newStartAdmin)->setTimezone('UTC');
                     $newEndAgent = (clone $newEndAdmin)->setTimezone('UTC');
                     $newStartUtc = (clone $newStartAdmin)->setTimezone('UTC');
@@ -883,7 +894,7 @@ class AdminAppointmentController extends Controller
 
                     // Check agent availability
                     $dayName = strtolower($newStartAgent->englishDayOfWeek);
-                    if($isAdminAppointment){
+                    if ($isAdminAppointment) {
                         $windows = AgentAvailability::where('admin_id', $appointment->admin_id)
                             ->where('is_active', 1)
                             ->where('is_admin_data', 1)
@@ -893,7 +904,7 @@ class AdminAppointmentController extends Controller
                             ->where('date', $newDate)
                             ->where('is_admin_data', 1)
                             ->get();
-                    }else{
+                    } else {
                         $windows = AgentAvailability::where('agent_id', $appointment->agent_id)
                             ->where('is_active', 1)
                             ->where('day_of_week', $dayName)
@@ -908,14 +919,18 @@ class AdminAppointmentController extends Controller
                     $bufferMinutes = max(0, (int) ($preferences->buffer_time_minutes ?? 0));
                     $slots = [];
                     foreach ($windows as $w) {
-                        $winStart = Carbon::parse($newDate . ' ' . $w->start_time);
-                        $winEnd = Carbon::parse($newDate . ' ' . $w->end_time);
-                        if ($winEnd <= $winStart) { continue; }
+                        $winStart = Carbon::parse($newDate.' '.$w->start_time);
+                        $winEnd = Carbon::parse($newDate.' '.$w->end_time);
+                        if ($winEnd <= $winStart) {
+                            continue;
+                        }
                         $cursor = (clone $winStart);
                         while (true) {
                             $candidateEnd = (clone $cursor)->addMinutes($meetingDurationMinutes);
-                            if ($candidateEnd > $winEnd) { break; }
-                            $slots[] = [ 'start' => (clone $cursor), 'end' => (clone $candidateEnd) ];
+                            if ($candidateEnd > $winEnd) {
+                                break;
+                            }
+                            $slots[] = ['start' => (clone $cursor), 'end' => (clone $candidateEnd)];
                             $cursor = (clone $candidateEnd)->addMinutes($bufferMinutes);
                         }
                     }
@@ -931,19 +946,19 @@ class AdminAppointmentController extends Controller
                     //     ->get();
 
                     // Check for existing appointments with same agent (excluding current appointment)
-                    $dayStartAgent = Carbon::parse($newDate . ' 00:00:00', $agentTimezone);
-                    $dayEndAgent = Carbon::parse($newDate . ' 23:59:59', $agentTimezone);
+                    $dayStartAgent = Carbon::parse($newDate.' 00:00:00', $agentTimezone);
+                    $dayEndAgent = Carbon::parse($newDate.' 23:59:59', $agentTimezone);
                     $dayStartUtc = (clone $dayStartAgent)->setTimezone('UTC')->toDateTimeString();
                     $dayEndUtc = (clone $dayEndAgent)->setTimezone('UTC')->toDateTimeString();
 
-                    if($isAdminAppointment){
+                    if ($isAdminAppointment) {
                         $sameDayAppointments = Appointment::where('admin_id', $appointment->admin_id)
                             ->whereIn('status', ['pending', 'confirmed', 'rescheduled'])
                             ->where('id', '!=', $appointment->id)
                             ->where('start_at', '<', $dayEndUtc)
                             ->where('end_at', '>', $dayStartUtc)
                             ->get();
-                    }else{
+                    } else {
                         $sameDayAppointments = Appointment::where('agent_id', $appointment->agent_id)
                             ->whereIn('status', ['pending', 'confirmed', 'rescheduled'])
                             ->where('id', '!=', $appointment->id)
@@ -989,13 +1004,15 @@ class AdminAppointmentController extends Controller
                                 break;
                             }
                         }
-                        if ($blockedByAppointment) { continue; }
+                        if ($blockedByAppointment) {
+                            continue;
+                        }
 
                         $slotValid = true;
                         break;
                     }
 
-                    if (!$slotValid) {
+                    if (! $slotValid) {
                         DB::rollBack();
                         ResponseService::validationError(trans('Selected time is not available'));
                     }
@@ -1132,7 +1149,7 @@ class AdminAppointmentController extends Controller
             }
 
             $appointment = Appointment::find($request->appointment_id);
-            if (!$appointment) {
+            if (! $appointment) {
                 return ResponseService::errorResponse(trans('Appointment not found'));
             }
 
@@ -1141,10 +1158,10 @@ class AdminAppointmentController extends Controller
             $isAdminAppointment = $appointment->is_admin_appointment;
 
             // Get agent preferences and timezone
-            if($isAdminAppointment){
-                $preferences = AgentBookingPreference::where(['is_admin_data' => 1,'admin_id' => Auth::id()])->first();
+            if ($isAdminAppointment) {
+                $preferences = AgentBookingPreference::where(['is_admin_data' => 1, 'admin_id' => Auth::id()])->first();
                 $agentTimezone = HelperService::getSettingData('timezone') ?: 'UTC';
-            }else{
+            } else {
                 $preferences = AgentBookingPreference::where('agent_id', $agentId)->first();
                 $agentTimezone = $preferences?->timezone ?: (config('app.timezone') ?? 'UTC');
             }
@@ -1154,12 +1171,12 @@ class AdminAppointmentController extends Controller
 
             // Handle past dates and same-day past times in agent's timezone
             $agentNow = Carbon::now($agentTimezone);
-            $selectedDateAgent = Carbon::parse($dateKey . ' 00:00:00', $agentTimezone);
+            $selectedDateAgent = Carbon::parse($dateKey.' 00:00:00', $agentTimezone);
             $todayAgentStart = (clone $agentNow)->startOfDay();
             if ($selectedDateAgent->lt($todayAgentStart)) {
                 return ResponseService::successResponse(trans('No slots available'), [
                     'available_slots' => [],
-                    'message' => trans('No available slots for the selected date')
+                    'message' => trans('No available slots for the selected date'),
                 ]);
             }
 
@@ -1167,10 +1184,10 @@ class AdminAppointmentController extends Controller
             $dayName = strtolower(Carbon::parse($dateKey)->englishDayOfWeek);
             $agentAvailabilityQuery = AgentAvailability::where(['is_active' => 1, 'day_of_week' => $dayName]);
             $agentExtraTimeSlotQuery = AgentExtraTimeSlot::where('date', $dateKey);
-            if($isAdminAppointment){
-                $windows = $agentAvailabilityQuery->where(['admin_id' => Auth::id(),'is_admin_data' => 1])->get();
+            if ($isAdminAppointment) {
+                $windows = $agentAvailabilityQuery->where(['admin_id' => Auth::id(), 'is_admin_data' => 1])->get();
                 $extraWindows = $agentExtraTimeSlotQuery->where(['admin_id' => Auth::id(), 'is_admin_data' => 1])->get();
-            }else{
+            } else {
                 $windows = $agentAvailabilityQuery->where(['agent_id' => $agentId])->get();
                 $extraWindows = $agentExtraTimeSlotQuery->where(['agent_id' => $agentId])->get();
             }
@@ -1179,14 +1196,18 @@ class AdminAppointmentController extends Controller
             // Build available slots
             $slots = [];
             foreach ($windows as $w) {
-                $winStart = Carbon::parse($dateKey . ' ' . $w->start_time);
-                $winEnd = Carbon::parse($dateKey . ' ' . $w->end_time);
-                if ($winEnd <= $winStart) { continue; }
+                $winStart = Carbon::parse($dateKey.' '.$w->start_time);
+                $winEnd = Carbon::parse($dateKey.' '.$w->end_time);
+                if ($winEnd <= $winStart) {
+                    continue;
+                }
                 $cursor = (clone $winStart);
                 while (true) {
                     $candidateEnd = (clone $cursor)->addMinutes($meetingDurationMinutes);
-                    if ($candidateEnd > $winEnd) { break; }
-                    $slots[] = [ 'start' => (clone $cursor), 'end' => (clone $candidateEnd) ];
+                    if ($candidateEnd > $winEnd) {
+                        break;
+                    }
+                    $slots[] = ['start' => (clone $cursor), 'end' => (clone $candidateEnd)];
                     $cursor = (clone $candidateEnd)->addMinutes($bufferMinutes);
                 }
             }
@@ -1194,7 +1215,7 @@ class AdminAppointmentController extends Controller
             if (empty($slots)) {
                 return ResponseService::successResponse(trans('No slots available'), [
                     'available_slots' => [],
-                    'message' => trans('No available slots for the selected date')
+                    'message' => trans('No available slots for the selected date'),
                 ]);
             }
 
@@ -1204,15 +1225,15 @@ class AdminAppointmentController extends Controller
             //     ->get();
 
             // Check for existing appointments (excluding current appointment)
-            $dayStartAgent = Carbon::parse($dateKey . ' 00:00:00', $agentTimezone);
-            $dayEndAgent = Carbon::parse($dateKey . ' 23:59:59', $agentTimezone);
+            $dayStartAgent = Carbon::parse($dateKey.' 00:00:00', $agentTimezone);
+            $dayEndAgent = Carbon::parse($dateKey.' 23:59:59', $agentTimezone);
             $dayStartUtc = (clone $dayStartAgent)->setTimezone('UTC')->toDateTimeString();
             $dayEndUtc = (clone $dayEndAgent)->setTimezone('UTC')->toDateTimeString();
 
             $appointmentsQuery = Appointment::whereIn('status', ['pending', 'confirmed', 'rescheduled'])
-                ->where('id', '!=', $appointment->id)->where(function($query) use ($dayEndUtc, $dayStartUtc){
+                ->where('id', '!=', $appointment->id)->where(function ($query) use ($dayEndUtc, $dayStartUtc) {
                     $query->where('start_at', '<', $dayEndUtc)
-                    ->where('end_at', '>', $dayStartUtc);
+                        ->where('end_at', '>', $dayStartUtc);
                 });
 
             if ($isAdminAppointment) {
@@ -1225,15 +1246,17 @@ class AdminAppointmentController extends Controller
 
             // Filter slots by unavailability and appointments
             $availableSlots = [];
-	        foreach ($slots as $s) {
+            foreach ($slots as $s) {
                 $sStartAgent = $s['start'];
                 $sEndAgent = $s['end'];
 
-	                // Skip past slots when the selected date is today (agent timezone)
-	                if ($selectedDateAgent->equalTo($todayAgentStart)) {
-	                    $slotStartInAgentTz = (clone $sStartAgent)->setTimezone($agentTimezone);
-	                    if ($slotStartInAgentTz->lte($agentNow)) { continue; }
-	                }
+                // Skip past slots when the selected date is today (agent timezone)
+                if ($selectedDateAgent->equalTo($todayAgentStart)) {
+                    $slotStartInAgentTz = (clone $sStartAgent)->setTimezone($agentTimezone);
+                    if ($slotStartInAgentTz->lte($agentNow)) {
+                        continue;
+                    }
+                }
 
                 // // Check unavailability overlap
                 // $blockedByUnavailability = false;
@@ -1263,7 +1286,9 @@ class AdminAppointmentController extends Controller
                         break;
                     }
                 }
-                if ($blockedByAppointment) { continue; }
+                if ($blockedByAppointment) {
+                    continue;
+                }
 
                 // Convert to admin timezone for display
                 $startAdmin = (clone $sStartAgent)->setTimezone($agentTimezone);
@@ -1274,7 +1299,7 @@ class AdminAppointmentController extends Controller
                     'end_time' => $endAdmin->format('H:i'),
                     'start_at' => $startAdmin->toIso8601String(),
                     'end_at' => $endAdmin->toIso8601String(),
-                    'display' => $startAdmin->format('H:i') . ' - ' . $endAdmin->format('H:i')
+                    'display' => $startAdmin->format('H:i').' - '.$endAdmin->format('H:i'),
                 ];
             }
 
@@ -1282,7 +1307,7 @@ class AdminAppointmentController extends Controller
                 'available_slots' => $availableSlots,
                 'date' => $dateKey,
                 'agent_timezone' => $agentTimezone,
-                'admin_timezone' => $agentTimezone
+                'admin_timezone' => $agentTimezone,
             ]);
 
         } catch (Exception $e) {
@@ -1295,13 +1320,13 @@ class AdminAppointmentController extends Controller
      */
     public function appointmentManagementDestroy($id)
     {
-        if (!has_permissions('delete', 'appointment_management')) {
+        if (! has_permissions('delete', 'appointment_management')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
         try {
             $appointment = Appointment::find($id);
-            if (!$appointment) {
+            if (! $appointment) {
                 ResponseService::errorResponse(trans('Appointment not found'));
             }
 
@@ -1315,7 +1340,7 @@ class AdminAppointmentController extends Controller
     /**
      * Send appointment status notifications to relevant parties
      */
-    private function sendAppointmentStatusNotifications(Appointment $appointment, string $newStatus, string $reason = null, string $oldStatus = null)
+    private function sendAppointmentStatusNotifications(Appointment $appointment, string $newStatus, ?string $reason = null, ?string $oldStatus = null)
     {
         try {
             // Only send notifications for meaningful status changes
@@ -1328,21 +1353,21 @@ class AdminAppointmentController extends Controller
             $user = $appointment->user;
 
             // Send notification to agent (if exists and different from user)
-            if ($agent && (!$user || $agent->id !== $user->id)) {
+            if ($agent && (! $user || $agent->id !== $user->id)) {
                 $this->sendNotificationToParty($appointment, $agent, $newStatus, $reason, 'admin');
             }
 
             // Send notification to user (if exists and different from agent)
-            if ($user && (!$agent || $user->id !== $agent->id)) {
+            if ($user && (! $agent || $user->id !== $agent->id)) {
                 $this->sendNotificationToParty($appointment, $user, $newStatus, $reason, 'admin');
             }
 
         } catch (Exception $e) {
             // Log the error but don't fail the main operation
-            Log::error("Failed to send appointment status notifications", [
+            Log::error('Failed to send appointment status notifications', [
                 'appointment_id' => $appointment->id,
                 'new_status' => $newStatus,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }
@@ -1350,7 +1375,7 @@ class AdminAppointmentController extends Controller
     /**
      * Send notification to a specific party (agent or user)
      */
-    private function sendNotificationToParty(Appointment $appointment, $targetParty, string $newStatus, string $reason = null, string $changedBy = 'admin')
+    private function sendNotificationToParty(Appointment $appointment, $targetParty, string $newStatus, ?string $reason = null, string $changedBy = 'admin')
     {
         try {
             // Get the other party for context
@@ -1371,11 +1396,11 @@ class AdminAppointmentController extends Controller
             $this->storeNotificationToParty($appointment, $targetParty, $newStatus, $reason);
 
         } catch (Exception $e) {
-            Log::error("Failed to send notification to party", [
+            Log::error('Failed to send notification to party', [
                 'appointment_id' => $appointment->id,
                 'target_party_id' => $targetParty->id,
                 'status' => $newStatus,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }
@@ -1383,7 +1408,7 @@ class AdminAppointmentController extends Controller
     /**
      * Send email notification to a specific party
      */
-    private function sendEmailNotificationToParty(Appointment $appointment, $targetParty, $otherParty, string $status, string $reason = null)
+    private function sendEmailNotificationToParty(Appointment $appointment, $targetParty, $otherParty, string $status, ?string $reason = null)
     {
         try {
             if (empty($targetParty->email)) {
@@ -1392,7 +1417,7 @@ class AdminAppointmentController extends Controller
 
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             // Get timezone for the target party
             $targetTimezone = $targetParty->timezone ?? config('app.timezone');
@@ -1430,14 +1455,16 @@ class AdminAppointmentController extends Controller
             ];
 
             HelperService::sendMail($data);
+
             return true;
 
         } catch (Exception $e) {
-            Log::error("Failed to send appointment email notification", [
+            Log::error('Failed to send appointment email notification', [
                 'appointment_id' => $appointment->id,
                 'target_email' => $targetParty->email ?? 'N/A',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -1445,7 +1472,7 @@ class AdminAppointmentController extends Controller
     /**
      * Send push notification to a specific party
      */
-    private function sendPushNotificationToParty(Appointment $appointment, $targetParty, string $status, string $reason = null)
+    private function sendPushNotificationToParty(Appointment $appointment, $targetParty, string $status, ?string $reason = null)
     {
         try {
             $fcmTokens = Usertokens::where('customer_id', $targetParty->id)
@@ -1471,14 +1498,16 @@ class AdminAppointmentController extends Controller
             ];
 
             send_push_notification($fcmTokens, $fcmMsg);
+
             return true;
 
         } catch (Exception $e) {
-            Log::error("Failed to send appointment push notification", [
+            Log::error('Failed to send appointment push notification', [
                 'appointment_id' => $appointment->id,
                 'target_id' => $targetParty->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -1486,7 +1515,7 @@ class AdminAppointmentController extends Controller
     /**
      * Store notification in database for a specific party
      */
-    private function storeNotificationToParty(Appointment $appointment, $targetParty, string $status, string $reason = null)
+    private function storeNotificationToParty(Appointment $appointment, $targetParty, string $status, ?string $reason = null)
     {
         try {
             $title = $this->getNotificationTitle($status);
@@ -1507,11 +1536,12 @@ class AdminAppointmentController extends Controller
             return true;
 
         } catch (Exception $e) {
-            Log::error("Failed to store appointment notification", [
+            Log::error('Failed to store appointment notification', [
                 'appointment_id' => $appointment->id,
                 'target_id' => $targetParty->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -1567,7 +1597,7 @@ class AdminAppointmentController extends Controller
     /**
      * Get notification body based on status
      */
-    private function getNotificationBody(string $status, string $reason = null): string
+    private function getNotificationBody(string $status, ?string $reason = null): string
     {
         $baseMessages = [
             'confirmed' => 'Your appointment has been confirmed',
@@ -1580,7 +1610,7 @@ class AdminAppointmentController extends Controller
         $message = $baseMessages[$status] ?? 'Your appointment status has been updated';
 
         if ($reason && in_array($status, ['cancelled', 'rescheduled'])) {
-            $message .= '. Reason: ' . $reason;
+            $message .= '. Reason: '.$reason;
         }
 
         return $message;

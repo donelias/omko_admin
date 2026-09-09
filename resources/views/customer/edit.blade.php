@@ -114,6 +114,64 @@
 				</form>
 			</div>
 		</div>
+		@if($customer->is_agent)
+		<div class="card mt-4">
+			<div class="divider">
+				<div class="divider-text">
+					<h4>{{ __('Agent Profile') }}</h4>
+				</div>
+			</div>
+			<div class="card-body mt-4">
+				<div class="row">
+					<div class="col-md-4 mb-3">
+						<label class="form-label fw-bold">{{ __('Agent Status') }}</label>
+						<div>
+							<span class="badge bg-success">{{ __('Agent') }}</span>
+							@if($customer->is_agent_verified)
+								<span class="badge bg-primary">{{ __('Verified') }}</span>
+							@else
+								<span class="badge bg-warning">{{ __('Not Verified') }}</span>
+							@endif
+						</div>
+					</div>
+					<div class="col-md-4 mb-3">
+						<label class="form-label fw-bold">{{ __('Active Mode') }}</label>
+						<div>
+							<span class="badge bg-{{ $customer->is_agent ? 'info' : 'secondary' }}">
+								{{ $customer->is_agent ? __('Agent') : __('User') }}
+							</span>
+						</div>
+					</div>
+				</div>
+				@php $agentProfile = $customer->agent_profile; @endphp
+				@if($agentProfile)
+				<hr>
+				<div class="row">
+					<div class="col-md-4 mb-3">
+						<label class="form-label fw-bold">{{ __('Agent Name') }}</label>
+						<p>{{ $agentProfile->agent_name ?? '-' }}</p>
+					</div>
+					<div class="col-md-4 mb-3">
+						<label class="form-label fw-bold">{{ __('Agent Email') }}</label>
+						<p>{{ $agentProfile->agent_email ?? '-' }}</p>
+					</div>
+					<div class="col-md-4 mb-3">
+						<label class="form-label fw-bold">{{ __('Agent Profile Photo') }}</label>
+						<div>
+							@if($agentProfile->getRawOriginal('agent_profile_photo'))
+								<img src="{{ $agentProfile->agent_profile_photo }}" alt="Agent Photo" height="80" width="80" class="rounded">
+							@else
+								<span class="text-muted">-</span>
+							@endif
+						</div>
+					</div>
+				</div>
+				@else
+				<p class="text-muted">{{ __('No agent profile data available.') }}</p>
+				@endif
+			</div>
+		</div>
+		@endif
 	</section>
 @endsection
 

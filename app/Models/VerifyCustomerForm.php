@@ -2,22 +2,25 @@
 
 namespace App\Models;
 
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
 use App\Traits\ManageTranslations;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class VerifyCustomerForm extends Model
 {
-    use HasFactory, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, ManageTranslations;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
+
+    protected $with = ['form_fields_values'];
+
     protected $fillable = [
         'name',
         'field_type',
-        'rank'
+        'rank',
     ];
-
 
     /**
      * Get all of the form_fields_values for the VerifyCustomerForm

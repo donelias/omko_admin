@@ -1,10 +1,38 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\AdvertisementApiController;
+use App\Http\Controllers\Api\AgentApiController;
+use App\Http\Controllers\Api\AppointmentApiController;
+use App\Http\Controllers\Api\AssistantChatController;
+use App\Http\Controllers\Api\SavedSearchApiController;
+use App\Http\Controllers\Api\ShortTermApiController;
+use App\Http\Controllers\Api\AuthApiController;
+use App\Http\Controllers\Api\CategoryApiController;
+use App\Http\Controllers\Api\ChatApiController;
+use App\Http\Controllers\Api\ContentApiController;
+use App\Http\Controllers\Api\FavouriteApiController;
+use App\Http\Controllers\Api\HomepageApiController;
+use App\Http\Controllers\Api\FreeMapApiController;
+use App\Http\Controllers\Api\LeadApiController;
+use App\Http\Controllers\Api\MapApiController;
+use App\Http\Controllers\Api\NotificationApiController;
+use App\Http\Controllers\Api\PackageApiController;
+use App\Http\Controllers\Api\PaymentApiController;
+use App\Http\Controllers\Api\PersonalisationApiController;
+use App\Http\Controllers\Api\ProfileApiController;
+use App\Http\Controllers\Api\ProjectApiController;
+use App\Http\Controllers\Api\ProjectInventoryApiController;
+use App\Http\Controllers\Api\CommissionApiController;
+use App\Http\Controllers\Api\PropertyApiController;
+use App\Http\Controllers\Api\SettingsApiController;
+use App\Http\Controllers\Api\StoryApiController;
+use App\Http\Controllers\Api\VerificationApiController;
+use App\Http\Controllers\PriceIntelligenceController;
 use App\Http\Controllers\ApiController;
-use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\GeminiAIController;
-use App\Http\Controllers\PropertyCommissionController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Middleware\ActiveRoleMiddleware;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -18,294 +46,387 @@ use App\Http\Controllers\PropertyCommissionController;
 */
 
 /*********************************************************************** */
-/** Property */
-Route::get('get-properties-on-map', [ApiController::class, 'getPropertiesOnMap']);
-Route::get('compare-properties', [ApiController::class, 'compareProperties']);
-Route::get('get-cities-data', [ApiController::class, 'getCitiesData']);
-/*********************************************************************** */
-
-/** Users */
-Route::post('user_signup', [ApiController::class, 'user_signup']);
-Route::post('user-register', [ApiController::class, 'userRegister']);
-Route::get('check-number-password-exists', [ApiController::class, 'checkNumberPasswordExists']);
-Route::post('update-number-password', [ApiController::class, 'updateNumberPassword']);
-
-Route::get('forgot-password', [ApiController::class, 'forgotPassword']);
-/*********************************************************************** */
-
-/** Others */
-Route::post('contact-us', [ApiController::class, 'contactUs']);
-Route::get('get-slider', [ApiController::class, 'getSlider']);
-Route::get('get_facilities', [ApiController::class, 'get_facilities']);
-Route::get('get_seo_settings', [ApiController::class, 'get_seo_settings']);
-Route::get('get_report_reasons', [ApiController::class, 'get_report_reasons']);
-/*********************************************************************** */
-
-/** Google Maps */
-Route::get('get-map-places-list', [ApiController::class, 'getMapPlacesListData']);
-Route::get('get-map-place-details', [ApiController::class, 'getMapPlaceDetailsData']);
-/*********************************************************************** */
-
-/** Extra */
-Route::get('get_articles', [ApiController::class, 'get_articles']);
-Route::get('get_categories', [ApiController::class, 'get_categories']);
-Route::get('get_languages', [ApiController::class, 'get_languages']);
-/*********************************************************************** */
-
-Route::match(array('GET', 'POST'),'flutterwave-payment-status', [PaymentController::class, 'flutterwavePaymentStatus']);
-Route::match(array('GET', 'POST'),'flutterwave-payment-status-web', [PaymentController::class, 'flutterwavePaymentStatusWeb']);
-/*********************************************************************** */
-
-/** Confirmation needed */
-Route::get('get_advertisement', [ApiController::class, 'get_advertisement']);
-Route::post('mortgage_calc', [ApiController::class, 'mortgage_calc']);
-
-Route::get('get_app_settings', [ApiController::class, 'get_app_settings']);
-/*********************************************************************** */
-
-/** Authenticated APIS */
 Route::group(['middleware' => ['auth:sanctum']], function () {
     /*********************************************************************** */
     /** Property */
-    Route::post('post_property', [ApiController::class, 'post_property']);
-    Route::post('update_post_property', [ApiController::class, 'update_post_property']);
-    Route::post('update_property_status', [ApiController::class, 'update_property_status']);
-    Route::post('delete_property', [ApiController::class, 'delete_property']);
-    Route::post('interested_users', [ApiController::class, 'interested_users']);
-    Route::post('change-property-status', [ApiController::class, 'changePropertyStatus']);
-    Route::get('get_favourite_property', [ApiController::class, 'get_favourite_property']);
-    Route::get('get_property_inquiry', [ApiController::class, 'get_property_inquiry']);
-    Route::get('get-added-properties',[ApiController::class,'getAddedProperties']);
+    Route::post('post_property', [PropertyApiController::class, 'post_property'])->name('post-property');
+    Route::post('activate-listing', [PropertyApiController::class, 'activateListing']);
+    Route::post('update_post_property', [PropertyApiController::class, 'update_post_property'])->name('update-post-property');
+    Route::post('update_property_status', [PropertyApiController::class, 'update_property_status'])->name('update-property-status');
+    Route::post('update_project_status', [ProjectApiController::class, 'update_project_status'])->name('update-project-status');
+    Route::post('delete_property', [PropertyApiController::class, 'delete_property'])->name('delete-property');
+    Route::post('interested_users', [PropertyApiController::class, 'interested_users'])->name('interested-users');
+    Route::post('change-property-status', [PropertyApiController::class, 'changePropertyStatus'])->name('change-property-status');
+
+    Route::get('get-added-properties', [PropertyApiController::class, 'getAddedProperties'])->name('get-added-properties');
+
+    Route::get('get_interested_users', [PropertyApiController::class, 'getInterestedUsers'])->name('get-interested-users');
+    Route::post('remove_post_images', [PropertyApiController::class, 'remove_post_images'])->name('remove-post-images');
+    Route::post('user_interested_property', [PropertyApiController::class, 'user_interested_property'])->name('user-interested-property');
+
+    /*********************************************************************** */
+    /** CRM Leads (FASE 5) */
+    Route::get('leads/mine', [LeadApiController::class, 'myLeads'])->name('leads-mine');
+    Route::post('leads/unlock', [LeadApiController::class, 'unlock'])->name('leads-unlock');
+    Route::post('leads/update-status', [LeadApiController::class, 'updateStatus'])->name('leads-update-status');
+    Route::post('leads/add-interaction', [LeadApiController::class, 'addInteraction'])->name('leads-add-interaction');
+    Route::post('leads/reassign', [LeadApiController::class, 'reassign'])->name('leads-reassign');
+    Route::post('leads/register-score', [LeadApiController::class, 'registerScore'])->name('leads-register-score');
+
     /*********************************************************************** */
 
+    Route::post('before-logout', [AuthApiController::class, 'beforeLogout'])->name('before-logout');
+
     /** Users */
-    Route::post('update_profile', [ApiController::class, 'update_profile']);
-    Route::post('delete_user', [ApiController::class, 'delete_user']);
-    Route::post('before-logout', [ApiController::class, 'beforeLogout']);
-    Route::get('get-user-data', [ApiController::class, 'getUserData']);
-    Route::get('get_user_recommendation', [ApiController::class, 'get_user_recommendation']);
-    Route::post('update-language', [ApiController::class, 'updateLanguage']);
+    Route::post('update_profile', [ProfileApiController::class, 'update_profile'])->name('update-profile');
+    Route::post('delete_user', [ProfileApiController::class, 'delete_user'])->name('delete-user');
+    Route::get('get-user-data', [ProfileApiController::class, 'getUserData'])->name('get-user-data');
+    Route::post('update-language', [ProfileApiController::class, 'updateLanguage'])->name('update-language');
+
     /*********************************************************************** */
 
     /** Chat */
-    Route::post('send_message', [ApiController::class, 'send_message']);
-    Route::post('delete_chat_message', [ApiController::class, 'delete_chat_message']);
-    Route::post('block-user',[ApiController::class,'blockChatUser']);
-    Route::post('unblock-user',[ApiController::class,'unBlockChatUser']);
-    Route::get('get_messages', [ApiController::class, 'get_messages']);
-    Route::get('get_chats', [ApiController::class, 'get_chats']);
+    Route::post('send_message', [ChatApiController::class, 'send_message'])->name('send-message');
+    Route::post('delete_chat_message', [ChatApiController::class, 'delete_chat_message'])->name('delete-chat-message');
+    Route::post('block-user', [ChatApiController::class, 'blockChatUser'])->name('block-user.api');
+    Route::post('unblock-user', [ChatApiController::class, 'unBlockChatUser'])->name('unblock-user.api');
+    Route::get('get_messages', [ChatApiController::class, 'get_messages'])->name('get-messages');
+    Route::get('get_chats', [ChatApiController::class, 'get_chats'])->name('get-chats');
     /*********************************************************************** */
 
     /** Package */
-    Route::post('assign_package', [ApiController::class, 'assign_package']);
-    Route::get('check-package-limit', [ApiController::class, 'checkPackageLimit']);
-    Route::delete('remove-all-packages', [ApiController::class, 'removeAllPackages']);
+    Route::post('assign_package', [PackageApiController::class, 'assign_package'])->name('assign-package');
+    Route::get('check-package-limit', [PackageApiController::class, 'checkPackageLimit'])->name('check-package-limit');
+    Route::delete('remove-all-packages', [PackageApiController::class, 'removeAllPackages'])->name('remove-all-packages');
     /*********************************************************************** */
 
-    /** Agents */
-    Route::get('get-agent-verification-form-fields', [ApiController::class, 'getAgentVerificationFormFields']);
-    Route::get('get-agent-verification-form-values', [ApiController::class, 'getAgentVerificationFormValues']);
-    Route::post('apply-agent-verification', [ApiController::class, 'applyAgentVerification']);
-    /*********************************************************************** */
+    /** Payment */
+    Route::get('get_payment_settings', [PaymentApiController::class, 'get_payment_settings'])->name('get-payment-settings');
+    Route::get('get_payment_details', [PaymentApiController::class, 'getPaymentTransactionDetails'])->name('get-payment-details');
+    Route::post('create-payment-intent', [PaymentApiController::class, 'createPaymentIntent'])->name('create-payment-intent');
+    Route::post('payment-transaction-fail', [PaymentApiController::class, 'makePaymentTransactionFail'])->name('payment-transaction-fail');
+    Route::get('get-payment-receipt', [PaymentApiController::class, 'getPaymentReceipt'])->name('get-payment-receipt');
+    Route::post('initiate-bank-transfer', [PaymentApiController::class, 'initiateBankTransaction'])->name('initiate-bank-transfer');
+    Route::post('upload-bank-receipt-file', [PaymentApiController::class, 'uploadBankReceiptFile'])->name('upload-bank-receipt-file');
 
-    /** Others */
-
-    // Payment
-    Route::get('get_payment_settings', [ApiController::class, 'get_payment_settings']);
-    Route::get('get_payment_details', [ApiController::class, 'getPaymentTransactionDetails']);
-
-    Route::post('create-payment-intent',[ApiController::class, 'createPaymentIntent']);
-    Route::post('payment-transaction-fail', [ApiController::class, 'makePaymentTransactionFail']);
-
-    // Payment Receipt
-    Route::get('get-payment-receipt', [ApiController::class, 'getPaymentReceipt']);
-
-    // Bank Transfer Apis
-    Route::post('initiate-bank-transfer',[ApiController::class,'initiateBankTransaction']);
-    Route::post('upload-bank-receipt-file',[ApiController::class,'uploadBankReceiptFile']);
     // Other's APIs
-    Route::get('get_notification_list', [ApiController::class, 'get_notification_list']);
+    Route::get('get_notification_list', [NotificationApiController::class, 'get_notification_list'])->name('get-notification-list');
     /*********************************************************************** */
 
     /** Personalised Interest */
-    Route::get('personalised-fields', [ApiController::class, 'getUserPersonalisedInterest']);
-    Route::post('personalised-fields', [ApiController::class, 'storeUserPersonalisedInterest']);
-    Route::delete('personalised-fields', [ApiController::class, 'deleteUserPersonalisedInterest']);
+
     /*********************************************************************** */
 
     /** Extra */
-    Route::post('store_advertisement', [ApiController::class, 'store_advertisement']);
-    Route::post('post_project', [ApiController::class, 'post_project']);
-    Route::post('delete_project', [ApiController::class, 'delete_project']);
-    Route::get('get_interested_users', [ApiController::class, 'getInterestedUsers']);
+    Route::post('store_advertisement', [AdvertisementApiController::class, 'store_advertisement'])->name('store-advertisement');
+    Route::post('renew_listing', [AdvertisementApiController::class, 'renew_listing'])->name('renew-listing');
     /*********************************************************************** */
-
-    /** Confirmation needed */
-    Route::post('remove_post_images', [ApiController::class, 'remove_post_images']);
-    Route::post('set_property_inquiry', [ApiController::class, 'set_property_inquiry']);
-    Route::post('add_favourite', [ApiController::class, 'add_favourite']);
-    Route::post('delete_favourite', [ApiController::class, 'delete_favourite']);
-    Route::post('user_purchase_package', [ApiController::class, 'user_purchase_package']);
-    Route::post('delete_advertisement', [ApiController::class, 'delete_advertisement']);
-    Route::post('delete_inquiry', [ApiController::class, 'delete_inquiry']);
-    Route::post('user_interested_property', [ApiController::class, 'user_interested_property']);
-    Route::post('add_reports', [ApiController::class, 'add_reports']);
-    Route::post('add_edit_user_interest', [ApiController::class, 'add_edit_user_interest']);
-    /*********************************************************************** */
-
 
     /** Projects */
-    Route::get('get-added-projects', [ApiController::class, 'getAddedProjects']);
-    Route::get('get-project-detail', [ApiController::class, 'getProjectDetail']);
-    Route::post('change-project-status', [ApiController::class, 'changeProjectStatus']);
+    Route::post('post_project', [ProjectApiController::class, 'post_project'])->name('post-project');
+    Route::post('delete_project', [ProjectApiController::class, 'delete_project'])->name('delete-project');
+    Route::post('change-project-status', [ProjectApiController::class, 'changeProjectStatus'])->name('change-project-status');
+    /*********************************************************************** */
+
+    /** Stories — agent upload/delete (auth:sanctum + agent) */
+    Route::group(['middleware' => ['agent']], function () {
+        Route::post('upload-story', [StoryApiController::class, 'upload'])->name('upload-story');
+        Route::delete('delete-story', [StoryApiController::class, 'destroy'])->name('delete-story');
+        Route::get('my-stories', [StoryApiController::class, 'myStories'])->name('my-stories');
+    });
+    /*********************************************************************** */
+
+    /** Agent Specific Action APIs */
+    Route::group(['middleware' => ['agent']], function () {
+        /** Agent Profile Apis */
+        Route::get('get-agent-profile', [AgentApiController::class, 'getAgentProfile'])->name('get-agent-profile');
+        Route::post('update-agent-profile', [AgentApiController::class, 'updateAgentProfile'])->name('update-agent-profile');
+        Route::get('get-agent-watermark-settings', [AgentApiController::class, 'getAgentWatermarkSettings'])->name('get-agent-watermark-settings');
+        Route::post('update-agent-watermark-settings', [AgentApiController::class, 'updateAgentWatermarkSettings'])->name('update-agent-watermark-settings');
+
+        /** Agent Dashboard Apis */
+        Route::group(['prefix' => 'agent-dashboard'], function () {
+            Route::get('profile-completion', [AgentApiController::class, 'getAgentProfileCompletion'])->name('get-agent-profile-completion');
+            Route::get('summery', [AgentApiController::class, 'getAgentDashboardSummeryData'])->name('get-agent-dashboard-summery-data');
+            Route::get('listings', [AgentApiController::class, 'getAgentDashboardListingsData'])->name('get-agent-dashboard-listings-data');
+            Route::get('recent-listing', [AgentApiController::class, 'getAgentDashboardRecentlyAddedListingsData'])->name('get-agent-dashboard-recently-added-listings-data');
+            Route::get('active-packages', [AgentApiController::class, 'getAgentDashboardActivePackagesData'])->name('get-agent-dashboard-active-packages-data');
+            Route::get('most-viewed-listing', [AgentApiController::class, 'getAgentDashboardMostViewedListingData'])->name('get-agent-dashboard-most-viewed-listing-data');
+            Route::get('most-viewed-category', [AgentApiController::class, 'getAgentDashboardMostViewedCategoryData'])->name('get-agent-dashboard-most-viewed-category-data');
+            Route::get('appointments', [AgentApiController::class, 'getAgentDashboardAppointmentData'])->name('get-agent-dashboard-appointment-data');
+        });
+
+        Route::group(['prefix' => 'appointment'], function () {
+            Route::get('agent-appointments', [AppointmentApiController::class, 'getAgentAppointments'])->name('get-agent-appointments');
+            Route::post('booking-preferences', [AppointmentApiController::class, 'storeBookingPreferences'])->name('store-booking-preferences');
+            Route::get('booking-preferences', [AppointmentApiController::class, 'getAgentBookingPreferences'])->name('get-agent-booking-preferences');
+            // Time Schedule Data
+            Route::post('set-agent-time-schedule', [AppointmentApiController::class,    'setAgentTimeSchedule'])->name('set-agent-time-schedule');
+            Route::get('agent-time-schedules', [AppointmentApiController::class,    'getAgentTimeSchedules'])->name('get-agent-time-schedules');
+            // Unavailability Data
+            Route::post('add-unavailability', [AppointmentApiController::class,     'addAgentUnavailability'])->name('add-agent-unavailability');
+            Route::get('unavailability-data', [AppointmentApiController::class,     'getUnavailabilityData'])->name('get-unavailability-data');
+            Route::delete('delete-unavailability', [AppointmentApiController::class,    'deleteUnavailabilityData'])->name('delete-unavailability-data');
+            // Extra Time Slots (Bulk Operations Only)
+            Route::get('extra-time-slots', [AppointmentApiController::class, 'getAgentExtraTimeSlots'])->name('get-agent-extra-time-slots');
+            Route::post('manage-extra-time-slots', [AppointmentApiController::class,    'manageAgentExtraTimeSlots'])->name('manage-agent-extra-time-slots');
+            Route::post('delete-extra-time-slots', [AppointmentApiController::class,    'deleteMultipleAgentExtraTimeSlots'])->name('delete-multiple-agent-extra-time-slots');
+            // General
+            // Update Meeting Type
+
+        });
+    });
+    /*********************************************************************** */
+
+    Route::group(['middleware' => ['user']], function () {
+
+        Route::get('get_user_recommendation', [PropertyApiController::class, 'get_user_recommendation'])->name('get-user-recommendation');
+
+        Route::get('get_user_verification_form', [VerificationApiController::class, 'getUserVerificationForm'])->name('get-user-verification-form');
+        Route::get('get_user_verification_form_values', [VerificationApiController::class, 'getUserVerificationFormValues'])->name('get-user-verification-form-values');
+        Route::post('apply_user_verification', [VerificationApiController::class, 'applyUserVerification'])->name('apply-user-verification');
+
+        Route::get('mortgage-calculator', [ContentApiController::class, 'calculateMortgageCalculator'])->name('mortgage-calculator');
+
+        Route::get('get_report_reasons', [ContentApiController::class, 'get_report_reasons'])->name('get-report-reasons');
+
+        Route::post('add_reports', [PropertyApiController::class, 'add_reports'])->name('add-reports');
+
+        Route::get('appointment/check-availability', [AppointmentApiController::class, 'checkAgentTimeAvailability'])->name('check-agent-time-availability');
+        // Get Appointments
+        Route::get('appointment/user-appointments', [AppointmentApiController::class, 'getUserAppointments'])->name('get-user-appointments');
+
+        // Create Appointment Request
+        Route::post('appointment/request', [AppointmentApiController::class, 'createAppointment'])->name('create-appointment');
+
+        Route::get('personalised-fields', [PersonalisationApiController::class, 'getUserPersonalisedInterest'])->name('get-user-personalised-interest');
+        Route::post('personalised-fields', [PersonalisationApiController::class, 'storeUserPersonalisedInterest'])->name('store-user-personalised-interest');
+        Route::delete('personalised-fields', [PersonalisationApiController::class, 'deleteUserPersonalisedInterest'])->name('delete-user-personalised-interest');
+
+        Route::get('get_favourite_property', [FavouriteApiController::class, 'get_favourite_property'])->name('get-favourite-property');
+    });
+
+    Route::post('apply-agent-verification', [VerificationApiController::class, 'applyAgentVerification'])->name('apply-agent-verification');
+    Route::get('get-agent-verification-form', [VerificationApiController::class, 'getAgentVerificationForm'])->name('get-agent-verification-form');
+    Route::get('get-agent-verification-form-fields', [VerificationApiController::class, 'getAgentVerificationFormFields'])->name('get-agent-verification-form-fields');
+    Route::get('get-agent-verification-form-values', [VerificationApiController::class, 'getAgentVerificationFormValues'])->name('get-agent-verification-form-values');
+
+    /** Confirmation needed */
+    // Route::post('set_property_inquiry', [ApiController::class, 'set_property_inquiry'])->name('set-property-inquiry');
+    Route::post('add_favourite', [FavouriteApiController::class, 'add_favourite'])->name('add-favourite');
+    // Route::post('delete_favourite', [ApiController::class, 'delete_favourite'])->name('delete-favourite');
+    Route::post('user_purchase_package', [PackageApiController::class, 'user_purchase_package'])->name('user-purchase-package');
+    Route::post('delete_advertisement', [AdvertisementApiController::class, 'delete_advertisement'])->name('delete-advertisement');
+    // Route::post('delete_inquiry', [ApiController::class, 'delete_inquiry'])->name('delete-inquiry');
+    // Route::post('add_edit_user_interest', [ApiController::class, 'add_edit_user_interest'])->name('add-edit-user-interest');
+    /*********************************************************************** */
+
     /*********************************************************************** */
 
     /** General Apis */
-    Route::get('get-featured-data',[ApiController::class, 'getFeaturedData']);
+    Route::get('get-featured-data', [PackageApiController::class, 'getFeaturedData'])->name('get-featured-data');
 
     /** Gemini AI */
-    Route::post('gemini/generate-description', [GeminiAIController::class, 'generateDescription']);
-    Route::post('gemini/generate-meta', [GeminiAIController::class, 'generateMetaDetails']);
+    Route::post('gemini/generate-description', [GeminiAIController::class, 'generateDescription'])->name('gemini-generate-description');
+    Route::post('gemini/generate-meta', [GeminiAIController::class, 'generateMetaDetails'])->name('gemini-generate-meta');
 
     /** Agent Appointment Apis */
     Route::group(['prefix' => 'appointment'], function () {
-        // Booking Preferences
-        Route::post('booking-preferences', [ApiController::class, 'storeBookingPreferences']);
-        Route::get('booking-preferences', [ApiController::class, 'getAgentBookingPreferences']);
-        // Time Schedule Data
-        Route::post('set-agent-time-schedule', [ApiController::class, 'setAgentTimeSchedule']);
-        Route::get('agent-time-schedules', [ApiController::class, 'getAgentTimeSchedules']);
-        // Unavailability Data
-        Route::post('add-unavailability', [ApiController::class, 'addAgentUnavailability']);
-        Route::get('unavailability-data', [ApiController::class, 'getUnavailabilityData']);
-        Route::delete('delete-unavailability', [ApiController::class, 'deleteUnavailabilityData']);
-        // Extra Time Slots (Bulk Operations Only)
-        Route::get('extra-time-slots', [ApiController::class, 'getAgentExtraTimeSlots']);
-        Route::post('manage-extra-time-slots', [ApiController::class, 'manageAgentExtraTimeSlots']);
-        Route::post('delete-extra-time-slots', [ApiController::class, 'deleteMultipleAgentExtraTimeSlots']);
-        // General
-        Route::get('monthly-time-slots', [ApiController::class, 'getMonthlyTimeSlots']);
-        Route::get('check-availability', [ApiController::class, 'checkAgentTimeAvailability']);
-        // Get Appointments
-        Route::get('user-appointments', [ApiController::class, 'getUserAppointments']);
-        Route::get('agent-appointments', [ApiController::class, 'getAgentAppointments']);
-        // Create Appointment Request
-        Route::post('request', [ApiController::class, 'createAppointment']);
+
+        Route::get('monthly-time-slots', [AppointmentApiController::class, 'getMonthlyTimeSlots'])->name('get-monthly-time-slots');
+
         // Update Appointment Status
-        Route::post('update-status', [ApiController::class, 'updateAppointmentStatus']);
-        // Update Meeting Type
-        Route::post('update-meeting-type', [ApiController::class, 'updateAppointmentMeetingType']);
+        Route::post('update-status', [AppointmentApiController::class, 'updateAppointmentStatus'])->name('update-appointment-status');
         // Report User
-        Route::post('report-user', [ApiController::class, 'reportUser']);
-        Route::get('get-user-reports', [ApiController::class, 'getUserReports']);
-
+        Route::post('report-user', [AppointmentApiController::class, 'reportUser'])->name('report-user');
+        Route::get('get-user-reports', [AppointmentApiController::class, 'getUserReports'])->name('get-user-reports');
+        Route::post('update-meeting-type', [AppointmentApiController::class,    'updateAppointmentMeetingType'])->name('update-appointment-meeting-type');
     });
 
-    /** Agent Dashboard Apis */
-    Route::group(['prefix' => 'agent-dashboard'], function () {
-        Route::get('summery',[ApiController::class, 'getAgentDashboardSummeryData']);
-        Route::get('listings',[ApiController::class, 'getAgentDashboardListingsData']);
-        Route::get('recent-listing',[ApiController::class, 'getAgentDashboardRecentlyAddedListingsData']);
-        Route::get('active-packages',[ApiController::class, 'getAgentDashboardActivePackagesData']);
-        Route::get('most-viewed-listing',[ApiController::class, 'getAgentDashboardMostViewedListingData']);
-        Route::get('most-viewed-category',[ApiController::class, 'getAgentDashboardMostViewedCategoryData']);
-        Route::get('appointments',[ApiController::class, 'getAgentDashboardAppointmentData']);
-    });
+    /*********************************************************************** */
 
-    // Meta Notifications Routes
-    include 'META_NOTIFICATIONS_ROUTES.php';
+    /** Price Intelligence Routes */
+    Route::prefix('price-intelligence')->group(function () {
+        // Get price suggestion for a property
+        Route::get('suggestions/{propertyId}', [PriceIntelligenceController::class, 'getSuggestion']);
+
+        // Get detailed price analysis
+        Route::get('analysis/{propertyId}', [PriceIntelligenceController::class, 'getAnalysis']);
+
+        // Get market analysis for a location
+        Route::post('market-analysis', [PriceIntelligenceController::class, 'getMarketAnalysis']);
+
+        // Record price history
+        Route::post('price-history', [PriceIntelligenceController::class, 'recordPriceHistory']);
+
+        // Get bulk suggestions for multiple properties
+        Route::post('bulk-suggestions', [PriceIntelligenceController::class, 'getBulkSuggestions']);
+
+        // Get comparable properties
+        Route::get('comparables/{propertyId}', [PriceIntelligenceController::class, 'getComparables']);
+
+        // Get price trends
+        Route::get('trends', [PriceIntelligenceController::class, 'getTrends']);
+    });
+    /*********************************************************************** */
 });
 
+/** Exchange rates — público: tasa diaria inofensiva para precios en las tarjetas */
+Route::get('price-intelligence/exchange-rates', [PriceIntelligenceController::class, 'exchangeRates']);
 
-/** Using Auth guard sanctum for get the data with or without authentication */
+/** Stories — public (optional auth via checkAuth middleware) */
+Route::middleware('checkAuth')->group(function () {
+    Route::get('get-stories', [StoryApiController::class, 'index'])->name('get-stories');
+});
+
+/** story-view requires a logged-in user (Auth::id() must not be null) */
+Route::middleware('auth:sanctum')->post('story-view', [StoryApiController::class, 'recordView'])->name('story-view');
+/*********************************************************************** */
 
 /** Property */
-Route::get('get_property', [ApiController::class, 'get_property']);
-Route::get('get-property-list', [ApiController::class, 'getPropertyList']);
-Route::get('get-all-similar-properties',[ApiController::class, 'getAllSimilarProperties']);
-Route::get('property-advance-filter-data',[ApiController::class, 'propertyAdvanceFilterData']);
+Route::get('get-properties-on-map', [PropertyApiController::class, 'getPropertiesOnMap'])->name('get-properties-on-map');
+Route::get('compare-properties', [PropertyApiController::class, 'compareProperties'])->name('compare-properties');
+Route::get('get_property', [PropertyApiController::class, 'get_property'])->name('get-property');
+Route::post('lead/guest', [LeadApiController::class, 'storeGuest'])->name('lead-guest');
+/** Asistente inmobiliario (chatbot) — FASE 7 (T4). Público. */
+Route::post('assistant/chat', [AssistantChatController::class, 'chat'])->name('assistant-chat');
+/** Búsquedas guardadas + alertas — FASE 8 (T3). Requiere auth. */
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('saved-searches', [SavedSearchApiController::class, 'index'])->name('saved-searches.index');
+    Route::post('saved-searches', [SavedSearchApiController::class, 'store'])->name('saved-searches.store');
+    Route::get('saved-searches/{id}', [SavedSearchApiController::class, 'show'])->name('saved-searches.show');
+    Route::put('saved-searches/{id}', [SavedSearchApiController::class, 'update'])->name('saved-searches.update');
+    Route::delete('saved-searches/{id}', [SavedSearchApiController::class, 'destroy'])->name('saved-searches.destroy');
+    Route::post('saved-searches/preview', [SavedSearchApiController::class, 'preview'])->name('saved-searches.preview');
+    /** Alquiler vacacional (short-term) — FASE 8 (T1). */
+    Route::post('short-term/reservations', [ShortTermApiController::class, 'store'])->name('short-term.store');
+    Route::get('short-term/my-reservations', [ShortTermApiController::class, 'myReservations'])->name('short-term.my-reservations');
+    Route::post('short-term/cancel', [ShortTermApiController::class, 'cancel'])->name('short-term.cancel');
+    /** Inventario on-plan — FASE 8 (T2). */
+    Route::post('project-inventory/reserve', [ProjectInventoryApiController::class, 'reserve'])->name('project-inventory.reserve');
+    Route::post('project-inventory/confirm', [ProjectInventoryApiController::class, 'confirm'])->name('project-inventory.confirm');
+    Route::post('project-inventory/cancel', [ProjectInventoryApiController::class, 'cancel'])->name('project-inventory.cancel');
+    Route::post('project-inventory/adjust', [ProjectInventoryApiController::class, 'adjust'])->name('project-inventory.adjust');
+    /** Comisiones + créditos (monetización) — FASE 8 (T6). */
+    Route::get('commission/my-commissions', [CommissionApiController::class, 'myCommissions'])->name('commission.my-commissions');
+    Route::get('commission/settings', [CommissionApiController::class, 'settings'])->name('commission.settings');
+    Route::get('commission/my-credits', [CommissionApiController::class, 'myCredits'])->name('commission.my-credits');
+    Route::post('commission/mark-paid', [CommissionApiController::class, 'markPaid'])->name('commission.mark-paid');
+});
+
+/** Disponibilidad alquiler vacacional (short-term) — FASE 8 (T1). Público. */
+Route::get('short-term/availability', [ShortTermApiController::class, 'availability'])->name('short-term.availability');
+/** Consulta de inventario on-plan — FASE 8 (T2). Público (lectura). */
+Route::get('project-inventory/status', [ProjectInventoryApiController::class, 'status'])->name('project-inventory.status');
+Route::get('project-inventory/movements', [ProjectInventoryApiController::class, 'movements'])->name('project-inventory.movements');
+
+Route::get('get-all-similar-properties', [PropertyApiController::class, 'getAllSimilarProperties'])->name('get-all-similar-properties');
+Route::get('property-advance-filter-data', [PropertyApiController::class, 'propertyAdvanceFilterData'])->name('property-advance-filter-data');
 /*********************************************************************** */
+Route::group(['middleware' => ['user']], function () {
+    Route::get('agent-properties', [AgentApiController::class, 'getAgentProperties'])->name('agent-properties');
+    Route::get('agent-list', [AgentApiController::class, 'getAgentList'])->name('agent-list');
+});
+/** Auth */
+Route::post('user_signup', [AuthApiController::class, 'user_signup'])->name('user-signup');
+Route::post('user-register', [AuthApiController::class, 'userRegister'])->name('user-register');
+Route::get('check-number-password-exists', [AuthApiController::class, 'checkNumberPasswordExists'])->name('check-number-password-exists');
+Route::post('update-number-password', [AuthApiController::class, 'updateNumberPassword'])->name('update-number-password');
+Route::post('update-email-password', [AuthApiController::class, 'updateEmailPassword'])->name('update-email-password');
+Route::get('remove-account-temp', [AuthApiController::class, 'removeAccountTemp'])->name('remove-account-temp');
+Route::get('get-otp', [AuthApiController::class, 'getOtp'])->name('get-otp');
+Route::get('verify-otp', [AuthApiController::class, 'verifyOtp'])->name('verify-otp');
+/*********************************************************************** */
+
+/** Content */
+Route::post('contact-us', [ContentApiController::class, 'contactUs'])->name('contact-us');
+Route::get('get-slider', [ContentApiController::class, 'getSlider'])->name('get-slider');
+Route::get('get_facilities', [ContentApiController::class, 'get_facilities'])->name('get-facilities');
+Route::get('get_seo_settings', [ContentApiController::class, 'get_seo_settings'])->name('get-seo-settings');
+
+Route::get('get_articles', [ContentApiController::class, 'get_articles'])->name('get-articles');
+Route::get('get_custom_pages', [ContentApiController::class, 'get_custom_pages'])->name('get-custom-pages');
+
+Route::get('faqs', [ContentApiController::class, 'getFaqData'])->name('get_faqs');
+/*********************************************************************** */
+
+/** Google Maps */
+Route::get('get-map-places-list', [MapApiController::class, 'getMapPlacesListData'])->name('get-map-places-list');
+Route::get('get-map-place-details', [MapApiController::class, 'getMapPlaceDetailsData'])->name('get-map-place-details');
+Route::get('get-cities-data', [MapApiController::class, 'getCitiesData'])->name('get-cities-data');
+/*********************************************************************** */
+
+/** Open Street Maps (Free / GeoNames) */
+Route::get('get-osm-places-list', [FreeMapApiController::class, 'getOsmPlacesListData'])->name('get-osm-places-list');
+Route::get('get-osm-place-details', [FreeMapApiController::class, 'getOsmPlaceDetailsData'])->name('get-osm-place-details');
+/*********************************************************************** */
+
+/** Category */
+Route::get('get_categories', [CategoryApiController::class, 'get_categories'])->name('get_categories');
+/*********************************************************************** */
+
+/** Payment */
+Route::match(['GET', 'POST'], 'flutterwave-payment-status', [PaymentController::class, 'flutterwavePaymentStatus'])->name('flutterwave-payment-status');
+Route::match(['GET', 'POST'], 'flutterwave-payment-status-web', [PaymentController::class, 'flutterwavePaymentStatusWeb'])->name('flutterwave-payment-status-web');
+/*********************************************************************** */
+
+/** Advertisement */
+Route::get('get_advertisement', [AdvertisementApiController::class, 'get_advertisement'])->name('get_advertisement');
+/*********************************************************************** */
+// Route::post('mortgage_calc', [ApiController::class, 'mortgage_calc'])->name('mortgage_calc');
 
 /** Projects */
-Route::get('get-projects', [ApiController::class, 'getProjects']);
-/*********************************************************************** */
-
-/** User */
-Route::get('get-otp', [ApiController::class, 'getOtp']);
-Route::get('verify-otp', [ApiController::class, 'verifyOtp']);
+Route::get('get-projects', [ProjectApiController::class, 'getProjects'])->name('get-projects');
+Route::get('get-project-detail', [ProjectApiController::class, 'getProjectDetail'])->name('get-project-detail');
 /*********************************************************************** */
 
 /** Package */
 // Route::get('get_package', [ApiController::class, 'get_package']);
-Route::get('get-package', [ApiController::class, 'getPackages']);
-Route::get('get-features', [ApiController::class, 'getFeatures']);
+Route::get('get-package', [PackageApiController::class, 'getPackages'])->name('get-package');
+Route::get('get-features', [PackageApiController::class, 'getFeatures'])->name('get-features');
 /*********************************************************************** */
 
 /** Agents */
-Route::get('agent-list', [ApiController::class, 'getAgentList']);
-Route::get('agent-properties', [ApiController::class, 'getAgentProperties']);
+
 /*********************************************************************** */
 
 /** Settings */
-Route::get('web-settings', [ApiController::class, 'getWebSettings']);
-Route::get('app-settings', [ApiController::class, 'getAppSettings']);
+Route::get('get_languages', [SettingsApiController::class, 'get_languages'])->name('get_languages');
+Route::get('get_app_settings', [SettingsApiController::class, 'get_app_settings'])->name('get_app_settings');
+Route::get('web-settings', [SettingsApiController::class, 'getWebSettings'])->name('web-settings');
+Route::get('app-settings', [SettingsApiController::class, 'getAppSettings'])->name('app-settings');
+Route::get('deep-link', [SettingsApiController::class, 'deepLink'])->name('deep-link');
+Route::get('privacy-policy', [SettingsApiController::class, 'getPrivacyPolicy'])->name('privacy-policy');
+Route::get('terms-conditions', [SettingsApiController::class, 'getTermsAndConditions'])->name('terms-conditions');
+Route::get('about-us', [SettingsApiController::class, 'getAboutUs'])->name('about-us');
 /*********************************************************************** */
 
-/** Mortgage Calculator */
-Route::get('mortgage-calculator', [ApiController::class, 'calculateMortgageCalculator']);
-/*********************************************************************** */
+/** Projects (optional auth — auth/role enforced in controller unless with_seo=1) */
+Route::get('get-added-projects', [ProjectApiController::class, 'getAddedProjects'])
+    ->middleware('checkAuth')
+    ->name('get-added-projects');
 
 // Route::get('homepage-data', [ApiController::class, 'homepageData']);
-Route::get('faqs', [ApiController::class, 'getFaqData']);
-Route::get('privacy-policy', [ApiController::class, 'getPrivacyPolicy']);
-Route::get('terms-conditions', [ApiController::class, 'getTermsAndConditions']);
-Route::get('about-us', [ApiController::class, 'getAboutUs']);
 
-
-// Deep Link
-Route::get('deep-link', [ApiController::class, 'deepLink']);
-
-// Temp
-Route::get('remove-account-temp', [ApiController::class, 'removeAccountTemp']);
-/*********************************************************************** */
-
-/** Ad Banners */
-Route::get('ad-banners', [ApiController::class, 'getAdBanners']);
-/*********************************************************************** */// Add these routes to your existing api.php file
 /** Homepage Grouped APIs */
-Route::prefix('homepage')->group(function () {
-    Route::get('sections-data', [ApiController::class, 'getHomepageSectionsData']);
-    Route::get('property-sections', [ApiController::class, 'getHomepagePropertySections']);
-    Route::get('project-sections', [ApiController::class, 'getHomepageProjectSections']);
-    Route::get('other-sections', [ApiController::class, 'getHomepageOtherSections']);
-    Route::get('properties-by-city', [ApiController::class, 'getHomepagePropertiesByCity']);
-    Route::get('properties-on-map', [ApiController::class, 'getHomepagePropertiesOnMap']);
-});
-/*********************************************************************** */
+Route::get('ad-banners', [HomepageApiController::class, 'getAdBanners'])->name('ad-banners');
 
-/** Commission Management */
-Route::prefix('commissions')->middleware('auth:sanctum')->group(function () {
-    // Commissions CRUD
-    Route::get('/', [PropertyCommissionController::class, 'index']);
-    Route::post('/', [PropertyCommissionController::class, 'store']);
-    Route::get('/{id}', [PropertyCommissionController::class, 'show']);
-    Route::post('/{id}/approve', [PropertyCommissionController::class, 'approve']);
-    Route::post('/{id}/reject', [PropertyCommissionController::class, 'reject']);
-    Route::post('/{id}/record-payment', [PropertyCommissionController::class, 'recordPayment']);
-    
-    // Dashboard and reporting
-    Route::get('/agent/dashboard', [PropertyCommissionController::class, 'dashboard']);
-    Route::get('/pending/list', [PropertyCommissionController::class, 'pending']);
-    Route::get('/alerts/list', [PropertyCommissionController::class, 'alerts']);
-    Route::post('/alerts/{alertId}/read', [PropertyCommissionController::class, 'markAlertRead']);
-    Route::get('/report/generate', [PropertyCommissionController::class, 'report']);
-    
-    // Settings
-    Route::get('/settings/list', [PropertyCommissionController::class, 'settings']);
-    Route::post('/settings/update', [PropertyCommissionController::class, 'updateSettings']);
+Route::group(['middleware' => ['user']], function () {
+    Route::get('get-property-list', [PropertyApiController::class, 'getPropertyList'])->name('get-property-list');
+
+    Route::prefix('homepage')->group(function () {
+        Route::get('sections-data', [HomepageApiController::class, 'getHomepageSectionsData'])->name('sections-data');
+        Route::get('property-sections', [HomepageApiController::class, 'getHomepagePropertySections'])->name('property-sections');
+        Route::get('project-sections', [HomepageApiController::class, 'getHomepageProjectSections'])->name('project-sections');
+        Route::get('other-sections', [HomepageApiController::class, 'getHomepageOtherSections'])->name('other-sections');
+        Route::get('properties-by-city', [HomepageApiController::class, 'getHomepagePropertiesByCity'])->name('properties-by-city');
+        Route::get('properties-on-map', [HomepageApiController::class, 'getHomepagePropertiesOnMap'])->name('properties-on-map');
+    });
+
 });
 
-// Validate transaction before processing (public endpoint with optional auth)
-Route::post('validate-transaction-commission', [PropertyCommissionController::class, 'validateTransaction']);
-
+// Routes without active role middleware (agent/user distinction not needed)
+Route::withoutMiddleware(ActiveRoleMiddleware::class)->group(function () {
+    Route::get('get-agent-packages', [PackageApiController::class, 'getAgentPackages'])->name('get-agent-packages');
+});
 /*********************************************************************** */

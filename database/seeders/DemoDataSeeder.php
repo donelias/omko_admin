@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use Database\Seeders\Demo\ParametersDataSeeder;
 use Database\Seeders\Demo\CategoriesDataSeeder;
+use Database\Seeders\Demo\ParametersDataSeeder;
 use Database\Seeders\Demo\PropertiesDataSeeder;
+use Illuminate\Database\Seeder;
 
 class DemoDataSeeder extends Seeder
 {
@@ -15,15 +15,15 @@ class DemoDataSeeder extends Seeder
     public function run(): void
     {
         // Parameters/Facilities Data Seeder (5 facilities)
-        $parametersDataSeeder = new ParametersDataSeeder();
+        $parametersDataSeeder = new ParametersDataSeeder;
         $parametersDataSeeder->run();
 
         // Categories Data Seeder (5 categories)
-        $categoriesDataSeeder = new CategoriesDataSeeder();
+        $categoriesDataSeeder = new CategoriesDataSeeder;
         $categoriesDataSeeder->run();
 
         // Properties Data Seeder (8 properties)
-        $propertiesDataSeeder = new PropertiesDataSeeder();
+        $propertiesDataSeeder = new PropertiesDataSeeder;
         $propertiesDataSeeder->run();
     }
 }

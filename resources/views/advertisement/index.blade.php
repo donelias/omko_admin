@@ -22,6 +22,14 @@
     <section class="section">
         <div class="card">
             <div class="card-body">
+                {{-- Added As Filter Tabs --}}
+                <div class="mb-3">
+                    <div class="btn-group" role="group" id="added-as-filter">
+                        <button type="button" class="btn btn-outline-primary active" data-value="">{{ __('All') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="user">{{ __('User') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="agent">{{ __('Agent') }}</button>
+                    </div>
+                </div>
                 <div class="row" id="toolbar">
                     {{-- Filter Status --}}
                     <div class="col-xl-4 mt-2">
@@ -50,7 +58,7 @@
                         </select>
                     </div>
                     {{-- Filter Category --}}
-                    <div class="col-xl-3 mt-2">
+                    <div class="col-xl-4 mt-2">
                         <select class="form-select form-control-sm" id="filter_category">
                             <option value="">{{ __('Select Category') }}</option>
                             @if (isset($category))
@@ -76,10 +84,11 @@
                                     <th scope="col" data-field="for" data-align="center" data-sortable="true" data-formatter="advertisementTypeFormatter">{{ __('Advertisement Type') }}</th>
                                     <th scope="col" data-field="image" data-formatter="imageFormatter" data-align="center"> {{ __('Image') }} </th>
                                     <th scope="col" data-field="start_date" data-align="center" data-sortable="true">{{ __('Start Date') }}</th>
-                                    <th scope="col" data-field="end_date" data-align="center" data-sortable="true">{{ __('End Date') }}</th>
-                                    <th scope="col" data-field="category" data-align="center" data-sortable="true">{{ __('Category') }}</th>
-                                    <th scope="col" data-field="listing_title" data-align="center" data-sortable="true">{{ __('Listing Title') }}</th>
-                                    <th scope="col" data-field="customer.name" data-align="center"> {{ __('Customer Name') }}</th>
+                                    <th scope="col" data-field="end_date" data-align="center" data-sortable="true" data-formatter="expiryDateFormatter">{{ __('End Date') }}</th>
+                                    <th scope="col" data-field="category" data-align="center" data-sortable="false">{{ __('Category') }}</th>
+                                    <th scope="col" data-field="listing_title" data-align="center" data-sortable="false">{{ __('Listing Title') }}</th>
+                                    <th scope="col" data-field="customer.name" data-align="center"> {{ __('Customer Name')}}</th>
+                                    <th scope="col" data-field="created_by_role" data-align="center" data-formatter="addedAsFormatter"> {{ __('Created By') }}</th>
                                     <th scope="col" data-field="customer.mobile" data-align="center" data-visible="false">{{ __('Customer Contact') }}</th>
                                     <th scope="col" data-field="customer.email" data-align="center" data-visible="false" data-sortable="false">{{ __('Customer Email') }}</th>
                                     <th scope="col" data-field="status" data-align="center" data-sortable="false"> {{ __('Status') }} </th>
@@ -157,8 +166,14 @@
 
         $('#category').on('change', function() {
             $('#table_list').bootstrapTable('refresh');
-
         });
+
+        $('#added-as-filter button').on('click', function() {
+            $('#added-as-filter button').removeClass('active');
+            $(this).addClass('active');
+            $('#table_list').bootstrapTable('refresh');
+        });
+
         $(document).ready(function() {
             var params = new window.URLSearchParams(window.location.search);
             if (params.get('status') != 'null') {
@@ -186,6 +201,7 @@
                 for: $('#filter-for').val(),
                 visibility: $('#filter-visibility').val(),
                 category: $('#filter_category').val(),
+                role_context_filter: $('#added-as-filter button.active').data('value'),
             };
         }
 

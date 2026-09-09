@@ -130,7 +130,7 @@
                                         <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
                                         <th scope="col" data-field="name" data-sortable="true">{{ __('Name') }}</th>
                                         <th scope="col" data-field="image" data-sortable="false" data-formatter="imageFormatter">{{ __('Image') }}</th>
-                                        <th scope="col" data-field="type_of_parameter"> {{ __('Type') }}</th>
+                                        <th scope="col" data-field="type_of_parameter" data-formatter="typeFormatter"> {{ __('Type') }}</th>
                                         <th scope="col" data-field="is_required" data-formatter="yesNoStatusFormatter"> {{ __('Is Required ?') }}</th>
                                         <th scope="col" data-field="value" data-sortable="true">{{ __('Value') }}</th>
                                         @if (has_permissions('update', 'facility'))
@@ -280,6 +280,19 @@
                 limit: p.limit,
                 search: p.search
             };
+        }
+
+        function typeFormatter(value, row) {
+            let translations = {
+                'textbox': '{{ __("Text Box") }}',
+                'textarea': '{{ __("Text Area") }}',
+                'dropdown': '{{ __("Dropdown") }}',
+                'radiobutton': '{{ __("Radio Button") }}',
+                'checkbox': '{{ __("Checkbox") }}',
+                'file': '{{ __("File") }}',
+                'number': '{{ __("Number") }}'
+            };
+            return translations[value] || value;
         }
 
         window.parameterEvents = {

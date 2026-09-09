@@ -19,7 +19,7 @@ class NotificationTranslationService
             // Get customer's default language
             $customer = Customer::select('default_language')->find($customerId);
 
-            if ($customer && !empty($customer->default_language)) {
+            if ($customer && ! empty($customer->default_language)) {
                 // Validate language exists and is active
                 $language = Language::where('code', $customer->default_language)
                     ->where('status', 1)
@@ -32,7 +32,7 @@ class NotificationTranslationService
 
             // Fallback to admin's default language
             $adminDefaultLanguage = HelperService::getSettingData('default_language');
-            if (!empty($adminDefaultLanguage)) {
+            if (! empty($adminDefaultLanguage)) {
                 $language = Language::where('code', $adminDefaultLanguage)
                     ->where('status', 1)
                     ->first();
@@ -46,7 +46,8 @@ class NotificationTranslationService
             return 'en';
 
         } catch (\Exception $e) {
-            Log::error("Error getting customer language: " . $e->getMessage());
+            Log::error('Error getting customer language: '.$e->getMessage());
+
             return 'en';
         }
     }
@@ -66,7 +67,7 @@ class NotificationTranslationService
             return Cache::remember("translation_file_{$languageCode}", 3600, function () use ($languageCode) {
                 $filePath = resource_path("lang/{$languageCode}.json");
 
-                if (!file_exists($filePath)) {
+                if (! file_exists($filePath)) {
                     // Fallback to en.json if language file doesn't exist
                     if ($languageCode != 'en') {
                         $filePath = resource_path('lang/en.json');
@@ -76,6 +77,7 @@ class NotificationTranslationService
                 if (file_exists($filePath)) {
                     $json = file_get_contents($filePath);
                     $translations = json_decode($json, true);
+
                     return is_array($translations) ? $translations : [];
                 }
 
@@ -83,7 +85,8 @@ class NotificationTranslationService
             });
 
         } catch (\Exception $e) {
-            Log::error("Error loading translation file for {$languageCode}: " . $e->getMessage());
+            Log::error("Error loading translation file for {$languageCode}: ".$e->getMessage());
+
             return [];
         }
     }
@@ -104,11 +107,11 @@ class NotificationTranslationService
 
             return self::applyReplacements($translatedText, $replace);
         } catch (\Exception $e) {
-            Log::error("Error translating text: " . $e->getMessage());
+            Log::error('Error translating text: '.$e->getMessage());
+
             return self::applyReplacements($text, $replace);
         }
     }
-
 
     /**
      * Apply replacements like Laravel’s trans() function
@@ -116,8 +119,9 @@ class NotificationTranslationService
     protected static function applyReplacements($text, array $replace)
     {
         foreach ($replace as $key => $value) {
-            $text = str_replace(':' . $key, $value, $text);
+            $text = str_replace(':'.$key, $value, $text);
         }
+
         return $text;
     }
 
@@ -128,7 +132,7 @@ class NotificationTranslationService
     {
         return [
             'title' => self::translate($title, $languageCode, $replace),
-            'body'  => self::translate($body, $languageCode, $replace)
+            'body' => self::translate($body, $languageCode, $replace),
         ];
     }
 }

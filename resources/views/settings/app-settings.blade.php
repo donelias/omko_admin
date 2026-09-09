@@ -154,7 +154,7 @@
                                     <input type="file" class="filepond" id="app_home_screen" name="app_home_screen" {{ isset($getAppSettings['app_home_screen']) && $getAppSettings['app_home_screen'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg">
                                     @if (isset($getAppSettings['app_home_screen']) && $getAppSettings['app_home_screen'] != '')
                                         <div class="title_img mt-2">
-                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['app_home_screen']) }}" alt="Image" class="img-fluid" width="100" height="100">
+                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['app_home_screen']) }}?v={{ time() }}" alt="Image" class="img-fluid" width="100" height="100">
                                         </div>
                                     @endif
                                 </div>
@@ -167,7 +167,7 @@
                                     <input type="file" class="filepond" id="placeholder_logo" name="placeholder_logo" {{ isset($getAppSettings['placeholder_logo']) && $getAppSettings['placeholder_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg">
                                     @if (isset($getAppSettings['placeholder_logo']) && $getAppSettings['placeholder_logo'] != '')
                                         <div class="title_img mt-2">
-                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['placeholder_logo']) }}" alt="Image" class="img-fluid" width="100" height="100">
+                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['placeholder_logo']) }}?v={{ time() }}" alt="Image" class="img-fluid" width="100" height="100">
                                         </div>
                                     @endif
                                 </div>
@@ -180,7 +180,7 @@
                                     <input type="file" class="filepond" id="dark_mode_logo" name="dark_mode_logo" {{ isset($getAppSettings['dark_mode_logo']) && $getAppSettings['dark_mode_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg">
                                     @if (isset($getAppSettings['dark_mode_logo']) && $getAppSettings['dark_mode_logo'] != '')
                                         <div class="title_img mt-2">
-                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['dark_mode_logo']) }}" alt="Image" class="img-fluid" width="100" height="100">
+                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['dark_mode_logo']) }}?v={{ time() }}" alt="Image" class="img-fluid" width="100" height="100">
                                         </div>
                                     @endif
                                 </div>
@@ -193,7 +193,7 @@
                                     <input type="file" class="filepond" id="app_login_background" name="app_login_background" {{ isset($getAppSettings['app_login_background']) && $getAppSettings['app_login_background'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg">
                                     @if (isset($getAppSettings['app_login_background']) && $getAppSettings['app_login_background'] != '')
                                         <div class="title_img mt-2">
-                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['app_login_background']) }}" alt="Image" class="img-fluid" width="100" height="100">
+                                            <img src="{{ url('assets/images/logo/'.$getAppSettings['app_login_background']) }}?v={{ time() }}" alt="Image" class="img-fluid" width="100" height="100">
                                         </div>
                                     @endif
                                 </div>

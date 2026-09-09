@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands\Demo;
 
-use Exception;
 use App\Models\Property;
+use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -34,17 +34,16 @@ class RemoveProperties extends Command
                 ->where('created_at', '<', now()->subDays(15))
                 ->get();
 
-
             if ($propertyData->count() > 0) {
                 foreach ($propertyData as $property) {
                     $property->delete();
                 }
-                Log::info('Successfully deleted ' . $propertyData->count() . ' properties');
+                Log::info('Successfully deleted '.$propertyData->count().' properties');
             } else {
                 Log::info('No properties found to delete');
             }
         } catch (Exception $e) {
-            Log::error('Issue Removing Properties From Demo: ' . $e->getMessage());
+            Log::error('Issue Removing Properties From Demo: '.$e->getMessage());
         }
     }
 }

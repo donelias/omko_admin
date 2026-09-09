@@ -13,9 +13,9 @@ class CheckAuth
         $token = $request->bearerToken();
 
         if ($token) {
-            $accessToken = PersonalAccessToken::with('tokenable')
-                ->where('token', hash('sha256', $token))
-                ->first();
+            // Sanctum tokens are formatted as "<id>|<plaintext>"; use Sanctum's
+            // own resolver so the "id|token" format is parsed correctly.
+            $accessToken = PersonalAccessToken::findToken($token);
 
             if ($accessToken && $accessToken->tokenable) {
                 Auth::login($accessToken->tokenable);

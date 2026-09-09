@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('advertisements',function(Blueprint $table){
+        Schema::table('advertisements', function (Blueprint $table) {
             $table->integer('status')->comment('0=approved,1=pending,2=rejected,3=expired')->change();
         });
     }
@@ -21,7 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('advertisements',function(Blueprint $table){
+        Schema::table('advertisements', function (Blueprint $table) {
             $table->integer('status')->comment('0=approved,1=pending,2=rejected')->change();
         });
     }

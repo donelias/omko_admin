@@ -52,6 +52,12 @@
                                         {{ __('Login Methods') }}</th>
                                     <th scope="col" data-field="address" data-sortable="false" data-align="center">
                                         {{ __('Address') }}</th>
+                                    <!-- <th scope="col" data-field="active_role" data-sortable="true"
+                                        data-align="center" data-formatter="activeRoleFormatter">
+                                        {{ __('Mode') }}</th> -->
+                                    <th scope="col" data-field="is_agent" data-sortable="true"
+                                        data-align="center" data-formatter="agentBadgeFormatter">
+                                        {{ __('Agent') }}</th>
                                     <th scope="col" data-field="total_properties" data-sortable="false"
                                         data-align="center">
                                         {{ __('Total Property Post') }}</th>

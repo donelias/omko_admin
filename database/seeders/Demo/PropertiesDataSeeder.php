@@ -2,16 +2,16 @@
 
 namespace Database\Seeders\Demo;
 
+use App\Models\AssignParameters;
 use App\Models\Category;
-use App\Models\Property;
 use App\Models\parameter;
+use App\Models\Property;
 use App\Models\PropertyImages;
+use App\Services\DemoImageService;
 use App\Services\HelperService;
 use Exception;
 use Illuminate\Database\Seeder;
-use App\Models\AssignParameters;
 use Illuminate\Support\Facades\Artisan;
-use App\Services\DemoImageService;
 use Illuminate\Support\Facades\Log;
 
 class PropertiesDataSeeder extends Seeder
@@ -23,7 +23,7 @@ class PropertiesDataSeeder extends Seeder
     {
         // Ensure demo images are downloaded and extracted
         DemoImageService::ensureDemoImagesExist();
-        
+
         $this->createProperties();
     }
 
@@ -36,7 +36,7 @@ class PropertiesDataSeeder extends Seeder
                 'latitude',
                 'longitude',
             ]);
-            $adminAddress  = $adminData['company_address'] ?? '123 Demo Street';
+            $adminAddress = $adminData['company_address'] ?? '123 Demo Street';
             $adminLatitude = $adminData['latitude'] ?? 40.7128;
             $adminLongitude = $adminData['longitude'] ?? -74.0060;
 
@@ -48,7 +48,7 @@ class PropertiesDataSeeder extends Seeder
             $plotCategoryId = Category::where(['category' => 'Plot', 'is_demo' => 1])->first()->id;
 
             // If Any of category is empty then populate category demo data and get id
-            if(empty($villaCategoryId) || empty($houseCategoryId) || empty($apartmentCategoryId) || empty($commercialCategoryId) || empty($plotCategoryId)){
+            if (empty($villaCategoryId) || empty($houseCategoryId) || empty($apartmentCategoryId) || empty($commercialCategoryId) || empty($plotCategoryId)) {
                 Artisan::call('db:seed --class=\Database\Seeders\Demo\CategoriesDataSeeder');
                 $villaCategoryId = Category::where(['category' => 'Villa', 'is_demo' => 1])->first()->id;
                 $houseCategoryId = Category::where(['category' => 'House', 'is_demo' => 1])->first()->id;
@@ -65,7 +65,7 @@ class PropertiesDataSeeder extends Seeder
             $areaParameterId = parameter::where(['name' => 'Area', 'is_demo' => 1])->first()->id;
 
             // If Any of parameter is empty then populate parameter demo data and get id
-            if(empty($bedroomParameterId) || empty($bathroomParameterId) || empty($kitchenParameterId) || empty($parkingParameterId) || empty($areaParameterId)){
+            if (empty($bedroomParameterId) || empty($bathroomParameterId) || empty($kitchenParameterId) || empty($parkingParameterId) || empty($areaParameterId)) {
                 Artisan::call('db:seed --class=\Database\Seeders\Demo\ParametersDataSeeder');
                 $bedroomParameterId = parameter::where(['name' => 'Bedroom', 'is_demo' => 1])->first()->id;
                 $bathroomParameterId = parameter::where(['name' => 'Bathroom', 'is_demo' => 1])->first()->id;
@@ -110,7 +110,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 6500], // Area
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
                 [
                     'category_id' => $houseCategoryId,
@@ -146,7 +146,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 3200],
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
                 [
                     'category_id' => $apartmentCategoryId,
@@ -183,7 +183,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 1200],
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
                 [
                     'category_id' => $commercialCategoryId,
@@ -218,7 +218,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 5000],
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
                 [
                     'category_id' => $plotCategoryId,
@@ -250,7 +250,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 8000],
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
                 [
                     'category_id' => $villaCategoryId,
@@ -286,7 +286,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 7500],
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
                 [
                     'category_id' => $houseCategoryId,
@@ -323,7 +323,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 1800],
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
                 [
                     'category_id' => $apartmentCategoryId,
@@ -360,7 +360,7 @@ class PropertiesDataSeeder extends Seeder
                         ['parameter_id' => $areaParameterId, 'value' => 600],
                     ],
                     'gallery_images' => ['Living Room.jpg', 'Kitchen.jpg', 'Bedroom.jpg'],
-                    'is_demo' => 1
+                    'is_demo' => 1,
                 ],
             ];
 
@@ -373,7 +373,7 @@ class PropertiesDataSeeder extends Seeder
                 $property['slug_id'] = generateUniqueSlug($property['title'], 1, $property['slug_id']);
 
                 $coords = $this->getRandomNearbyCoordinates($adminLatitude, $adminLongitude);
-                if($coords){
+                if ($coords) {
                     $property['latitude'] = $coords['latitude'];
                     $property['longitude'] = $coords['longitude'];
                 }
@@ -399,12 +399,12 @@ class PropertiesDataSeeder extends Seeder
                 // Parameters
                 $parameters = $property['parameters'];
                 unset($property['parameters']);
-                
+
                 // Process demo image from demo folder through FileService with watermark
-                if (!empty($titleImage)) {
+                if (! empty($titleImage)) {
                     $demoTitleImageFilename = $titleImage;
-                    $demoTitleImagePath = 'property_title_img/' . $demoTitleImageFilename;
-                    
+                    $demoTitleImagePath = 'property_title_img/'.$demoTitleImageFilename;
+
                     if (DemoImageService::imageExists($demoTitleImagePath)) {
                         // Process image through FileService (compression, watermark, optimization)
                         // Demo image from: storage/app/public/demo/property_title_img/demo_villa_1.jpg
@@ -414,15 +414,15 @@ class PropertiesDataSeeder extends Seeder
                             config('global.PROPERTY_TITLE_IMG_PATH', 'property_title_img'), // destination folder
                             true // Add watermark for property images
                         );
-                        
+
                         if ($processedImage) {
                             $property['title_image'] = $processedImage;
                             Log::info('Processed property title demo image');
                         }
-                    }else{
+                    } else {
                         Log::error('Property title demo image not found', [
                             'property' => $property['title'],
-                            'source' => $demoTitleImagePath
+                            'source' => $demoTitleImagePath,
                         ]);
                     }
                 }
@@ -430,38 +430,38 @@ class PropertiesDataSeeder extends Seeder
                 // Add timestamps
                 $property['created_at'] = now();
                 $property['updated_at'] = now();
-                
+
                 $propertyId = Property::insertGetId($property);
                 // Insert property gallery images - process from demo folder through FileService with watermark
                 if (isset($galleryImages)) {
                     foreach ($galleryImages as $imageFilename) {
-                        $demoImagePath = 'property_gallery_img/' . $imageFilename;
-                        
+                        $demoImagePath = 'property_gallery_img/'.$imageFilename;
+
                         if (DemoImageService::imageExists($demoImagePath)) {
                             // Process image through FileService (compression, watermark, optimization)
                             // Demo image from: storage/app/public/demo/property_gallery_img/demo_villa_1.jpg
                             // Processed to: storage/app/public/property_gallery_img/property_id/[processed_name].jpg
-                            $destinationPath = config('global.PROPERTY_GALLERY_IMG_PATH', 'property_gallery_img') . '/' . $propertyId . '/';
+                            $destinationPath = config('global.PROPERTY_GALLERY_IMG_PATH', 'property_gallery_img').'/'.$propertyId.'/';
                             $processedGalleryImage = DemoImageService::processImageWithFileService(
                                 $demoImagePath, // e.g., 'property_gallery_img/demo_villa_1.jpg'
                                 $destinationPath, // destination folder
                                 true // Add watermark for gallery images
                             );
-                            
+
                             if ($processedGalleryImage) {
                                 PropertyImages::insert([
                                     'propertys_id' => $propertyId,
                                     'image' => $processedGalleryImage,
                                     'created_at' => now(),
-                                    'updated_at' => now()
+                                    'updated_at' => now(),
                                 ]);
-                                
+
                                 Log::info('Processed property gallery demo image');
                             }
-                        }else{
+                        } else {
                             Log::error('Property gallery demo image not found', [
                                 'property' => $property['title'],
-                                'source' => $demoImagePath
+                                'source' => $demoImagePath,
                             ]);
                         }
                     }
@@ -477,13 +477,14 @@ class PropertiesDataSeeder extends Seeder
                             'parameter_id' => $parameter['parameter_id'],
                             'value' => $parameter['value'],
                             'created_at' => now(),
-                            'updated_at' => now()
+                            'updated_at' => now(),
                         ]);
                     }
                 }
             }
         } catch (Exception $e) {
-            Log::error('Error in property data seeder: ' . $e->getMessage());
+            Log::error('Error in property data seeder: '.$e->getMessage());
+            throw $e;
         }
     }
 
@@ -510,7 +511,7 @@ class PropertiesDataSeeder extends Seeder
         ];
     }
 
-     /** Free reverse geocoding using OpenStreetMap */
+    /** Free reverse geocoding using OpenStreetMap */
     private function reverseGeocode(float $lat, float $lng): ?array
     {
         try {
@@ -518,9 +519,13 @@ class PropertiesDataSeeder extends Seeder
             $opts = ['http' => ['header' => "User-Agent: Laravel-DemoSeeder/1.0\r\n"]];
             $context = stream_context_create($opts);
             $resp = @file_get_contents($url, false, $context);
-            if (!$resp) return null;
+            if (! $resp) {
+                return null;
+            }
             $data = json_decode($resp, true);
-            if (empty($data['address'])) return null;
+            if (empty($data['address'])) {
+                return null;
+            }
 
             return [
                 'address' => $data['display_name'] ?? null,
@@ -529,7 +534,8 @@ class PropertiesDataSeeder extends Seeder
                 'country' => $data['address']['country'] ?? null,
             ];
         } catch (Exception $e) {
-            Log::error('Reverse geocode failed: ' . $e->getMessage());
+            Log::error('Reverse geocode failed: '.$e->getMessage());
+
             return null;
         }
     }

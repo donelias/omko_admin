@@ -1,9 +1,9 @@
 <?php
+
 namespace Grav\Plugin;
 
-use \Grav\Common\Plugin;
-use \Grav\Common\Grav;
-use \Grav\Common\Page\Page;
+use Grav\Common\Page\Page;
+use Grav\Common\Plugin;
 
 class HighlightPlugin extends Plugin
 {
@@ -13,7 +13,7 @@ class HighlightPlugin extends Plugin
     public static function getSubscribedEvents()
     {
         return [
-            'onPageInitialized' => ['onPageInitialized', 0]
+            'onPageInitialized' => ['onPageInitialized', 0],
         ];
     }
 
@@ -24,6 +24,7 @@ class HighlightPlugin extends Plugin
     {
         if ($this->isAdmin()) {
             $this->active = false;
+
             return;
         }
 
@@ -36,7 +37,7 @@ class HighlightPlugin extends Plugin
         }
         if ($this->config->get('plugins.highlight.enabled')) {
             $this->enable([
-                'onTwigSiteVariables' => ['onTwigSiteVariables', 0]
+                'onTwigSiteVariables' => ['onTwigSiteVariables', 0],
             ]);
         }
     }

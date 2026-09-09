@@ -2,22 +2,24 @@
 
 namespace App\Models;
 
+use App\Traits\HasAppTimezone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\HasAppTimezone;
+
 class Unit extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
-    protected $table ='units';
+
+    protected $table = 'units';
 
     protected $fillable = [
-        'measurement'
+        'measurement',
     ];
+
     protected $hidden = [
         'updated_at',
-        'deleted_at'
+        'deleted_at',
     ];
-
-
 }

@@ -32,7 +32,7 @@
 <script src="{{ url('assets/js/custom/function.js') }}"></script>
 <script src="{{ url('assets/js/custom/common.js') }}"></script>
 <script src="{{ url('assets/js/custom/custom.js') }}"></script>
-<script src="{{ url('assets/js/custom/formatter.js') }}"></script>
+<script src="{{ url('assets/js/custom/formatter.js') }}?v={{ filemtime(public_path('assets/js/custom/formatter.js')) }}"></script>
 <script src="{{ url('assets/js/custom/validate.js') }}"></script>
 
 <script src="{{ url('assets/js/jquery-jvectormap-2.0.5.min.js') }}"></script>
@@ -45,10 +45,36 @@
 <script src="{{ url('assets/js/pages/parsley.js') }}"></script>
 <script src="{{ url('assets/js/custom/parsley-localization.js') }}"></script>
 
-{{-- Set current locale before loading Bootstrap Table --}}
-<script>
-    // Set current locale immediately when translations are available
+{{-- Set current locale and translations before loading Bootstrap Table --}}
+<!-- <script>
     window.currentLocale = '{{ Session::get("locale", "en") }}';
+    window.trans = {!! json_encode([
+        'Loading, please wait' => __('Loading, please wait'),
+        'rows per page' => __('rows per page'),
+        'Showing' => __('Showing'),
+        'to' => __('to'),
+        'of' => __('of'),
+        'rows' => __('rows'),
+        'filtered from' => __('filtered from'),
+        'total rows' => __('total rows'),
+        'previous page' => __('previous page'),
+        'to page' => __('to page'),
+        'next page' => __('next page'),
+        'Search' => __('Search'),
+        'Clear Search' => __('Clear Search'),
+        'No matching records found' => __('No matching records found'),
+        'Hide/Show pagination' => __('Hide/Show pagination'),
+        'Show pagination' => __('Show pagination'),
+        'Hide pagination' => __('Hide pagination'),
+        'Refresh' => __('Refresh'),
+        'Toggle' => __('Toggle'),
+        'Show card view' => __('Show card view'),
+        'Hide card view' => __('Hide card view'),
+        'Columns' => __('Columns'),
+        'Toggle all' => __('Toggle all'),
+        'Fullscreen' => __('Fullscreen'),
+        'All' => __('All'),
+    ]) !!};
     
     // Prevent Bootstrap Table auto-initialization and add global XSS protection
     $(document).ready(function() {
@@ -62,7 +88,7 @@
             }
         });
     });
-</script>
+</script> -->
 
 <script src="{{ url('assets/extensions/bootstrap-table/bootstrap-table.min.js') }}"></script>
 <script src="{{ url('assets/extensions/bootstrap-table/reorder-rows.min.js') }}"></script>
@@ -403,6 +429,33 @@
     });
 </script>
 {{-- End Global Search --}}
+
+{{-- Fix dropdown inside bootstrap-table --}}
+<script>
+    $(document).on('show.bs.dropdown', '.fixed-table-body .dropdown', function () {
+        var $menu = $(this).find('.dropdown-menu');
+        var $btn = $(this).find('.dropdown-toggle');
+        var btnRect = $btn[0].getBoundingClientRect();
+
+        $menu.appendTo('body').css({
+            position: 'fixed',
+            top: btnRect.bottom + 'px',
+            left: btnRect.left + 'px',
+            zIndex: 1060,
+            display: 'block'
+        });
+
+        $(this).data('bs-menu', $menu);
+    });
+
+    $(document).on('hide.bs.dropdown', '.fixed-table-body .dropdown', function () {
+        var $menu = $(this).data('bs-menu');
+        if ($menu) {
+            $menu.removeAttr('style').appendTo(this);
+            $(this).removeData('bs-menu');
+        }
+    });
+</script>
 
 {{-- Google Map ID --}}
 <script>

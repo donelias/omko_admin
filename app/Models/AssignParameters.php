@@ -4,13 +4,14 @@ namespace App\Models;
 
 use App\Services\FileService;
 use App\Traits\HasAppTimezone;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class AssignParameters extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
     protected $table = 'assign_parameters';
@@ -20,7 +21,7 @@ class AssignParameters extends Model
         'modal_id',
         'property_id',
         'parameter_id',
-        'value'
+        'value',
     ];
 
     protected static function boot()
@@ -33,7 +34,7 @@ class AssignParameters extends Model
             }
 
             $folderPath = config('global.PARAMETER_IMG_PATH');
-            $filePath = $folderPath . $parameter->value;
+            $filePath = $folderPath.$parameter->value;
 
             // Define allowed mime types
             $allowedMimeTypes = [
@@ -41,7 +42,7 @@ class AssignParameters extends Model
                 'application/pdf',
                 'application/msword',
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'text/plain'
+                'text/plain',
             ];
 
             // Check if file exists via FileService
@@ -61,63 +62,61 @@ class AssignParameters extends Model
                 } catch (\Exception $e) {
                     Log::warning('Parameter file delete failed', [
                         'file' => $filePath,
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
                     ]);
                 }
             }
         });
     }
 
-
-
-
     public function modal()
     {
         return $this->morphTo();
     }
+
     public function parameter()
     {
-        return  $this->belongsTo(parameter::class,'parameter_id');
+        return $this->belongsTo(parameter::class, 'parameter_id');
     }
-
 
     public function getValueAttribute($value)
     {
-        if(!empty($value)){
+        if (! empty($value)) {
             $a = json_decode($value, true);
             if (json_last_error() == JSON_ERROR_NONE) {
-                if ($a == NULL) {
+                if ($a == null) {
                     /** Was Getting Null in string that's why commented $value return code */
                     // return $value;
-                    return "";
+                    return '';
                 } else {
                     return $a;
                 }
-            }else{
+            } else {
                 return $value;
             }
         }
-        return "";
+
+        return '';
     }
-//     public function getValueAttribute($value)
-// {
-//     // Try to decode JSON strings
-//     $decoded = json_decode($value, true);
-//     if ($decoded !== null) {
-//         return $decoded;
-//     }
+    //     public function getValueAttribute($value)
+    // {
+    //     // Try to decode JSON strings
+    //     $decoded = json_decode($value, true);
+    //     if ($decoded !== null) {
+    //         return $decoded;
+    //     }
 
-//     // Try to convert numeric strings to numbers
-//     if (is_numeric($value)) {
-//         if (strpos($value, '.') !== false) {
-//             return floatval($value);
-//         } else {
-//             return intval($value);
-//         }
-//     }
+    //     // Try to convert numeric strings to numbers
+    //     if (is_numeric($value)) {
+    //         if (strpos($value, '.') !== false) {
+    //             return floatval($value);
+    //         } else {
+    //             return intval($value);
+    //         }
+    //     }
 
-//     // Otherwise return the original string
-//     return $value;
-// }
+    //     // Otherwise return the original string
+    //     return $value;
+    // }
 
 }

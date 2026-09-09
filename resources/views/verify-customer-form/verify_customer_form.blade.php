@@ -1,7 +1,7 @@
 @extends('layouts.main')
 
 @section('title')
-    {{ __('Verify Agent Form') }}
+    {{ __('User Verification Form') }}
 @endsection
 
 @section('page-title')

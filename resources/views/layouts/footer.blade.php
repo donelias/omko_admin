@@ -1,6 +1,5 @@
 <!----- THIS FORM USE FOR DELETE  ---->
-<form method="DELETE" id="form-del">
-    <input name="_method" type="hidden" value="DELETE">
+<form method="GET" id="form-del">
     {{ csrf_field() }}
 
 </form>

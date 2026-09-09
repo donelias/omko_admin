@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
 use App\Models\Feature;
 use App\Models\Translation;
-use Illuminate\Http\Request;
-use App\Models\PackageFeature;
+use App\Services\BootstrapTableService;
 use App\Services\HelperService;
 use App\Services\ResponseService;
-use App\Services\BootstrapTableService;
+use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class PackageFeatureController extends Controller
@@ -17,12 +16,14 @@ class PackageFeatureController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        if (!has_permissions('read', 'package-feature')) {
+        if (! has_permissions('read', 'package-feature')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
-        return view('packages.features.index');
+        $type = $request->input('user_type');
+
+        return view('features.index', compact('type'));
     }
 
     /**
@@ -30,14 +31,15 @@ class PackageFeatureController extends Controller
      */
     public function store(Request $request)
     {
-        if (!has_permissions('create', 'package-feature')) {
+        if (! has_permissions('create', 'package-feature')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
-            Feature::create($request->only('name'));
-            ResponseService::successResponse(trans("Data Created Successfully"));
+            $type = $request->input('user_type', 'user');
+            Feature::create(array_merge($request->only('name'), ['user_type' => $type]));
+            ResponseService::successResponse(trans('Data Created Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,'Error in Package Feature Store Controller',trans("Something Went Wrong"));
+            ResponseService::logErrorResponse($e, 'Error in Package Feature Store Controller', trans('Something Went Wrong'));
         }
     }
 
@@ -46,7 +48,7 @@ class PackageFeatureController extends Controller
      */
     public function show(string $id)
     {
-        if (!has_permissions('read', 'package-feature')) {
+        if (! has_permissions('read', 'package-feature')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $offset = request('offset', 0);
@@ -56,24 +58,29 @@ class PackageFeatureController extends Controller
         $search = request('search');
 
         $sql = Feature::when($search, function ($query) use ($search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('id', 'LIKE', "%$search%")
-                        ->orWhere('name', 'LIKE', "%$search%");
-                });
+            $query->where(function ($query) use ($search) {
+                $query->where('id', 'LIKE', "%$search%")
+                    ->orWhere('name', 'LIKE', "%$search%");
             });
+        });
 
+        if (request()->has('user_type') && ! empty(request('user_type'))) {
+            $userType = request('user_type');
+            $sql->whereIn('user_type', [$userType, 'all']);
+        }
 
         $total = $sql->count();
 
         $sql->orderBy($sort, $order)->skip($offset)->take($limit);
         $res = $sql->get();
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
+        $rows = [];
         $no = 1;
         foreach ($res as $row) {
-            $row = (object)$row;
-            $operate = BootstrapTableService::button('fa fa-language', route('package-features.translated-names', $row->id), ['btn-primary'], ['title' => __('Manage Translations')]);
+            $row = (object) $row;
+            $translationUrl = route('package-features.translated-names', $row->id);
+            $operate = BootstrapTableService::button('fa fa-language', $translationUrl, ['btn-primary'], ['title' => __('Manage Translations')]);
 
             $tempRow = $row->toArray();
             $tempRow['edit_status_url'] = route('package-features.status-update');
@@ -83,6 +90,7 @@ class PackageFeatureController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
@@ -91,14 +99,14 @@ class PackageFeatureController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        if (!has_permissions('update', 'package-feature')) {
+        if (! has_permissions('update', 'package-feature')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
-            Feature::where('id',$id)->update($request->only('name'));
-            ResponseService::successResponse(trans("Data Updated Successfully"));
+            Feature::where('id', $id)->update($request->only('name'));
+            ResponseService::successResponse(trans('Data Updated Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,'Error in Package Feature Update Controller',trans("Something Went Wrong"));
+            ResponseService::logErrorResponse($e, 'Error in Package Feature Update Controller', trans('Something Went Wrong'));
         }
     }
 
@@ -107,14 +115,14 @@ class PackageFeatureController extends Controller
      */
     public function destroy(string $id)
     {
-        if (!has_permissions('delete', 'package-feature')) {
+        if (! has_permissions('delete', 'package-feature')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
-            Feature::where('id',$id)->delete();
-            ResponseService::successResponse(trans("Data Deleted Successfully"));
+            Feature::where('id', $id)->delete();
+            ResponseService::successResponse(trans('Data Deleted Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,'Error in Package Feature Delete Controller',trans("Something Went Wrong"));
+            ResponseService::logErrorResponse($e, 'Error in Package Feature Delete Controller', trans('Something Went Wrong'));
         }
     }
 
@@ -123,65 +131,66 @@ class PackageFeatureController extends Controller
      */
     public function updateStatus(Request $request)
     {
-        if (!has_permissions('update', 'package-feature')) {
+        if (! has_permissions('update', 'package-feature')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
-            Feature::where('id',$request->id)->update(['status' => $request->status == 1 ? true : false]);
-            ResponseService::successResponse(trans("Status Updated Successfully"));
+            Feature::where('id', $request->id)->update(['status' => $request->status == 1 ? true : false]);
+            ResponseService::successResponse(trans('Status Updated Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,'Error in Package Feature Update Controller',trans("Something Went Wrong"));
+            ResponseService::logErrorResponse($e, 'Error in Package Feature Update Controller', trans('Something Went Wrong'));
         }
     }
 
     public function translatedNames(string $id)
     {
-        if (!has_permissions('read', 'package-feature')) {
+        if (! has_permissions('read', 'package-feature')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $feature = Feature::find($id);
         $languages = HelperService::getActiveLanguages();
         $featureTranslations = Translation::where('translatable_id', $id)->where('translatable_type', 'App\Models\Feature')->get();
-        return view('packages.features.translated-names', compact('feature', 'languages', 'featureTranslations'));
+        $type = request('user_type');
+
+        return view('features.translated-names', compact('feature', 'languages', 'featureTranslations', 'type'));
     }
 
     public function updateTranslatedNames(Request $request)
     {
-        if (!has_permissions('update', 'package-feature')) {
+        if (! has_permissions('update', 'package-feature')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
             $validator = Validator::make($request->all(), [
-                'feature_id'                    => 'required|exists:features,id',
-                'translations'                  => 'required|array',
-                'translations.*.language_id'    => 'required|exists:languages,id',
-                'translations.*.value'          => 'required|string',
+                'feature_id' => 'required|exists:features,id',
+                'translations' => 'required|array',
+                'translations.*.language_id' => 'required|exists:languages,id',
+                'translations.*.value' => 'required|string',
             ]);
             if ($validator->fails()) {
                 ResponseService::validationError($validator->errors()->first());
             }
-            
+
             // Add Translations
-            if(isset($request->translations) && !empty($request->translations)){
-                $translationData = array();
-                foreach($request->translations as $translation){
-                    $translationData[] = array(
-                        'id'                => $translation['id'] ?? null,
-                        'translatable_id'   => $request->feature_id,
+            if (isset($request->translations) && ! empty($request->translations)) {
+                $translationData = [];
+                foreach ($request->translations as $translation) {
+                    $translationData[] = [
+                        'id' => $translation['id'] ?? null,
+                        'translatable_id' => $request->feature_id,
                         'translatable_type' => 'App\Models\Feature',
-                        'key'               => 'name',
-                        'value'             => $translation['value'],
-                        'language_id'       => $translation['language_id'],
-                    );
+                        'key' => 'name',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
-                if(!empty($translationData)){
+                if (! empty($translationData)) {
                     HelperService::storeTranslations($translationData);
                 }
             }
-            ResponseService::successResponse(trans("Data Updated Successfully"));
-        }
-        catch (Exception $e) {
-            ResponseService::logErrorResponse($e,'Error in Package Feature Update Translated Names Controller',trans("Something Went Wrong"));
+            ResponseService::successResponse(trans('Data Updated Successfully'));
+        } catch (Exception $e) {
+            ResponseService::logErrorResponse($e, 'Error in Package Feature Update Translated Names Controller', trans('Something Went Wrong'));
         }
     }
 }

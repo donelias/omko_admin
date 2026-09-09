@@ -48,7 +48,7 @@
                                     <thead class="thead-dark">
                                         <tr>
                                             <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
-                                            <th scope="col" data-field="agent_name" data-sortable="true">{{ __('Agent') }}</th>
+                                            <th scope="col" data-field="agent_name" data-sortable="true">{{ __('Verified User') }}</th>
                                             <th scope="col" data-field="user_name" data-sortable="true">{{ __('User') }}</th>
                                             <th scope="col" data-field="reason" data-sortable="false">{{ __('Reason') }}</th>
                                             <th scope="col" data-field="raw_status_badge" data-sortable="true">{{ __('Status') }}</th>
@@ -82,8 +82,8 @@
                                 <label for="block_type">{{ __('Block Type') }} <span class="text-danger">*</span></label>
                                 <select class="form-control" id="block_type" name="block_type" required>
                                     <option value="">{{ __('Select Block Type') }}</option>
-                                    <option value="agent_specific">{{ __('Agent Specific (Only for this agent)') }}</option>
-                                    <option value="global">{{ __('Global (For all agents)') }}</option>
+                                    <option value="agent_specific">{{ __('Verified User Specific (Only for this verified user)') }}</option>
+                                    <option value="global">{{ __('Global (For all verified users)') }}</option>
                                 </select>
                             </div>
 
@@ -94,8 +94,8 @@
 
                             <div class="alert alert-info">
                                 <i class="bi bi-info-circle me-2"></i>
-                                <strong>{{ __('Agent Specific:') }}</strong> {{ __('User will be blocked only for the specific agent who reported them.') }}<br>
-                                <strong>{{ __('Global:') }}</strong> {{ __('User will be blocked from making appointments with all agents.') }}
+                                <strong>{{ __('Verified User Specific:') }}</strong> {{ __('User will be blocked only for the specific verified user who reported them.') }}<br>
+                                <strong>{{ __('Global:') }}</strong> {{ __('User will be blocked from making appointments with all verified users.') }}
                             </div>
                         </div>
                         <div class="modal-footer">

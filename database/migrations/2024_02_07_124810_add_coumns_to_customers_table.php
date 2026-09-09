@@ -14,17 +14,17 @@ return new class extends Migration
     public function up()
     {
         Schema::table('customers', function (Blueprint $table) {
-            if (!Schema::hasColumn('customers', 'city')) {
+            if (! Schema::hasColumn('customers', 'city')) {
                 Schema::table('customers', function (Blueprint $table) {
                     $table->string('city')->nullable();
                 });
             }
-            if (!Schema::hasColumn('customers', 'state')) {
+            if (! Schema::hasColumn('customers', 'state')) {
                 Schema::table('customers', function (Blueprint $table) {
                     $table->string('state')->nullable();
                 });
             }
-            if (!Schema::hasColumn('customers', 'country')) {
+            if (! Schema::hasColumn('customers', 'country')) {
                 Schema::table('customers', function (Blueprint $table) {
                     $table->string('country')->nullable();
                 });

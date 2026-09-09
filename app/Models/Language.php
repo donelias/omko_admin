@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use App\Traits\HasAppTimezone;
-use Illuminate\Support\Facades\File;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\File;
 
 class Language extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
     // public function getFileNameAttribute($file)
     // {
@@ -19,9 +20,10 @@ class Language extends Model
     // }
     public function getCodeAttribute($value)
     {
-        if($value == 'en-new'){
+        if ($value == 'en-new') {
             return 'en';
         }
+
         return $value;
     }
 }

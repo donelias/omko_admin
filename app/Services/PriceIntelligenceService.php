@@ -2,552 +2,804 @@
 
 namespace App\Services;
 
-use App\Models\Property;
+use App\Models\AssignParameters;
+use App\Models\PriceAnalytic;
 use App\Models\PriceHistory;
 use App\Models\PriceSuggestion;
-use App\Models\PriceAnalytic;
+use App\Models\Property;
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Collection;
 
 class PriceIntelligenceService
 {
+    const ALGORITHM_VERSION = '1.0';
+
+    // Pesos de los algoritmos (suma = 1.0)
+    const WEIGHT_PRICE_PER_SQM = 0.35;
+    const WEIGHT_FEATURE_REGRESSION = 0.35;
+    const WEIGHT_HISTORY = 0.20;
+    const WEIGHT_MARKET = 0.10;
+
     /**
-     * Generate price suggestion for a property
+     * ---------------------------------------------------------------------
+     * CONVERSIÓN DE PRECIOS (moneda base + tasas de cambio)
+     * ---------------------------------------------------------------------
      */
-    public static function generatePriceSuggestion(Property $property, $forceRefresh = false): ?PriceSuggestion
+
+    public function baseCurrency()
     {
-        try {
-            // Verificar si ya existe sugerencia válida
-            if (!$forceRefresh) {
-                $existing = PriceSuggestion::where('property_id', $property->id)
-                    ->valid()
-                    ->first();
+        return strtoupper(config('global.PRICE_BASE_CURRENCY', 'DOP'));
+    }
 
-                if ($existing) {
-                    return $existing;
-                }
+    public function exchangeRates()
+    {
+        return app(ExchangeRateService::class)->rates();
+    }
+
+    public function rateFor($currency)
+    {
+        $currency = strtoupper((string) ($currency ?: 'DOP'));
+        $rates = $this->exchangeRates();
+
+        return (float) ($rates[$currency] ?? 1.0);
+    }
+
+    /**
+     * Convierte un precio de su moneda a la moneda base (DOP).
+     */
+    public function toBaseCurrency($price, $currency = 'DOP')
+    {
+        if (empty($price) || (float) $price <= 0) {
+            return 0.0;
+        }
+
+        return round((float) $price * $this->rateFor($currency), 2);
+    }
+
+    /**
+     * Convierte un importe en moneda base a la moneda destino.
+     */
+    public function fromBaseCurrency($baseAmount, $currency = 'DOP')
+    {
+        $rate = $this->rateFor($currency);
+        if ($rate <= 0) {
+            $rate = 1.0;
+        }
+
+        return round((float) $baseAmount / $rate, 2);
+    }
+
+    /**
+     * ---------------------------------------------------------------------
+     * MÉTRICAS DE LA PROPIEDAD (área, dormitorios, baños)
+     * ---------------------------------------------------------------------
+     */
+
+    protected function parameterValues($property, array $names)
+    {
+        $result = [];
+
+        AssignParameters::query()
+            ->join('parameters', 'parameters.id', '=', 'assign_parameters.parameter_id')
+            ->where('assign_parameters.modal_id', $property->id)
+            ->where('assign_parameters.modal_type', Property::class)
+            ->whereIn('parameters.name', $names)
+            ->select('parameters.name', 'assign_parameters.value')
+            ->get()
+            ->each(function ($row) use (&$result) {
+                $result[$row->name] = $row->value;
+            });
+
+        return $result;
+    }
+
+    public function getPropertyMetrics($property)
+    {
+        $values = $this->parameterValues($property, ['Build Area', 'Land Area', 'Bedrooms', 'Bathrooms']);
+
+        $buildArea = $this->toFloat($values['Build Area'] ?? 0);
+        $landArea = $this->toFloat($values['Land Area'] ?? 0);
+        $area = $buildArea > 0 ? $buildArea : $landArea;
+
+        return [
+            'area' => round($area, 2),
+            'bedrooms' => $this->toFloat($values['Bedrooms'] ?? 0),
+            'bathrooms' => $this->toFloat($values['Bathrooms'] ?? 0),
+        ];
+    }
+
+    /**
+     * ---------------------------------------------------------------------
+     * PROPIEDADES COMPARABLES
+     * ---------------------------------------------------------------------
+     */
+
+    public function findComparableProperties($property, $limit = 20)
+    {
+        if ($limit < 1) {
+            $limit = 20;
+        }
+
+        $base = Property::query()
+            ->where('id', '!=', $property->id)
+            ->where('status', 1)
+            ->where('request_status', 'approved')
+            ->where('price', '>', 0)
+            ->where('propery_type', (int) $property->getRawOriginal('propery_type'))
+            ->where(function ($query) use ($property) {
+                $query->where('state', $property->state)
+                    ->orWhere('city', $property->city)
+                    ->orWhere('country', $property->country);
+            })
+            ->get();
+
+        $targetMetrics = $this->getPropertyMetrics($property);
+        if ($targetMetrics['area'] <= 0) {
+            return collect();
+        }
+
+        return $base
+            ->map(function ($candidate) use ($targetMetrics, $property) {
+                $metrics = $this->getPropertyMetrics($candidate);
+                $candidate->metrics = $metrics;
+                $candidate->similarity_score = $this->calculateSimilarity($targetMetrics, $metrics, $property, $candidate);
+
+                return $candidate;
+            })
+            ->filter(fn ($candidate) => $candidate->similarity_score > 0)
+            ->sortByDesc('similarity_score')
+            ->take($limit)
+            ->values();
+    }
+
+    /**
+     * Similitud 0-1 entre la propiedad objetivo y un comparable.
+     */
+    protected function calculateSimilarity(array $target, array $candidate, $targetProperty, $candidateProperty)
+    {
+        $score = 0.0;
+        $weightTotal = 0.0;
+
+        // Área: 80-120% = máxima similitud
+        if ($target['area'] > 0 && $candidate['area'] > 0) {
+            $ratio = $candidate['area'] / $target['area'];
+            if ($ratio >= 0.8 && $ratio <= 1.2) {
+                $score += 1.0 * 0.5;
+            } elseif ($ratio >= 0.5 && $ratio <= 1.5) {
+                $score += 0.6 * 0.5;
+            } else {
+                $score += 0.2 * 0.5;
             }
+            $weightTotal += 0.5;
+        }
 
-            // Obtener datos para análisis
-            $comparableProperties = self::findComparableProperties($property);
+        // Dormitorios: ±1 = bueno
+        if ($target['bedrooms'] > 0 && $candidate['bedrooms'] > 0) {
+            $diff = abs($target['bedrooms'] - $candidate['bedrooms']);
+            $score += ($diff <= 1 ? 1.0 : ($diff <= 2 ? 0.5 : 0.2)) * 0.25;
+            $weightTotal += 0.25;
+        }
 
-            if ($comparableProperties->isEmpty()) {
-                Log::warning("No comparable properties found for property {$property->id}");
-                return null;
-            }
+        // Baños: ±1 = bueno
+        if ($target['bathrooms'] > 0 && $candidate['bathrooms'] > 0) {
+            $diff = abs($target['bathrooms'] - $candidate['bathrooms']);
+            $score += ($diff <= 1 ? 1.0 : ($diff <= 2 ? 0.5 : 0.2)) * 0.25;
+            $weightTotal += 0.25;
+        }
 
-            // Obtener análisis de mercado
-            $marketAnalysis = self::getMarketAnalysis($property);
+        $similarity = $weightTotal > 0 ? ($score / $weightTotal) : 0;
 
-            // Calcular sugerencia de precio
-            $priceData = self::calculateSuggestedPrice(
-                $property,
-                $comparableProperties,
-                $marketAnalysis
-            );
+        // Bonus por misma categoría y misma ciudad
+        if ($candidateProperty->category_id && $targetProperty->category_id && $candidateProperty->category_id == $targetProperty->category_id) {
+            $similarity = min(1.0, $similarity + 0.05);
+        }
+        if ($candidateProperty->city && $targetProperty->city && mb_strtolower(trim($candidateProperty->city)) === mb_strtolower(trim($targetProperty->city))) {
+            $similarity = min(1.0, $similarity + 0.05);
+        }
 
-            // Generar recomendación
-            $recommendation = self::generateRecommendation(
-                $property->price,
-                $priceData['suggested_price'],
-                $priceData['confidence_score']
-            );
+        return round($similarity, 3);
+    }
 
-            // Crear o actualizar sugerencia
-            $existing = PriceSuggestion::where('property_id', $property->id)->first();
+    /**
+     * ---------------------------------------------------------------------
+     * SUGERENCIA DE PRECIO
+     * ---------------------------------------------------------------------
+     */
 
-            if ($existing) {
-                $existing->delete();
-            }
+    public function generatePriceSuggestion($property, $forceRefresh = false)
+    {
+        $existing = PriceSuggestion::where('property_id', $property->id)->first();
 
-            $suggestion = PriceSuggestion::create([
+        if (! $forceRefresh && $existing && ! $existing->is_expired) {
+            return $existing;
+        }
+
+        $comparables = $this->findComparableProperties($property, 20);
+        $targetMetrics = $this->getPropertyMetrics($property);
+
+        if ($comparables->isEmpty() || $targetMetrics['area'] <= 0) {
+            throw new Exception('Not enough comparable data to generate a price suggestion.', 422);
+        }
+
+        $transactionType = $this->transactionTypeFor($property);
+        $marketAnalysis = $this->getMarketAnalysis(
+            $property->state ?: $property->city,
+            $this->propertyTypeOf($property),
+            $transactionType
+        );
+
+        $calculation = $this->calculateSuggestedPrice($property, $comparables, $targetMetrics, $marketAnalysis);
+
+        $confidence = $this->calculateConfidenceScore(
+            $calculation['comparables_used'],
+            $calculation['historical_data'],
+            $calculation['algorithms_count']
+        );
+        $salesProbability = $this->estimateSalesProbability($property, $calculation['suggested_price'], $marketAnalysis);
+        $recommendation = $this->recommendationFor($property->price, $calculation['suggested_price'], $confidence);
+        $reasoning = $this->buildReasoning($calculation, $comparables->count());
+
+        $suggestion = PriceSuggestion::updateOrCreate(
+            ['property_id' => $property->id],
+            [
                 'property_id' => $property->id,
-                'suggested_price' => $priceData['suggested_price'],
-                'suggested_price_per_sqm' => $priceData['suggested_price_per_sqm'],
-                'minimum_price' => $priceData['minimum_price'],
-                'maximum_price' => $priceData['maximum_price'],
+                'suggested_price' => round($calculation['suggested_price'], 2),
+                'suggested_price_per_sqm' => $targetMetrics['area'] > 0 ? round($calculation['suggested_price'] / $targetMetrics['area'], 2) : null,
+                'minimum_price' => round($calculation['minimum_price'], 2),
+                'maximum_price' => round($calculation['maximum_price'], 2),
                 'current_price' => $property->price,
-                'price_difference' => $priceData['suggested_price'] - $property->price,
-                'confidence_score' => $priceData['confidence_score'],
+                'price_difference' => round($calculation['suggested_price'] - $property->price, 2),
+                'confidence_score' => round($confidence, 2),
                 'recommendation' => $recommendation,
-                'reasoning' => $priceData['reasoning'],
-                'comparable_properties' => $comparableProperties->pluck('id')->toArray(),
-                'market_trend' => $marketAnalysis['trend'],
-                'estimated_sales_probability' => $priceData['sales_probability'],
+                'reasoning' => $reasoning,
+                'comparable_properties' => array_map('intval', $comparables->pluck('id')->toArray()),
+                'market_trend' => $marketAnalysis ? ($marketAnalysis->getMarketCondition() ?: 'balanced') : 'balanced',
+                'estimated_sales_probability' => round($salesProbability, 2),
                 'is_ai_generated' => true,
-                'algorithm_version' => '1.0',
-                'generated_by' => auth()->id(),
-                'expires_at' => now()->addDays(30),
-            ]);
+                'algorithm_version' => self::ALGORITHM_VERSION,
+                'generated_by' => $this->currentUserId(),
+                'expires_at' => now()->addDays((int) config('global.PRICE_SUGGESTION_VALID_DAYS', 30)),
+            ]
+        );
 
-            Log::info("Price suggestion generated for property {$property->id}", [
-                'suggested_price' => $priceData['suggested_price'],
-                'confidence_score' => $priceData['confidence_score'],
-            ]);
+        return $suggestion;
+    }
 
-            return $suggestion;
+    /**
+     * Combina los 4 algoritmos ponderados.
+     */
+    protected function calculateSuggestedPrice($property, $comparables, array $targetMetrics, $marketAnalysis)
+    {
+        $currency = $property->currency ?: 'DOP';
 
-        } catch (\Exception $e) {
-            Log::error("Error generating price suggestion: {$e->getMessage()}");
+        $algo1 = $this->pricePerSquareMeterAnalysis($property, $comparables, $targetMetrics);
+        $algo2 = $this->featureRegressionAnalysis($property, $comparables, $targetMetrics);
+        $algo3 = $this->propertyHistoryAnalysis($property, $currency);
+        $algo4 = $this->marketAdjustment($property, $marketAnalysis);
+
+        $weightedBase = 0.0;
+        $weightTotal = 0.0;
+
+        if ($algo1 !== null) {
+            $weightedBase += $this->toBaseCurrency($algo1['price'], $currency) * self::WEIGHT_PRICE_PER_SQM;
+            $weightTotal += self::WEIGHT_PRICE_PER_SQM;
+        }
+        if ($algo2 !== null) {
+            $weightedBase += $this->toBaseCurrency($algo2['price'], $currency) * self::WEIGHT_FEATURE_REGRESSION;
+            $weightTotal += self::WEIGHT_FEATURE_REGRESSION;
+        }
+        if ($algo3 !== null) {
+            $weightedBase += $this->toBaseCurrency($algo3['price'], $currency) * self::WEIGHT_HISTORY;
+            $weightTotal += self::WEIGHT_HISTORY;
+        }
+        if ($algo4 !== null) {
+            $weightedBase += $this->toBaseCurrency($algo4['price'], $currency) * self::WEIGHT_MARKET;
+            $weightTotal += self::WEIGHT_MARKET;
+        }
+
+        if ($weightTotal <= 0) {
+            throw new Exception('Not enough comparable data to generate a price suggestion.', 422);
+        }
+
+        $suggestedBase = $weightedBase / $weightTotal;
+        $suggestedPrice = $this->fromBaseCurrency($suggestedBase, $currency);
+
+        // Rango ±1 desviación estándar del algoritmo de m²
+        $stdDevPrice = 0.0;
+        if ($algo1 !== null) {
+            $stdDevPrice = $this->fromBaseCurrency($algo1['std_deviation'] * $targetMetrics['area'], $currency);
+        }
+
+        return [
+            'suggested_price' => $suggestedPrice,
+            'minimum_price' => max(0, $suggestedPrice - abs($stdDevPrice)),
+            'maximum_price' => $suggestedPrice + abs($stdDevPrice),
+            'algorithms_count' => collect([$algo1, $algo2, $algo3, $algo4])->filter()->count(),
+            'comparables_used' => $comparables->count(),
+            'historical_data' => ($algo3 !== null),
+            'algorithms' => [
+                'price_per_sqm' => $algo1,
+                'feature_regression' => $algo2,
+                'history' => $algo3,
+                'market' => $algo4,
+            ],
+        ];
+    }
+
+    /**
+     * Algoritmo 1: Precio por m² de comparables (35%)
+     */
+    protected function pricePerSquareMeterAnalysis($property, $comparables, array $targetMetrics)
+    {
+        if ($targetMetrics['area'] <= 0) {
             return null;
         }
-    }
 
-    /**
-     * Find comparable properties based on location, type, and characteristics
-     */
-    public static function findComparableProperties(Property $property, $limit = 20): Collection
-    {
-        $query = Property::where('id', '!=', $property->id)
-            ->where('type', $property->type)
-            ->where('province', $property->province)
-            ->where('status', 'listed')
-            ->withoutTrashed();
-
-        // Filtrar por similitud de características
-        $query->whereBetween('area', [
-            $property->area * 0.8,
-            $property->area * 1.2,
-        ]);
-
-        if ($property->bedrooms) {
-            $query->whereBetween('bedrooms', [
-                max(1, $property->bedrooms - 1),
-                $property->bedrooms + 1,
-            ]);
-        }
-
-        // Dar prioridad a propiedades con historial de precios
-        $comparables = $query->with('priceHistory')
-            ->orderByRaw('ABS(area - ?) ASC', [$property->area])
-            ->limit($limit)
-            ->get()
-            ->filter(fn($p) => $p->priceHistory->count() > 0 || $p->price > 0);
-
-        return $comparables;
-    }
-
-    /**
-     * Calculate suggested price using multiple algorithms
-     */
-    public static function calculateSuggestedPrice(
-        Property $property,
-        Collection $comparables,
-        array $marketAnalysis
-    ): array {
-        // Algoritmo 1: Precio por m²
-        $pricePerSqmAnalysis = self::pricePerSquareMeterAnalysis($property, $comparables);
-
-        // Algoritmo 2: Regresión de características
-        $featureRegressionAnalysis = self::featureRegressionAnalysis($property, $comparables);
-
-        // Algoritmo 3: Histórico de la propiedad
-        $historyAnalysis = self::propertyHistoryAnalysis($property);
-
-        // Algoritmo 4: Análisis de mercado
-        $marketAdjustment = self::marketAdjustment($property, $marketAnalysis);
-
-        // Ponderar resultados
-        $weights = [
-            'price_per_sqm' => 0.35,
-            'feature_regression' => 0.35,
-            'history' => 0.20,
-            'market' => 0.10,
-        ];
-
-        $suggestedPrice = (
-            ($pricePerSqmAnalysis['estimated_price'] * $weights['price_per_sqm']) +
-            ($featureRegressionAnalysis['estimated_price'] * $weights['feature_regression']) +
-            ($historyAnalysis['estimated_price'] * $weights['history']) +
-            ($marketAdjustment['adjusted_price'] * $weights['market'])
-        );
-
-        // Calcular confianza
-        $confidenceScore = self::calculateConfidenceScore(
-            $pricePerSqmAnalysis,
-            $featureRegressionAnalysis,
-            $historyAnalysis,
-            $comparables->count()
-        );
-
-        // Calcular rango de precios
-        $variance = $pricePerSqmAnalysis['std_deviation'] ?? ($suggestedPrice * 0.15);
-        $minPrice = $suggestedPrice - $variance;
-        $maxPrice = $suggestedPrice + $variance;
-
-        // Estimación de probabilidad de venta
-        $salesProbability = self::estimateSalesProbability(
-            $property,
-            $suggestedPrice,
-            $marketAnalysis
-        );
-
-        // Construir reasoning
-        $reasoning = self::buildReasoning([
-            'pricePerSqm' => $pricePerSqmAnalysis,
-            'featureRegression' => $featureRegressionAnalysis,
-            'history' => $historyAnalysis,
-            'market' => $marketAnalysis,
-            'comparablesCount' => $comparables->count(),
-        ]);
-
-        return [
-            'suggested_price' => round($suggestedPrice, 2),
-            'suggested_price_per_sqm' => round($suggestedPrice / $property->area, 2),
-            'minimum_price' => round($minPrice, 2),
-            'maximum_price' => round($maxPrice, 2),
-            'confidence_score' => round($confidenceScore, 2),
-            'sales_probability' => round($salesProbability, 2),
-            'reasoning' => $reasoning,
-        ];
-    }
-
-    /**
-     * Análisis: Precio por m²
-     */
-    private static function pricePerSquareMeterAnalysis(Property $property, Collection $comparables): array
-    {
-        $pricesPerSqm = $comparables
-            ->filter(fn($p) => $p->area > 0)
-            ->map(fn($p) => $p->price / $p->area);
-
-        if ($pricesPerSqm->isEmpty()) {
-            return [
-                'estimated_price' => $property->price,
-                'price_per_sqm' => 0,
-                'std_deviation' => 0,
-                'confidence' => 0,
-            ];
-        }
-
-        $avgPricePerSqm = $pricesPerSqm->avg();
-        $stdDeviation = self::calculateStdDeviation($pricesPerSqm);
-        $estimatedPrice = $avgPricePerSqm * $property->area;
-
-        return [
-            'estimated_price' => $estimatedPrice,
-            'price_per_sqm' => $avgPricePerSqm,
-            'std_deviation' => $stdDeviation * $property->area,
-            'confidence' => min(100, ($pricesPerSqm->count() / 20) * 100),
-        ];
-    }
-
-    /**
-     * Análisis: Regresión de características
-     */
-    private static function featureRegressionAnalysis(Property $property, Collection $comparables): array
-    {
-        if ($comparables->isEmpty()) {
-            return [
-                'estimated_price' => $property->price,
-                'confidence' => 0,
-            ];
-        }
-
-        $totalPrice = 0;
-        $weights = 0;
+        $currency = $property->currency ?: 'DOP';
+        $perSqm = [];
 
         foreach ($comparables as $comparable) {
-            // Calcular similitud
-            $similarity = self::calculatePropertySimilarity($property, $comparable);
-
-            // Ajustar por tamaño
-            $areaRatio = $comparable->area > 0 ? $property->area / $comparable->area : 1;
-
-            // Precio ajustado
-            $adjustedPrice = $comparable->price * $areaRatio * $similarity;
-
-            $totalPrice += $adjustedPrice * $similarity;
-            $weights += $similarity;
+            $area = $comparable->metrics['area'] ?? 0;
+            if ($area <= 0) {
+                continue;
+            }
+            $perSqm[] = $this->toBaseCurrency($comparable->price, $comparable->currency ?: 'DOP') / $area;
         }
 
-        $estimatedPrice = $weights > 0 ? $totalPrice / $weights : $property->price;
+        if (empty($perSqm)) {
+            return null;
+        }
+
+        $average = array_sum($perSqm) / count($perSqm);
+        $stdDeviation = $this->stddev($perSqm);
+
+        $price = $this->fromBaseCurrency($average * $targetMetrics['area'], $currency);
 
         return [
-            'estimated_price' => $estimatedPrice,
-            'confidence' => min(100, ($comparables->count() / 15) * 100),
+            'price' => round($price, 2),
+            'price_per_sqm' => $targetMetrics['area'] > 0 ? round($price / $targetMetrics['area'], 2) : null,
+            'std_deviation' => round($stdDeviation, 2),
+            'comparables_used' => count($perSqm),
         ];
     }
 
     /**
-     * Análisis: Histórico de la propiedad
+     * Algoritmo 2: Regresión de características (35%)
      */
-    private static function propertyHistoryAnalysis(Property $property): array
+    protected function featureRegressionAnalysis($property, $comparables, array $targetMetrics)
     {
-        $history = PriceHistory::forProperty($property->id)
-            ->orderBy('created_at', 'desc')
-            ->limit(12)
-            ->get();
+        if ($comparables->isEmpty()) {
+            return null;
+        }
 
+        $currency = $property->currency ?: 'DOP';
+        $weightedSum = 0.0;
+        $weightSum = 0.0;
+
+        foreach ($comparables as $comparable) {
+            $similarity = $comparable->similarity_score;
+            if ($similarity <= 0) {
+                continue;
+            }
+
+            $comparableArea = $comparable->metrics['area'] ?? 0;
+            $areaRatio = ($comparableArea > 0 && $targetMetrics['area'] > 0) ? $targetMetrics['area'] / $comparableArea : 1;
+
+            $adjustedBase = $this->toBaseCurrency($comparable->price, $comparable->currency ?: 'DOP') * $areaRatio;
+
+            $weightedSum += $adjustedBase * $similarity;
+            $weightSum += $similarity;
+        }
+
+        if ($weightSum <= 0) {
+            return null;
+        }
+
+        $price = $this->fromBaseCurrency($weightedSum / $weightSum, $currency);
+
+        return [
+            'price' => round($price, 2),
+            'comparables_used' => $comparables->count(),
+        ];
+    }
+
+    /**
+     * Algoritmo 3: Histórico de la propiedad (20%)
+     */
+    protected function propertyHistoryAnalysis($property, $currency = 'DOP')
+    {
+        $history = PriceHistory::getHistoryForProperty($property->id, 12);
         if ($history->isEmpty()) {
-            return [
-                'estimated_price' => $property->price,
-                'trend' => 'stable',
-                'confidence' => 0,
-            ];
+            return null;
         }
 
-        // Precio promedio histórico
-        $avgHistoricalPrice = $history->avg('price');
+        $basePrices = $history->map(fn ($row) => $this->toBaseCurrency($row->price, $currency))->filter(fn ($p) => $p > 0)->values();
 
-        // Tendencia de precio
-        $recentPrices = $history->take(3)->pluck('price')->avg();
-        $oldPrices = $history->skip(3)->take(3)->pluck('price')->avg();
+        if ($basePrices->isEmpty()) {
+            return null;
+        }
 
-        $priceTrend = $oldPrices > 0
-            ? (($recentPrices - $oldPrices) / $oldPrices) * 100
-            : 0;
+        $averageBase = $basePrices->avg();
+        $trend = PriceHistory::getPriceTrendForProperty($property->id);
+        $trendFactor = ($trend['percentage'] / 100) * 0.5; // ±50% de la tendencia detectada
+        $trendFactor = max(-0.075, min(0.075, $trendFactor)); // tope ±7.5%
+
+        $price = $this->fromBaseCurrency($averageBase * (1 + $trendFactor), $currency);
 
         return [
-            'estimated_price' => $avgHistoricalPrice,
-            'trend' => $priceTrend > 5 ? 'increasing' : ($priceTrend < -5 ? 'decreasing' : 'stable'),
-            'confidence' => min(100, ($history->count() / 12) * 100),
+            'price' => round($price, 2),
+            'average_price' => round($this->fromBaseCurrency($averageBase, $currency), 2),
+            'trend_percentage' => $trend['percentage'],
+            'trend_direction' => $trend['direction'],
+            'history_count' => $history->count(),
         ];
     }
 
     /**
-     * Ajuste por condiciones de mercado
+     * Algoritmo 4: Ajuste de mercado (10%)
      */
-    private static function marketAdjustment(Property $property, array $marketAnalysis): array
+    protected function marketAdjustment($property, $marketAnalysis = null)
     {
-        $marketMultiplier = 1.0;
+        $currency = $property->currency ?: 'DOP';
+        $base = $this->toBaseCurrency($property->price, $currency);
+        $multiplier = 1.0;
+        $reasons = [];
 
-        // Ajustar por demanda de mercado
-        if ($marketAnalysis['demand'] >= 80) {
-            $marketMultiplier += 0.08; // Aumentar 8%
-        } elseif ($marketAnalysis['demand'] >= 60) {
-            $marketMultiplier += 0.04; // Aumentar 4%
-        } elseif ($marketAnalysis['demand'] < 40) {
-            $marketMultiplier -= 0.05; // Disminuir 5%
+        $demand = $marketAnalysis ? (float) $marketAnalysis->market_demand : 60.0;
+        if ($demand >= 80) {
+            $multiplier += 0.08;
+            $reasons[] = 'hot_market';
+        } elseif ($demand >= 60) {
+            $multiplier += 0.04;
+            $reasons[] = 'active_market';
+        } elseif ($demand < 40) {
+            $multiplier -= 0.05;
+            $reasons[] = 'slow_market';
         }
 
-        // Ajustar por estacionalidad
-        $month = now()->month;
-        if (in_array($month, [6, 7, 8, 12])) { // Verano y Navidad
-            $marketMultiplier += 0.03;
+        $month = (int) now()->month;
+        if (in_array($month, [6, 7, 8, 12])) {
+            $multiplier += 0.03;
+            $reasons[] = 'seasonal';
         }
 
-        $adjustedPrice = $property->price * $marketMultiplier;
+        $daysOnMarket = $property->created_at ? (int) $property->created_at->diffInDays(now()) : 0;
+        if ($daysOnMarket > 90) {
+            $multiplier -= 0.10;
+            $reasons[] = 'aged_listing';
+        }
+
+        $price = $this->fromBaseCurrency($base * max(0.5, $multiplier), $currency);
 
         return [
-            'adjusted_price' => $adjustedPrice,
-            'multiplier' => $marketMultiplier,
+            'price' => round($price, 2),
+            'multiplier' => round($multiplier, 4),
+            'factors' => $reasons,
         ];
     }
 
     /**
-     * Obtener análisis de mercado para la ubicación
+     * ---------------------------------------------------------------------
+     * CONFIANZA, PROBABILIDAD Y RECOMENDACIÓN
+     * ---------------------------------------------------------------------
      */
-    public static function getMarketAnalysis(Property $property): array
-    {
-        $latest = PriceAnalytic::getLatestForLocation($property->province, $property->type);
 
-        if (!$latest) {
-            return self::generateMarketAnalysis($property);
+    public function calculateConfidenceScore($comparablesCount, $hasHistory, $algorithmsCount)
+    {
+        $score = 50.0;
+
+        // +1 punto por comparable (máx +25)
+        $score += min(25, max(0, $comparablesCount)) * 1;
+
+        // +10 si hay datos históricos
+        if ($hasHistory) {
+            $score += 10;
         }
 
-        return [
-            'average_price' => $latest->average_price,
-            'median_price' => $latest->median_price,
-            'price_per_sqm' => $latest->price_per_sqm,
-            'trend' => $latest->getMarketCondition(),
-            'demand' => $latest->market_demand ?? 50,
-            'days_on_market' => $latest->avg_days_on_market ?? 30,
-        ];
-    }
-
-    /**
-     * Generar análisis de mercado
-     */
-    private static function generateMarketAnalysis(Property $property): array
-    {
-        $properties = Property::where('province', $property->province)
-            ->where('type', $property->type)
-            ->where('status', 'listed')
-            ->whereNotNull('price')
-            ->withoutTrashed()
-            ->limit(100)
-            ->get();
-
-        if ($properties->isEmpty()) {
-            return [
-                'average_price' => $property->price,
-                'median_price' => $property->price,
-                'price_per_sqm' => $property->area > 0 ? $property->price / $property->area : 0,
-                'trend' => 'balanced',
-                'demand' => 50,
-                'days_on_market' => 30,
-            ];
+        // +5 si convergen ≥ 3 algoritmos
+        if ($algorithmsCount >= 3) {
+            $score += 5;
         }
 
-        $prices = $properties->pluck('price');
-
-        return [
-            'average_price' => $prices->avg(),
-            'median_price' => $prices->median(),
-            'price_per_sqm' => $properties->filter(fn($p) => $p->area > 0)
-                ->avg(fn($p) => $p->price / $p->area),
-            'trend' => 'balanced',
-            'demand' => 50,
-            'days_on_market' => 30,
-        ];
+        return max(0, round(min(100, $score), 2));
     }
 
-    /**
-     * Calcular similitud entre propiedades (0-1)
-     */
-    private static function calculatePropertySimilarity(Property $property1, Property $property2): float
+    public function estimateSalesProbability($property, $suggestedPrice, $marketAnalysis)
     {
-        $similarity = 1.0;
+        $probability = 50.0;
 
-        // Similitud por área (80-120% = máxima similitud)
-        if ($property2->area > 0) {
-            $areaRatio = $property1->area / $property2->area;
-            if ($areaRatio >= 0.8 && $areaRatio <= 1.2) {
-                $similarity *= 1.0;
+        $current = (float) $property->price;
+        $suggested = (float) $suggestedPrice;
+
+        if ($current > 0 && $suggested > 0) {
+            $difference = (($suggested - $current) / $current) * 100;
+            if (abs($difference) <= 20) {
+                $probability += 20;
+            } elseif ($difference < -20) {
+                $probability += 5;
             } else {
-                $similarity *= 1 - abs($areaRatio - 1) * 0.3;
+                $probability -= 10;
             }
         }
 
-        // Similitud por dormitorios
-        if ($property1->bedrooms && $property2->bedrooms) {
-            $bedroomDiff = abs($property1->bedrooms - $property2->bedrooms);
-            $similarity *= max(0.7, 1 - ($bedroomDiff * 0.15));
+        $demand = $marketAnalysis ? (float) $marketAnalysis->market_demand : 60.0;
+        if ($demand >= 80) {
+            $probability += 25;
+        } elseif ($demand >= 60) {
+            $probability += 10;
+        } elseif ($demand < 40) {
+            $probability -= 15;
         }
 
-        // Similitud por baños
-        if ($property1->bathrooms && $property2->bathrooms) {
-            $bathroomDiff = abs($property1->bathrooms - $property2->bathrooms);
-            $similarity *= max(0.7, 1 - ($bathroomDiff * 0.10));
+        $daysOnMarket = $property->created_at ? (int) $property->created_at->diffInDays(now()) : 0;
+        if ($daysOnMarket > 90) {
+            $probability -= 10;
         }
 
-        return max(0.3, min(1.0, $similarity));
+        return max(10, min(95, $probability));
     }
 
-    /**
-     * Calcular desviación estándar
-     */
-    private static function calculateStdDeviation(Collection $values): float
-    {
-        if ($values->count() < 2) {
-            return 0;
-        }
-
-        $mean = $values->avg();
-        $variance = $values
-            ->map(fn($v) => pow($v - $mean, 2))
-            ->avg();
-
-        return sqrt($variance);
-    }
-
-    /**
-     * Calcular puntuación de confianza (0-100)
-     */
-    private static function calculateConfidenceScore(
-        array $pricePerSqm,
-        array $featureRegression,
-        array $history,
-        int $comparablesCount
-    ): float {
-        $baseScore = 50;
-
-        // Bonus por número de propiedades comparables
-        $comparablesBonus = min(25, $comparablesCount * 2);
-        $baseScore += $comparablesBonus;
-
-        // Bonus por datos históricos
-        if (isset($history['confidence'])) {
-            $baseScore += ($history['confidence'] / 100) * 10;
-        }
-
-        // Bonus por confianza de métodos
-        if (isset($pricePerSqm['confidence'])) {
-            $baseScore += ($pricePerSqm['confidence'] / 100) * 5;
-        }
-
-        return min(100, $baseScore);
-    }
-
-    /**
-     * Generar recomendación basada en precio actual vs sugerido
-     */
-    private static function generateRecommendation(float $current, float $suggested, float $confidence): string
+    public function recommendationFor($currentPrice, $suggestedPrice, $confidence)
     {
         if ($confidence < 50) {
             return 'review_required';
         }
 
-        $percentageDiff = (($suggested - $current) / $current) * 100;
+        if ($currentPrice > 0 && $suggestedPrice > 0) {
+            $difference = (($suggestedPrice - $currentPrice) / $currentPrice) * 100;
 
-        if ($percentageDiff > 5) {
-            return 'increase';
-        } elseif ($percentageDiff < -5) {
-            return 'decrease';
-        } else {
-            return 'maintain';
-        }
-    }
-
-    /**
-     * Estimar probabilidad de venta
-     */
-    private static function estimateSalesProbability(Property $property, float $suggestedPrice, array $market): float
-    {
-        $baseProbability = 50;
-
-        // Ajustar por diferencia de precio
-        $priceDiff = abs($property->price - $suggestedPrice) / $suggestedPrice;
-        if ($priceDiff < 0.05) {
-            $baseProbability += 20;
-        } elseif ($priceDiff < 0.10) {
-            $baseProbability += 10;
-        } elseif ($priceDiff > 0.20) {
-            $baseProbability -= 15;
-        }
-
-        // Ajustar por demanda de mercado
-        $baseProbability += ($market['demand'] / 100) * 25;
-
-        // Ajustar por edad de la propiedad
-        if ($property->created_at->diffInDays() > 90) {
-            $baseProbability -= 10;
-        }
-
-        return max(10, min(95, $baseProbability));
-    }
-
-    /**
-     * Construir explicación del análisis
-     */
-    private static function buildReasoning(array $analysis): string
-    {
-        $parts = [];
-
-        $comparablesCount = $analysis['comparablesCount'] ?? 0;
-        $parts[] = "Basado en análisis de $comparablesCount propiedades comparables.";
-
-        if (isset($analysis['pricePerSqm']['price_per_sqm'])) {
-            $parts[] = "Precio medio por m²: RD$ " . number_format($analysis['pricePerSqm']['price_per_sqm'], 2);
-        }
-
-        if (isset($analysis['history']['trend'])) {
-            $trend = $analysis['history']['trend'];
-            $parts[] = "Tendencia histórica: " . ucfirst($trend);
-        }
-
-        if (isset($analysis['market'])) {
-            $demand = $analysis['market']['demand'] ?? 50;
-            if ($demand >= 75) {
-                $parts[] = "Mercado muy activo, demanda alta.";
-            } elseif ($demand >= 50) {
-                $parts[] = "Mercado equilibrado.";
-            } else {
-                $parts[] = "Mercado lento, baja demanda.";
+            if ($difference > 5) {
+                return 'increase';
+            }
+            if ($difference < -5) {
+                return 'decrease';
             }
         }
 
-        return implode(' ', $parts);
+        return 'maintain';
+    }
+
+    protected function buildReasoning(array $calculation, $comparableCount)
+    {
+        $algorithms = $calculation['algorithms'];
+        $parts = [];
+
+        if (! empty($algorithms['price_per_sqm'])) {
+            $parts[] = 'Precio por m² de '.$algorithms['price_per_sqm']['comparables_used'].' comparables: '.number_format($algorithms['price_per_sqm']['price'], 2).'.';
+        }
+        if (! empty($algorithms['feature_regression'])) {
+            $parts[] = 'Regresión por características ('.number_format($algorithms['feature_regression']['price'], 2).') ponderada por similitud.';
+        }
+        if (! empty($algorithms['history'])) {
+            $parts[] = 'Histórico: promedio '.number_format($algorithms['history']['average_price'], 2).', tendencia '.$algorithms['history']['trend_direction'].' ('.$algorithms['history']['trend_percentage'].'%).';
+        }
+        if (! empty($algorithms['market'])) {
+            $parts[] = 'Ajuste de mercado x'.number_format($algorithms['market']['multiplier'], 3).' ('.implode(', ', $algorithms['market']['factors']).').';
+        }
+
+        return 'Sugerencia generada con '.$comparableCount.' propiedades comparables.'.PHP_EOL.implode(PHP_EOL, $parts);
+    }
+
+    /**
+     * ---------------------------------------------------------------------
+     * ANÁLISIS DE MERCADO
+     * ---------------------------------------------------------------------
+     */
+
+    public function getMarketAnalysis($location = null, $propertyType = null, $transactionType = 'sale', $forceRefresh = false)
+    {
+        if (empty($location)) {
+            return null;
+        }
+
+        $cached = PriceAnalytic::getLatestForLocation($location, $propertyType, $transactionType);
+        if (! $forceRefresh && $cached && $cached->created_at >= now()->subHour()) {
+            return $cached;
+        }
+
+        $properties = Property::query()
+            ->where('status', 1)
+            ->where('request_status', 'approved')
+            ->where('price', '>', 0)
+            ->whereIn('propery_type', $transactionType === 'rental' ? [1, 3] : [0, 2])
+            ->where(function ($query) use ($location) {
+                $query->where('state', $location)->orWhere('city', $location);
+            })
+            ->when($propertyType && $propertyType !== 'other', function ($query) use ($propertyType) {
+                return $query->whereHas('category', function ($category) use ($propertyType) {
+                    return $category->where('slug_id', $propertyType)->orWhere('category', $propertyType);
+                });
+            })
+            ->when($propertyType === 'other', function ($query) {
+                return $query->doesntHave('category');
+            })
+            ->limit(200)
+            ->get();
+
+        if ($properties->isEmpty()) {
+            return $cached;
+        }
+
+        $basePrices = $properties
+            ->map(fn ($property) => $this->toBaseCurrency($property->price, $property->currency ?: 'DOP'))
+            ->filter(fn ($price) => $price > 0)
+            ->values();
+
+        $perSqmValues = [];
+        foreach ($properties as $property) {
+            $metrics = $this->getPropertyMetrics($property);
+            if ($metrics['area'] > 0) {
+                $perSqmValues[] = $this->toBaseCurrency($property->price, $property->currency ?: 'DOP') / $metrics['area'];
+            }
+        }
+
+        $prices = $basePrices->toArray();
+        $sorted = $basePrices->sort()->values();
+
+        $average = $basePrices->avg();
+        $median = $sorted->get(intdiv($sorted->count(), 2)) ?? $average;
+        $stdDeviation = $this->stddev($prices);
+
+        $priceChange = $this->marketPriceTrend($location, $transactionType);
+
+        $data = [
+            'metric_type' => 'market_avg',
+            'location' => $location,
+            'property_type' => $propertyType,
+            'transaction_type' => $transactionType,
+            'average_price' => round($average, 2),
+            'median_price' => round($median, 2),
+            'price_per_sqm' => round(empty($perSqmValues) ? 0 : array_sum($perSqmValues) / count($perSqmValues), 2),
+            'std_deviation' => round($stdDeviation, 2),
+            'sample_count' => $properties->count(),
+            'price_trend' => $priceChange['percentage'],
+            'avg_days_on_market' => 0,
+            'market_demand' => $this->estimateMarketDemand($properties),
+            'price_distribution' => $this->priceDistribution($prices),
+            'top_amenities' => [],
+            'analysis_period_start' => now()->subDays(30)->format('Y-m-d H:i:s'),
+            'analysis_period_end' => now()->format('Y-m-d H:i:s'),
+        ];
+
+        return PriceAnalytic::updateOrCreate(
+            [
+                'location' => $location,
+                'property_type' => $propertyType,
+                'transaction_type' => $transactionType,
+                'metric_type' => 'market_avg',
+            ],
+            $data
+        );
+    }
+
+    protected function marketPriceTrend($location, $transactionType)
+    {
+        $now = Carbon::now();
+        $recent = $this->activePricesBetween($location, $now->copy()->subDays(30), $now);
+        $previous = $this->activePricesBetween($location, $now->copy()->subDays(60), $now->copy()->subDays(30));
+
+        if (empty($recent) || empty($previous)) {
+            return ['percentage' => 0.0];
+        }
+
+        $recentAvg = array_sum($recent) / count($recent);
+        $previousAvg = array_sum($previous) / count($previous);
+
+        return ['percentage' => round((($recentAvg - $previousAvg) / $previousAvg) * 100, 2)];
+    }
+
+    protected function activePricesBetween($location, $from, $until)
+    {
+        $rows = DB::table('price_history')
+            ->join('propertys', 'propertys.id', '=', 'price_history.property_id')
+            ->where(function ($query) use ($location) {
+                $query->where('propertys.state', $location)->orWhere('propertys.city', $location);
+            })
+            ->whereBetween('price_history.created_at', [$from, $until])
+            ->get(['price_history.price', 'propertys.currency']);
+
+        return $rows
+            ->map(fn ($row) => $this->toBaseCurrency($row->price, $row->currency ?: 'DOP'))
+            ->filter(fn ($price) => $price > 0)
+            ->values()
+            ->toArray();
+    }
+
+    protected function estimateMarketDemand($properties)
+    {
+        if ($properties->isEmpty()) {
+            return 50.0;
+        }
+
+        // Heurística simple: demanda basada en cantidad de propiedades activas recientes + favoritos
+        $propertyIds = $properties->pluck('id')->toArray();
+        $favourites = \App\Models\Favourite::whereIn('property_id', $propertyIds)->count();
+
+        $demand = 40 + (min(2, \App\Models\PropertyView::whereIn('property_id', $propertyIds)->count() / max(1, count($propertyIds))) * 20);
+        $demand = $demand + min(20, $favourites >= 1 ? 10 : 0);
+
+        return max(0, round(min(100, $demand), 2));
+    }
+
+    protected function priceDistribution(array $prices)
+    {
+        $prices = array_values(array_filter($prices, fn ($p) => $p > 0));
+        if (empty($prices)) {
+            return [];
+        }
+
+        $buckets = [];
+        $min = min($prices);
+        $max = max($prices);
+        $bucketCount = max(5, min(10, intdiv((int) $max, 100000) + 1));
+        $bucketSize = ($max - $min) / $bucketCount;
+
+        if ($bucketSize <= 0) {
+            return ['count' => count($prices)];
+        }
+
+        foreach ($prices as $price) {
+            $index = (int) min($bucketCount - 1, floor(($price - $min) / $bucketSize));
+            $bucket = $min + ($index * $bucketSize);
+            $buckets[$bucket] = ($buckets[$bucket] ?? 0) + 1;
+        }
+
+        return $buckets;
+    }
+
+    /**
+     * ---------------------------------------------------------------------
+     * HELPERS
+     * ---------------------------------------------------------------------
+     */
+
+    protected function transactionTypeFor($property)
+    {
+        return in_array((int) $property->getRawOriginal('propery_type'), [1, 3]) ? 'rental' : 'sale';
+    }
+
+    /**
+     * Tipo de propiedad para analytics basado en su categoría (slug).
+     */
+    public function propertyTypeOf($property)
+    {
+        $category = $property->category;
+
+        return $category ? ($category->slug_id ?: $category->category) : 'other';
+    }
+
+    protected function currentUserId()
+    {
+        if (auth('sanctum')->check()) {
+            return auth('sanctum')->id();
+        }
+
+        return auth()->check() ? auth()->id() : null;
+    }
+
+    protected function toFloat($value)
+    {
+        $float = (float) $value;
+
+        return $float < 0 ? 0 : $float;
+    }
+
+    protected function stddev(array $values)
+    {
+        $values = array_values(array_filter($values, fn ($value) => is_numeric($value)));
+        $count = count($values);
+        if ($count < 2) {
+            return 0.0;
+        }
+
+        $mean = array_sum($values) / $count;
+        $variance = 0.0;
+        foreach ($values as $value) {
+            $variance += pow((float) $value - $mean, 2);
+        }
+
+        return sqrt($variance / ($count - 1));
     }
 }

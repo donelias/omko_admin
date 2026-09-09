@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class GeminiUsage extends Model
 {
@@ -47,6 +47,7 @@ class GeminiUsage extends Model
         if ($limit <= 0) {
             return false; // No limit set
         }
+
         return self::getUsageCount($userId, $userType, $type, $hours) >= $limit;
     }
 
@@ -88,4 +89,3 @@ class GeminiUsage extends Model
         return self::getUsageCount($userId, $userType, $type, 1);
     }
 }
-

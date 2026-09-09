@@ -2,7 +2,8 @@
 
 namespace App\Services\Payment;
 
-interface PaymentInterface {
+interface PaymentInterface
+{
     public function createPaymentIntent($amount, $customMetaData);
 
     public function createAndFormatPaymentIntent($amount, $customMetaData): array;

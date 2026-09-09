@@ -13,14 +13,14 @@ return new class extends Migration
     public function up(): void
     {
         // Add Login methods in settings table
-        $data = array('number_with_otp_login' => 1, 'social_login' => 1,'distance_option' => 'km', 'otp_service_provider' => 'firebase');
+        $data = ['number_with_otp_login' => 1, 'social_login' => 1, 'distance_option' => 'km', 'otp_service_provider' => 'firebase'];
         foreach ($data as $key => $value) {
             Setting::updateOrCreate(['type' => $key], ['data' => $value]);
         }
 
         // Change Distance Column datatype to float
         Schema::table('assigned_outdoor_facilities', function (Blueprint $table) {
-            $table->float('distance',10,1)->change();
+            $table->float('distance', 10, 1)->change();
         });
 
         // New table to store otps of numbers
@@ -35,7 +35,7 @@ return new class extends Migration
         // Rename the firebase id column to auth id
         if (Schema::hasColumn('customers', 'firebase_id')) {
             Schema::table('customers', function (Blueprint $table) {
-                $table->renameColumn('firebase_id','auth_id');
+                $table->renameColumn('firebase_id', 'auth_id');
             });
         }
 
@@ -57,7 +57,7 @@ return new class extends Migration
         // Rename the auth id column to firebase id
         if (Schema::hasColumn('customers', 'auth_id')) {
             Schema::table('customers', function (Blueprint $table) {
-                $table->renameColumn('auth_id','firebase_id');
+                $table->renameColumn('auth_id', 'firebase_id');
             });
         }
     }

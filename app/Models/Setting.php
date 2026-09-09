@@ -2,35 +2,41 @@
 
 namespace App\Models;
 
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
 use App\Traits\ManageTranslations;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Setting extends Model
 {
-    use HasFactory, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, ManageTranslations;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
-    public $table = "settings";
+
+    public $table = 'settings';
 
     protected $fillable = [
         'type',
-        'data'
-    ];
-    protected $hidden = [
-        'updated_at',
-        'deleted_at'
+        'data',
     ];
 
-    public function getDataAttribute($value){
-        if($this->type == 'default_language'){
-            if($value == 'en-new'){
+    protected $hidden = [
+        'updated_at',
+        'deleted_at',
+    ];
+
+    public function getDataAttribute($value)
+    {
+        if ($this->type == 'default_language') {
+            if ($value == 'en-new') {
                 return 'en';
             }
         }
+
         return $value;
     }
+
     /**
      * Translations relationship
      */
@@ -38,7 +44,7 @@ class Setting extends Model
     {
         return $this->morphMany(Translation::class, 'translatable');
     }
-    
+
     /**
      * Get translated data attribute
      */

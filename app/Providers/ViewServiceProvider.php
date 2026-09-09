@@ -4,18 +4,20 @@ namespace App\Providers;
 
 use App\Services\CachingService;
 use App\Services\HelperService;
-use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
-class ViewServiceProvider extends ServiceProvider {
+class ViewServiceProvider extends ServiceProvider
+{
     /**
      * Register services.
      *
      * @return void
      */
-    public function register() {
+    public function register()
+    {
         //
     }
 
@@ -24,15 +26,16 @@ class ViewServiceProvider extends ServiceProvider {
      *
      * @return void
      */
-    public function boot() {
+    public function boot()
+    {
         $cache = app(CachingService::class);
 
         /*** Main Blade File ***/
         View::composer('layouts.main', static function (\Illuminate\View\View $view) use ($cache) {
             $lang = Session::get('language');
-            if($lang){
+            if ($lang) {
                 $view->with('language', $lang);
-            }else{
+            } else {
                 $cache = app(CachingService::class);
                 $defaultLanguage = $cache->getDefaultLanguage();
                 Session::put('language', $defaultLanguage);
@@ -71,7 +74,6 @@ class ViewServiceProvider extends ServiceProvider {
             Artisan::call('cache:clear');
             $view->with('language', $cache->getDefaultLanguage());
         });
-
 
         View::composer('layouts.footer_script', static function (\Illuminate\View\View $view) use ($cache) {
             $view->with('language', $cache->getDefaultLanguage());

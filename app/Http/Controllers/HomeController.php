@@ -2,23 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use Carbon\Carbon;
-use App\Models\User;
 use App\Models\Article;
-use App\Models\Package;
-use App\Models\Setting;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Property;
-use Illuminate\Http\Request;
+use App\Models\Setting;
+use App\Models\User;
 use App\Services\FileService;
-use App\Models\PropertysInquiry;
-use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Contracts\Support\Renderable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Validator;
 
 class HomeController extends Controller
@@ -36,13 +34,13 @@ class HomeController extends Controller
     /**
      * Show the application dashboard.
      *
-     * @return \Illuminate\Contracts\Support\Renderable
+     * @return Renderable
      */
     public function index()
     {
         $currency_symbol = Setting::where('type', 'currency_symbol')->pluck('data')->first();
 
-        if (!has_permissions('read', 'dashboard')) {
+        if (! has_permissions('read', 'dashboard')) {
             return redirect('dashboard')->with('error', PERMISSION_ERROR_MSG);
         } else {
             // 0:Sell 1:Rent 2:Sold 3:Rented
@@ -58,34 +56,38 @@ class HomeController extends Controller
 
             /************************************************************************************ */
             // Get Month wise data
-            $monthDates = array();
-            for ($month = 1; $month <= 12; $month++) {
-                $monthName = Carbon::create(null, $month, 1)->format('M');
+            $currentMonth = date('n');
+            $monthDates = [];
+            for ($month = 1; $month <= $currentMonth; $month++) {
+                $monthName = Carbon::create(null, $month, 1)->translatedFormat('M');
                 array_push($monthDates, "'" . $monthName . "'");
             }
-            $propertiesQuery = Property::query();
+            $propertiesQuery = Property::whereYear('created_at', date('Y'));
 
             // Calculate sell and rent counts
             $sellProperties = $propertiesQuery->clone()->where('propery_type', 0)->get();
             $rentProperties = $propertiesQuery->clone()->where('propery_type', 1)->get();
 
             // Create month series for sell and rent properties
-            $sellMonthSeries = array_fill(0, 12, 0);
-            $rentMonthSeries = array_fill(0, 12, 0);
+            $sellMonthSeries = array_fill(0, $currentMonth, 0);
+            $rentMonthSeries = array_fill(0, $currentMonth, 0);
 
             // Loop through sell properties and update month series
             foreach ($sellProperties as $property) {
                 $monthIndex = Carbon::parse($property->created_at)->format('n') - 1; // Get the month index (0-11)
-                $sellMonthSeries[$monthIndex]++;
+                if (isset($sellMonthSeries[$monthIndex])) {
+                    $sellMonthSeries[$monthIndex]++;
+                }
             }
 
             // Loop through rent properties and update month series
             foreach ($rentProperties as $property) {
                 $monthIndex = Carbon::parse($property->created_at)->format('n') - 1; // Get the month index (0-11)
-                $rentMonthSeries[$monthIndex]++;
+                if (isset($rentMonthSeries[$monthIndex])) {
+                    $rentMonthSeries[$monthIndex]++;
+                }
             }
             /************************************************************************************ */
-
 
             /************************************************************************************ */
             // Get Week wise data
@@ -125,24 +127,22 @@ class HomeController extends Controller
             $sellCountForCurrentDay = array_values($sellCountForDay);
             $rentCountForCurrentDay = array_values($rentCountForDay);
 
-
             /************************************************************************************ */
 
-
-
             // Properties Data Query
-            $properties = Property::select('id', 'category_id', 'title', 'price', 'title_image', 'latitude', 'longitude', 'city', 'total_click','propery_type')->with('category')->where('total_click', '>', 0)->orderBy('total_click', 'DESC')->limit(10)->get()->map(function($property){
+            $properties = Property::select('id', 'category_id', 'title', 'price', 'title_image', 'latitude', 'longitude', 'city', 'total_click', 'propery_type')->with('category')->where('total_click', '>', 0)->orderBy('total_click', 'DESC')->limit(10)->get()->map(function ($property) {
                 $property->property_type = ucfirst($property->propery_type);
                 $property->promoted = $property->is_promoted;
+
                 return $property;
             });
 
             // Get Category Data
             $getCategory = Category::withCount('properties')->get();
-            $category_name = array();
-            $category_count = array();
+            $category_name = [];
+            $category_count = [];
             foreach ($getCategory as $key => $value) {
-                array_push($category_name, "`" . $value->category . "`");
+                array_push($category_name, '`'.$value->category.'`');
                 array_push($category_count, $value->properties_count);
             }
 
@@ -154,46 +154,50 @@ class HomeController extends Controller
                 'sellweekSeries' => $sellWeekSeries,
                 'rentweekSeries' => $rentWeekSeries,
                 'rentmonthSeries' => $rentMonthSeries,
-                'weekDates' =>  [0 => "'Day1'", 1 => "'Day2'", 2 => "'Day3'", 3 => "'Day4'", 4 => "'Day5'", 5 => "'Day6'", 6 => "'Day7'"],
-                'monthDates' =>  $monthDates,
+                'weekDates' => [
+                    0 => "'" . Carbon::now()->startOfWeek(Carbon::SUNDAY)->translatedFormat('D') . "'",
+                    1 => "'" . Carbon::now()->startOfWeek(Carbon::SUNDAY)->addDays(1)->translatedFormat('D') . "'",
+                    2 => "'" . Carbon::now()->startOfWeek(Carbon::SUNDAY)->addDays(2)->translatedFormat('D') . "'",
+                    3 => "'" . Carbon::now()->startOfWeek(Carbon::SUNDAY)->addDays(3)->translatedFormat('D') . "'",
+                    4 => "'" . Carbon::now()->startOfWeek(Carbon::SUNDAY)->addDays(4)->translatedFormat('D') . "'",
+                    5 => "'" . Carbon::now()->startOfWeek(Carbon::SUNDAY)->addDays(5)->translatedFormat('D') . "'",
+                    6 => "'" . Carbon::now()->startOfWeek(Carbon::SUNDAY)->addDays(6)->translatedFormat('D') . "'"
+                ],
+                'monthDates' => $monthDates,
                 'currentDates' => $currentDates,
-                'currentDate' => "[" . Carbon::now()->format('Y-m-d') . "]"
+                'currentDate' => '['.Carbon::now()->format('Y-m-d').']',
 
             ];
 
-            $rows = array();
-            $firebase_settings = array();
-
-
+            $rows = [];
+            $firebase_settings = [];
 
             $operate = '';
 
             $settings['company_name'] = system_setting('company_name');
             $settings['currency_symbol'] = system_setting('currency_symbol');
 
-
-
-            $userData = Customer::select(DB::raw("COUNT(*) as count"))
+            $userData = Customer::select(DB::raw('COUNT(*) as count'))
                 ->whereYear('created_at', date('Y'))
-                ->groupBy(DB::raw("Month(created_at)"))
+                ->groupBy(DB::raw('Month(created_at)'))
                 ->pluck('count');
 
             return view('home', compact('list', 'settings', 'properties', 'userData', 'chartData', 'currency_symbol', 'category_name', 'category_count'));
         }
     }
+
     public function blank_dashboard()
     {
 
-
         return view('blank_home');
     }
-
 
     public function change_password()
     {
 
         return view('change_password.index');
     }
+
     public function changeprofile()
     {
         return view('change_profile.index');
@@ -205,12 +209,10 @@ class HomeController extends Controller
         $oldpassword = $request->old_password;
         $user = DB::table('users')->where('id', $id)->first();
 
-
         $response['error'] = password_verify($oldpassword, $user->password) ? true : false;
+
         return response()->json($response);
     }
-
-
 
     public function store_password(Request $request)
     {
@@ -226,6 +228,7 @@ class HomeController extends Controller
         }
 
         $users->update();
+
         return back()->with('success', 'Password Change Successfully');
     }
 
@@ -235,12 +238,12 @@ class HomeController extends Controller
             $validator = Validator::make($request->all(), [
                 'profile_image' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
             ],
-            [
-                'profile_image.required' => trans('The profile image field is required.'),
-                'profile_image.image' => trans('The profile image must be an image.'),
-                'profile_image.mimes' => trans('The profile image must be a jpeg, png, jpg, gif, svg, or webp image.'),
-                'profile_image.max' => trans('The profile image size should not exceed 2MB.'),
-            ]);
+                [
+                    'profile_image.required' => trans('The profile image field is required.'),
+                    'profile_image.image' => trans('The profile image must be an image.'),
+                    'profile_image.mimes' => trans('The profile image must be a jpeg, png, jpg, gif, svg, or webp image.'),
+                    'profile_image.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
+                ]);
             if ($validator->fails()) {
                 return back()->with('error', $validator->errors()->first());
             }
@@ -249,8 +252,8 @@ class HomeController extends Controller
 
             $users = User::find($id);
             if ($role == 0) {
-                $users->name  = $request->name;
-                $users->email  = $request->email;
+                $users->name = $request->name;
+                $users->email = $request->email;
             }
 
             if ($request->hasFile('profile_image')) {
@@ -258,9 +261,10 @@ class HomeController extends Controller
                 $users->profile = FileService::compressAndReplace($request->file('profile_image'), config('global.ADMIN_PROFILE_IMG_PATH'), $rawImage);
             }
             $users->update();
-            return back()->with('success', trans("Data Updated Successfully"));
+
+            return back()->with('success', trans('Data Updated Successfully'));
         } catch (Exception $e) {
-            return back()->with('error', trans("Something Went Wrong"));
+            return back()->with('error', trans('Something Went Wrong'));
         }
     }
 
@@ -268,7 +272,6 @@ class HomeController extends Controller
     {
         echo system_setting('privacy_policy');
     }
-
 
     public function firebase_messaging_settings(Request $request)
     {
@@ -283,11 +286,12 @@ class HomeController extends Controller
         // Move new file
         $request->file->move(public_path(), 'firebase-messaging-sw.js');
     }
+
     public function getMapsData()
     {
         $apiKey = env('MAP_API_KEY');
 
-        $url = "https://maps.googleapis.com/maps/api/js?" . http_build_query([
+        $url = 'https://maps.googleapis.com/maps/api/js?'.http_build_query([
             'libraries' => 'places',
             'key' => $apiKey, // Use the API key from the .env file
             // Add any other parameters you need here

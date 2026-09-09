@@ -23,7 +23,6 @@ return new class extends Migration
 
             $table->string('status')->comment('1=success,2=fail');
 
-
             $table->timestamps();
         });
     }

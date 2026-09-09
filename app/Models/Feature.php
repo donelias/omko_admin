@@ -2,24 +2,32 @@
 
 namespace App\Models;
 
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
 use App\Traits\ManageTranslations;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Feature extends Model
 {
-    use HasFactory,SoftDeletes, HasAppTimezone, ManageTranslations;
-    protected $hidden = array('created_at','updated_at','deleted_at');
+    use HasAppTimezone,HasFactory, ManageTranslations, SoftDeletes;
+
+    protected $hidden = ['created_at', 'updated_at', 'deleted_at'];
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
-    protected $fillable = array(
+
+    protected $fillable = [
         'id',
         'name',
         'type',
-        'status'
-    );
+        'status',
+        'user_type',
+    ];
+
+    protected $casts = [
+        'status' => 'boolean',
+    ];
 
     /**
      * Translations relationship

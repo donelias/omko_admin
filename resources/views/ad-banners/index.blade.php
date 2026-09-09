@@ -78,7 +78,7 @@
                                 <th scope="col" data-field="external_link_url" data-sortable="false" data-align="center" data-formatter="linkFormatter">{{ __('External Link') }}</th>
                                 <th scope="col" data-field="is_active" data-sortable="true" data-align="center" data-formatter="statusFormatter">{{ __('Status') }}</th>
                                 <th scope="col" data-field="duration_days" data-sortable="true" data-align="center" data-formatter="durationDaysFormatter">{{ __('Duration Days') }}</th>
-                                <th scope="col" data-field="ends_at" data-sortable="true" data-align="center" data-formatter="endDateFormatter">{{ __('End Date') }}</th>
+                                <th scope="col" data-field="ends_at_raw" data-sortable="true" data-align="center" data-formatter="endDateFormatter">{{ __('End Date') }}</th>
                                 <th scope="col" data-field="operate" data-sortable="false" data-align="center">{{ __('Action') }}</th>
                             </tr>
                         </thead>
@@ -153,11 +153,11 @@
     // Format status
     function statusFormatter(value, row, index) {
         if(row.is_expired){
-            return `<span class="badge bg-warning text-dark">${window.trans['Expired']}</span>`;
+            return `<span class="badge bg-danger text-dark">${window.trans['Expired']}</span>`;
         }
         return `<div class="form-check form-switch" text-center">
             <input class = "form-check-input switch1"id = "${row.id}" onclick = "chk(this);" data-url="${row.edit_status_url}" type="checkbox" role="switch" ${value == 1 ? 'checked' : ''} value="${value}">
-            ${value == 1 ? `<span class="badge bg-success">${window.trans['Active']}</span>` : `<span class="badge bg-danger">${window.trans['Inactive']}</span>`}
+            ${value == 1 ? `<span class="badge bg-success">${window.trans['Active']}</span>` : `<span class="badge bg-warning">${window.trans['Inactive']}</span>`}
         </div>`;
     }
 
@@ -197,12 +197,31 @@
         return `<span>${value} ${window.trans['Days']}</span>`;
     }
 
-    // Format end date
+    // Format end date with remaining days badge (same style as property table)
     function endDateFormatter(value, row, index) {
-        return `<p ${row.is_expired ? 'style="color: red;"' : ''}>
-                    <span class="d-block">${value}</span>
-                    ${row.is_expired ? `<span class="text-danger">${window.trans['Expired']}</span>` : `<span class="text-muted">${row.days_left} ${window.trans['Days Left']}</span>`}
-                </p>`;
+        if (!value || value === '-') {
+            return '-';
+        }
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var expiry = new Date(value);
+        expiry.setHours(0, 0, 0, 0);
+        var diffTime = expiry - today;
+        var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        // Format display date as dd-mm-yyyy
+        var day = String(expiry.getDate()).padStart(2, '0');
+        var month = String(expiry.getMonth() + 1).padStart(2, '0');
+        var year = expiry.getFullYear();
+        var formattedDate = day + '-' + month + '-' + year;
+
+        if (diffDays < 0) {
+            return formattedDate + '<br><span class="badge bg-light-danger text-danger">' + (window.trans['Expired'] || 'Expired') + '</span>';
+        } else if (diffDays === 0) {
+            return formattedDate + '<br><span class="badge bg-light-warning text-warning">' + (window.trans['Expires Today'] || 'Expires Today') + '</span>';
+        } else {
+            return formattedDate + '<br><span class="badge bg-light-success text-success">' + diffDays + ' ' + (window.trans['Days Left'] || 'Days Left') + '</span>';
+        }
     }
 
     $(document).ready(function() {

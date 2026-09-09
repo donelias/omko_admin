@@ -21,20 +21,22 @@ class GooglePlacesService
             return [];
         }
 
+        $locale = $locale ?? app()->getLocale();
         $normalized = mb_strtolower(trim($input));
-        $cacheKey = 'gplaces:ac:' . md5($normalized . '|' . ($locale ?? app()->getLocale()));
+        $cacheKey = 'gplaces:ac:'.md5($normalized.'|'.$locale);
 
         $cached = Cache::store('gplaces')->get($cacheKey);
-        if (!is_null($cached)) {
+        if (! is_null($cached)) {
             return (array) $cached;
         }
 
         $response = Http::get('https://maps.googleapis.com/maps/api/place/autocomplete/json', [
             'key' => self::$apiKey,
             'input' => $input,
+            'language' => $locale,
         ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             return [];
         }
 
@@ -46,31 +48,32 @@ class GooglePlacesService
         return $json;
     }
 
-    public static function detailsOrGeocode(?string $placeId = null, ?float $latitude = null, ?float $longitude = null): array
+    public static function detailsOrGeocode(?string $placeId = null, ?float $latitude = null, ?float $longitude = null, ?string $locale = null): array
     {
         if (self::$apiKey === '') {
             return [];
         }
 
-        $params = ['key' => self::$apiKey];
+        $locale = $locale ?? app()->getLocale();
+        $params = ['key' => self::$apiKey, 'language' => $locale];
         $cacheKey = '';
         $endpoint = '';
 
-        if (!empty($placeId)) {
+        if (! empty($placeId)) {
             // Directly fetch Place Details
             $params['place_id'] = $placeId;
             $params['fields'] = 'address_components,geometry,formatted_address';
-            $cacheKey = 'gplaces:details:pid:' . $placeId;
+            $cacheKey = 'gplaces:details:pid:'.$placeId.'|'.$locale;
             $endpoint = 'https://maps.googleapis.com/maps/api/place/details/json';
         } else {
-            // Step 1: Try to get place_id from cache
-            $geoCacheKey = 'gplaces:geocode:latlng:' . $latitude . ',' . $longitude;
+            // Step 1: Try to get place_id from cache (place_id is language-agnostic, so no locale in this key)
+            $geoCacheKey = 'gplaces:geocode:latlng:'.$latitude.','.$longitude;
             $geocode = Cache::store('gplaces')->get($geoCacheKey);
 
-            if (!$geocode) {
+            if (! $geocode) {
                 // Not in cache → call API
                 $geocode = Http::get('https://maps.googleapis.com/maps/api/geocode/json', [
-                    'latlng' => $latitude . ',' . $longitude,
+                    'latlng' => $latitude.','.$longitude,
                     'key' => self::$apiKey,
                 ])->json();
 
@@ -80,25 +83,25 @@ class GooglePlacesService
             }
 
             $placeId = $geocode['results'][0]['place_id'] ?? null;
-            if (!$placeId) {
+            if (! $placeId) {
                 return [];
             }
 
             // Step 2: Fetch Place Details using place_id
             $params['place_id'] = $placeId;
             $params['fields'] = 'address_components,geometry,formatted_address';
-            $cacheKey = 'gplaces:details:pid:' . $placeId;
+            $cacheKey = 'gplaces:details:pid:'.$placeId.'|'.$locale;
             $endpoint = 'https://maps.googleapis.com/maps/api/place/details/json';
         }
 
         // Place Details cache
         $cached = Cache::store('gplaces')->get($cacheKey);
-        if (!is_null($cached)) {
+        if (! is_null($cached)) {
             return (array) $cached;
         }
 
         $response = Http::get($endpoint, $params);
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             return [];
         }
 
@@ -109,7 +112,4 @@ class GooglePlacesService
 
         return $json;
     }
-
 }
-
-

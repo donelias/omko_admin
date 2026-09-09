@@ -1,27 +1,31 @@
-<IfModule mod_rewrite.c>
-    <IfModule mod_negotiation.c>
-        Options -MultiViews -Indexes
-    </IfModule>
-<FilesMatch "\.(jpg|jpeg|png|svg|pdf|doc|webp)$">
-  Header set Access-Control-Allow-Origin "*"
-</FilesMatch>
-    RewriteEngine On
-    RewriteRule ^(.*)$ public/$1 [L]
-    # Handle Authorization Header
-    RewriteCond %{HTTP:Authorization} .
+# Enable headers FIRST
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, x-active-role, content-language"
+</IfModule>
 
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Handle OPTIONS request properly
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule ^(.*)$ - [R=200,L]
+
+    # Redirect to public folder
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Authorization Header fix
+    RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # Redirect Trailing Slashes If Not A Folder...
+    # Remove trailing slash
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Send Requests To Front Controller...
+    # Front controller
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
-
-
-

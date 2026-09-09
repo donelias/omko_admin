@@ -3,20 +3,26 @@
 namespace App\Services\Payment;
 
 use Exception;
-use Throwable;
-use RuntimeException;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class PhonePePayment implements PaymentInterface
 {
     private string $clientId;
+
     private string $clientSecret;
+
     private string $clientVersion;
+
     private string $merchantId;
+
     private string $currencyCode;
+
     private bool $isSandbox;
+
     private string $baseUrl;
+
     private string $authUrl;
 
     public function __construct($paymentData)
@@ -27,7 +33,7 @@ class PhonePePayment implements PaymentInterface
         $this->merchantId = $paymentData['phonepe_merchant_id'] ?? '';
         $this->currencyCode = $paymentData['phonepe_currency'] ?? 'INR';
         $this->isSandbox = ($paymentData['phonepe_sandbox_mode'] ?? 0) == 1;
-        
+
         if ($this->isSandbox) {
             // ✅ Sandbox (UAT)
             $this->baseUrl = 'https://api-preprod.phonepe.com/apis/pg-sandbox';
@@ -51,10 +57,10 @@ class PhonePePayment implements PaymentInterface
                     'grant_type' => 'client_credentials',
                     'client_id' => $this->clientId,
                     'client_secret' => $this->clientSecret,
-                    'client_version' => $this->clientVersion
+                    'client_version' => $this->clientVersion,
                 ]);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $errorBody = $response->body();
                 $statusCode = $response->status();
                 Log::error('PhonePe Auth Token failed', [
@@ -64,10 +70,11 @@ class PhonePePayment implements PaymentInterface
             }
 
             $data = $response->json();
+
             return $data['access_token'];
-            
+
         } catch (Exception $e) {
-            Log::error('PhonePe Auth Exception: ' . $e->getMessage());
+            Log::error('PhonePe Auth Exception: '.$e->getMessage());
             throw new RuntimeException($e->getMessage());
         }
     }
@@ -84,22 +91,23 @@ class PhonePePayment implements PaymentInterface
             }
 
             $amount = $this->minimumAmountValidation($this->currencyCode, $amount);
-            $returnURL = $customMetaData['platform_type'] == 'app' ? route('payment.success') : route('payment.success.web');
+            $returnURL = $customMetaData['platform_type'] == 'app' ? route('payment.success') : route('payment.success.web', ['gateway' => 'phonepe']);
 
-            $merchantTransactionId = 'TXN_' . ($customMetaData['payment_transaction_id']);
+            $merchantTransactionId = 'TXN_'.($customMetaData['payment_transaction_id']);
 
             // Amount in paise (smallest currency unit)
             $amountInPaise = (int) round($amount * 100);
 
             // Prepare payment data
-           $paymentData = [
-                'merchantOrderId'       => $merchantTransactionId,
-                'amount'                => (int)$amountInPaise,
-                'paymentFlow'           => [
+            $paymentData = [
+                'merchantOrderId' => $merchantTransactionId,
+                'amount' => (int) $amountInPaise,
+                'paymentFlow' => [
                     'type' => 'PG_CHECKOUT',
-                    'merchantUrls'          => [
+                    'merchantUrls' => [
                         'redirectUrl' => $returnURL,
-                    ]
+                        'callbackUrl' => route('webhook.phonepe'),
+                    ],
                 ],
             ];
 
@@ -108,10 +116,10 @@ class PhonePePayment implements PaymentInterface
 
             $response = Http::withHeaders([
                 'Content-Type' => 'application/json',
-                'Authorization' => 'O-Bearer ' . $authToken,
-            ])->post($this->baseUrl . '/checkout/v2/pay', $paymentData);
+                'Authorization' => 'O-Bearer '.$authToken,
+            ])->post($this->baseUrl.'/checkout/v2/pay', $paymentData);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 $errorBody = $response->body();
                 $statusCode = $response->status();
                 Log::error('PhonePe createPaymentIntent failed', [
@@ -126,8 +134,8 @@ class PhonePePayment implements PaymentInterface
             // Extract the payment URL
             $paymentUrl = $responseData['redirectUrl'] ?? null;
 
-            if (!$paymentUrl) {
-                Log::error('PhonePe createPaymentIntent missing payment URL: ' . $response->body());
+            if (! $paymentUrl) {
+                Log::error('PhonePe createPaymentIntent missing payment URL: '.$response->body());
             }
 
             return [
@@ -144,7 +152,7 @@ class PhonePePayment implements PaymentInterface
             ];
 
         } catch (Exception $e) {
-            Log::error('PhonePe createPaymentIntent failed: ' . $e->getMessage());
+            Log::error('PhonePe createPaymentIntent failed: '.$e->getMessage());
         }
     }
 
@@ -154,9 +162,10 @@ class PhonePePayment implements PaymentInterface
     public function createAndFormatPaymentIntent($amount, $customMetaData): array
     {
         $paymentIntent = $this->createPaymentIntent($amount, $customMetaData);
-        if (!$paymentIntent) {
+        if (! $paymentIntent) {
             return [];
         }
+
         return $this->format($paymentIntent, $amount, $this->currencyCode, $customMetaData);
     }
 

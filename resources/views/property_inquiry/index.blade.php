@@ -26,6 +26,14 @@
         <div class="card">
 
             <div class="card-body">
+                {{-- User/Agent Filter Tabs --}}
+                <div class="mb-3">
+                    <div class="btn-group" role="group" id="added-as-filter">
+                        <button type="button" class="btn btn-outline-primary active" data-value="">{{ __('All') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="user">{{ __('User') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="agent">{{ __('Agent') }}</button>
+                    </div>
+                </div>
                 <div class="row justify-content-center" id="toolbar">
 
 
@@ -70,7 +78,8 @@
                                         data-sortable="false">{{ __('Owner Mobile') }}</th>
                                     <th scope="col" data-field="name" data-align="center" data-sortable="false">
                                         {{ __('Inquiry By') }}</th>
-
+                                    <th scope="col" data-field="inquiry_by_role" data-align="center" data-formatter="activeRoleFormatter">
+                                        {{ __('Role') }}</th>
 
                                     <th scope="col" data-field="location" data-align="center" data-sortable="false">
                                         {{ __('Location') }}</th>
@@ -513,6 +522,12 @@
             }
         });
 
+        $('#added-as-filter button').on('click', function() {
+            $('#added-as-filter button').removeClass('active');
+            $(this).addClass('active');
+            $('#table_list').bootstrapTable('refresh');
+        });
+
         function queryParams(p) {
             return {
                 sort: p.sort,
@@ -521,9 +536,7 @@
                 limit: p.limit,
                 search: p.search,
                 status: $('#filter_status').val(),
-
-
-
+                role_filter: $('#added-as-filter button.active').data('value'),
             };
         }
         window.actionEvents1 = {

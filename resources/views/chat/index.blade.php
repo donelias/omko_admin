@@ -18,7 +18,19 @@
 
 @section('content')
     <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css" rel="stylesheet">
+    @php
+        $hasChats = !$user_list->isEmpty() || !empty($otherUsers);
+    @endphp
     <div class="container-fluid">
+        @if(!$hasChats)
+            <div class="panel messages-panel">
+                <div class="chat-empty-state">
+                    <i class="bi bi-chat-square-text chat-empty-state-icon"></i>
+                    <h4 class="chat-empty-state-title">{{ __('No conversations yet') }}</h4>
+                    <p class="chat-empty-state-text">{{ __('You have no messages at the moment. New conversations will appear here.') }}</p>
+                </div>
+            </div>
+        @else
         <div class="panel messages-panel">
             <div class="contacts-list">
                 <div class="tab-content">
@@ -28,52 +40,56 @@
                             <ul class="list-unstyled contacts">
                                 @foreach ($user_list as $key => $value)
                                     @empty($value->receiver)
-                                        <li data-toggle="tab" data-target="#inbox-message-1"
-                                            id="{{ 'tabs' . $value->sender->id }}"
-                                            onclick="setallMessage({{ $value->property_id }}, {{ $value->sender->id }}, {{ $value->is_blocked_by_me }}, {{ $value->is_blocked_by_user }});"
-                                            style="display: flex;">
+                                        @if($value->sender && $value->property)
+                                            <li data-toggle="tab" data-target="#inbox-message-1"
+                                                id="{{ 'tabs' . $value->sender->id }}"
+                                                onclick="setallMessage({{ $value->property_id }}, {{ $value->sender->id }}, {{ $value->is_blocked_by_me }}, {{ $value->is_blocked_by_user }});"
+                                                style="display: flex;">
 
-                                            <img alt="" class="img-circle medium-image user-image" src="{{ $value->sender->profile ? $value->sender->profile : url('assets/images/faces/2.jpg') }}">
+                                                <img alt="" class="img-circle medium-image user-image" src="{{ $value->sender->profile ? $value->sender->profile : url('assets/images/faces/2.jpg') }}">
 
-                                            <div class="vcentered info-combo">
-                                                <h3 class="no-margin-bottom name username"> {{ $value->sender->name }}</h3>
+                                                <div class="vcentered info-combo">
+                                                    <h3 class="no-margin-bottom name username"> {{ $value->sender->name }}</h3>
 
-                                                <h5> {{ $value->property->title }}</h5>
-                                            </div>
-
-                                            {{-- Unread Count --}}
-                                            @if($value->unread_count > 0)
-                                                <div class="text-right unread-count">
-                                                    <span class="badge rounded-pill bg-primary">{{ $value->unread_count }}</span>
+                                                    <h5> {{ $value->property->title }}</h5>
                                                 </div>
-                                            @endif
 
-                                        </li>
+                                                {{-- Unread Count --}}
+                                                @if($value->unread_count > 0)
+                                                    <div class="text-right unread-count">
+                                                        <span class="badge rounded-pill bg-primary">{{ $value->unread_count }}</span>
+                                                    </div>
+                                                @endif
+
+                                            </li>
+                                        @endif
                                     @endempty
                                 @endforeach
 
                                 @foreach ($user_list as $key => $value)
                                     @empty($value->sender)
-                                        <li data-toggle="tab" data-target="#inbox-message-1"
-                                            id="{{ 'tabs' . $value->receiver->id }}"
-                                            onclick="setallMessage({{ $value->property_id }}, {{ $value->receiver->id }}, {{ $value->is_blocked_by_me }}, {{ $value->is_blocked_by_user }});"
-                                            style="display: flex;">
+                                        @if($value->receiver && $value->property)
+                                            <li data-toggle="tab" data-target="#inbox-message-1"
+                                                id="{{ 'tabs' . $value->receiver->id }}"
+                                                onclick="setallMessage({{ $value->property_id }}, {{ $value->receiver->id }}, {{ $value->is_blocked_by_me }}, {{ $value->is_blocked_by_user }});"
+                                                style="display: flex;">
 
-                                            <img alt="" class="img-circle medium-image user-image" src="{{ $value->receiver->profile ? $value->receiver->profile : url('assets/images/faces/2.jpg') }}">
+                                                <img alt="" class="img-circle medium-image user-image" src="{{ $value->receiver->profile ? $value->receiver->profile : url('assets/images/faces/2.jpg') }}">
 
-                                            <div class="vcentered info-combo">
-                                                <h3 class="no-margin-bottom name username"> {{ $value->receiver->name }} </h3>
-                                                <h5> {{ $value->property->title }}</h5>
-                                            </div>
-
-                                            @if($value->unread_count > 0)
-                                                {{-- Unread Count --}}
-                                                <div class="text-right unread-count">
-                                                    <span class="badge rounded-pill bg-primary">{{ $value->unread_count }}</span>
+                                                <div class="vcentered info-combo">
+                                                    <h3 class="no-margin-bottom name username"> {{ $value->receiver->name }} </h3>
+                                                    <h5> {{ $value->property->title }}</h5>
                                                 </div>
-                                            @endif
 
-                                        </li>
+                                                @if($value->unread_count > 0)
+                                                    {{-- Unread Count --}}
+                                                    <div class="text-right unread-count">
+                                                        <span class="badge rounded-pill bg-primary">{{ $value->unread_count }}</span>
+                                                    </div>
+                                                @endif
+
+                                            </li>
+                                        @endif
                                     @endempty
                                 @endforeach
                                 @foreach ($otherUsers as $key => $value)
@@ -165,6 +181,7 @@
                 </div>
             </div>
         </div>
+        @endif
     @endsection
     @section('script')
         <script>

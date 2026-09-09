@@ -31,17 +31,18 @@
                         <div class="col-12 d-flex justify-content-end">
                             <a href="{{ route('customer-privacy-policy') }}"col-sm-12 col-md-12 d-fluid class="btn icon btn-primary btn-sm rounded-pill" onclick="" title="{{__('Show Privacy Policy')}}"><i class="bi bi-eye-fill"></i></a>
                         </div>
-                        <div class="col-md-12">
+                        <div class="col-md-12 mt-3">
                             <textarea id="tinymce_editor" name="data" class="form-control col-md-7 col-xs-12">{{ $settingData?->getRawOriginal('data') ?? '' }}</textarea>
                         </div>
                     </div>
                 </div>
-                <div class="card">
+            </div>
+            <div class="card">
                     @if(isset($translationLanguages) && $translationLanguages->count() > 0)
                         {{-- Translations Div --}}
                         <div class="translation-div">
                             <div class="card">
-                                <h3 class="card-header">{{ __('Translations for Privacy Policy') }}</h3>
+                                <h5 class="card-header">{{ __('Translations for Privacy Policy') }}</h3>
                                 <hr>
                                 <div class="card-body">
                                     {{-- Fields for Translations --}}
@@ -63,8 +64,10 @@
                         </div>
                     @endif
                 </div>
-                <div class="col-12 d-flex justify-content-end">
+                  <div class="card">
+                <div class="card-body text-end">
                     <button class="btn btn-primary me-1 mb-1" type="submit" name="submit">{{ __('Save') }}</button>
+                </div>
                 </div>
             </form>
         </div>

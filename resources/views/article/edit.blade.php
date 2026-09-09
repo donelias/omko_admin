@@ -29,8 +29,8 @@
 
 @section('content')
     <section class="section">
-        <div class="row">
-            <div class="col-md-7 col-sm-12">
+        <div class="row article-form-layout">
+            <div class="col-12 col-xxl-7 article-form-main">
                 <div class="card">
                     <div class="card-header add_article_header">
                         {{ __('Update Article') }}
@@ -148,7 +148,7 @@
                 </div>
             </div>
 
-            <div class="col-md-5 col-sm-12">
+            <div class="col-12 col-xxl-5 article-form-sidebar">
 
                 <div class="card edit_recent_articles">
                     <div class="card-header add_article_header">

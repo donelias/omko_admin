@@ -14,9 +14,9 @@ $lang = Session::get('language');
 <section class="section">
     <div class="dashboard_title mb-3"> {{ __('Hi, Admin') }}</div>
     <div class="row">
-        <div class="col-md-4 col-sm-12">
+        <div class="col-12 col-lg-4 col-md-12 mb-4 mb-lg-0">
             <div class="row">
-                <div class="col-md-6 col-sm-6">
+                <div class="col-6 col-md-6">
                     <a href="{{ url('customer') }}">
 
                     <div class="card h-100">
@@ -54,7 +54,7 @@ $lang = Session::get('language');
                     </div>
                     </a>
                 </div>
-                <div class="col-md-6 col-sm-6">
+                <div class="col-6 col-md-6">
                                         <a href="{{ url('property') }}">
 
                     <div class="card h-100">
@@ -91,7 +91,7 @@ $lang = Session::get('language');
                 </div>
             </div>
             <div class="row mt-3">
-                <div class="col-md-6 col-sm-6">
+                <div class="col-6 col-md-6">
                                         <a href="{{ url('property') . '?type=0' }}">
 
                     <div class="card h-100">
@@ -127,7 +127,7 @@ $lang = Session::get('language');
                                 </svg>
                             </div>
                             <div class="card_info">
-                                <div class="total_number mt-5">
+                                <div class="total_number">
                                     {{ $list['total_sell_property'] }}
                                 </div>
 
@@ -139,7 +139,7 @@ $lang = Session::get('language');
                     </div>
                     </a>
                 </div>
-                <div class="col-md-6 col-sm-6">
+                <div class="col-6 col-md-6">
                                         <a href="{{ url('property') . '?type=1' }}">
 
                     <div class="card h-100">
@@ -171,7 +171,7 @@ $lang = Session::get('language');
                                 </svg>
                             </div>
                             <div class="card_info">
-                                <div class="total_number mt-5">
+                                <div class="total_number">
                                     {{ $list['total_rant_property'] }}
                                 </div>
 
@@ -185,14 +185,14 @@ $lang = Session::get('language');
                 </div>
             </div>
         </div>
-        <div class="col-md-8 col-sm-12">
+        <div class="col-12 col-lg-8 col-md-12">
             <div class="card proeprty_chart">
                 <div class="card-header d-flex mt-3">
                     <div class="recent_list_heading mb-3">{{ __('Properties') }}</div>
                 </div>
                 <div class="card-body">
                     <div class="row property-label-card">
-                        <div class="col-md-3 lable_sell d-flex">
+                        <div class="col-md-3 lable_sell d-flex mb-3 mb-md-0">
 
                             <div class="svg_icon">
                                 <svg width="40" height="40" viewBox="0 0 40 40" fill="none"
@@ -402,10 +402,22 @@ $lang = Session::get('language');
 @section('script')
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 
-
-
+@php
+    $mapFile = public_path('assets/js/query-jvectormap-world-mill-en.js');
+    $countryTranslations = [];
+    if (file_exists($mapFile)) {
+        $fileContent = file_get_contents($mapFile);
+        preg_match_all('/"name":\s*"([^"]+)"/', $fileContent, $matches);
+        if (!empty($matches[1])) {
+            foreach ($matches[1] as $country) {
+                $countryTranslations[$country] = __($country);
+            }
+        }
+    }
+@endphp
 
 <script>
+    var mapCountryTranslations = @json($countryTranslations);
     $("#recent-property-type-filter").on('change', function() {
         $('#table_list').bootstrapTable('refresh');
     });
@@ -658,6 +670,12 @@ $lang = Session::get('language');
         onMarkerTipShow: function (event, label, index) {
             var cardContent = markerValues[index].card.content;
             label.html(cardContent);
+        },
+        onRegionTipShow: function (event, label, code) {
+            var countryName = label.html();
+            if (typeof mapCountryTranslations !== 'undefined' && mapCountryTranslations[countryName]) {
+                label.html(mapCountryTranslations[countryName]);
+            }
         }
     });
 </script>

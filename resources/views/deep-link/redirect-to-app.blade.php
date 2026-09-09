@@ -6,7 +6,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const slug = @json($slug);
-            const schema = @json($settingsData['schema_for_deeplink'] ?? 'ebroker');
+            const schema = @json($settingsData['schema_for_deeplink'] ?? 'omko');
             const androidStore = @json($settingsData['playstore_id']);
             const iosStore = @json($settingsData['appstore_id']);
             const appName = schema.charAt(0).toUpperCase() + schema.slice(1);

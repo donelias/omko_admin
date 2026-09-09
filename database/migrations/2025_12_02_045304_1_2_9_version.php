@@ -2,10 +2,10 @@
 
 use App\Models\Setting;
 use App\Services\HelperService;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -21,7 +21,7 @@ return new class extends Migration
         HelperService::changeEnv(['FILESYSTEM_DISK' => 'public']);
         /****************************************************************************** */
         // Add default language column to customers table
-        if (!Schema::hasColumn('customers', 'default_language')) {
+        if (! Schema::hasColumn('customers', 'default_language')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->string('default_language')->after('country_code')->nullable();
             });
@@ -29,21 +29,21 @@ return new class extends Migration
 
         /****************************************************************************** */
         // Add gemini_usage table
-        if (!Schema::hasTable('gemini_usage')) {
+        if (! Schema::hasTable('gemini_usage')) {
             Schema::create('gemini_usage', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('user_id')->nullable()->comment('Customer ID or User ID');
-                $table->string('user_type',50)->default('customer')->comment('customer or admin');
-                $table->string('type',50)->comment('description, meta, search');
-                $table->string('entity_type',50)->nullable()->comment('property, project');
+                $table->string('user_type', 50)->default('customer')->comment('customer or admin');
+                $table->string('type', 50)->comment('description, meta, search');
+                $table->string('entity_type', 50)->nullable()->comment('property, project');
                 $table->unsignedBigInteger('entity_id')->nullable();
                 $table->string('prompt_hash')->comment('MD5 hash of prompt for caching');
                 $table->integer('tokens_used')->nullable();
                 $table->string('ip_address')->nullable();
                 $table->timestamps();
 
-                $table->index(['user_id', 'user_type', 'type', 'created_at'],'gemini_usage_index');
-                $table->index(['prompt_hash'],'gemini_usage_prompt_hash_index');
+                $table->index(['user_id', 'user_type', 'type', 'created_at'], 'gemini_usage_index');
+                $table->index(['prompt_hash'], 'gemini_usage_prompt_hash_index');
             });
         }
         /****************************************************************************** */

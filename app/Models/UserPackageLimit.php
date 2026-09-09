@@ -2,23 +2,27 @@
 
 namespace App\Models;
 
+use App\Traits\HasAppTimezone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\HasAppTimezone;
+
 class UserPackageLimit extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
-    protected $hidden = array('created_at','updated_at','deleted_at');
-    protected $fillable = array(
+
+    protected $hidden = ['created_at', 'updated_at', 'deleted_at'];
+
+    protected $fillable = [
         'id',
         'user_package_id',
         'package_feature_id',
         'total_limit',
         'used_limit',
         'created_at',
-        'updated_at'
-    );
+        'updated_at',
+    ];
 
     /**
      * Get the user that owns the UserPackageLimit
@@ -33,13 +37,15 @@ class UserPackageLimit extends Model
         return $this->belongsTo(PackageFeature::class, 'package_feature_id');
     }
 
-    public function getIsLimitOverAttribute(){
-        if($this->package_feature->limit_type == 'unlimited'){
+    public function getIsLimitOverAttribute()
+    {
+        if ($this->package_feature->limit_type == 'unlimited') {
             return false;
         }
-        if($this->total_limit <= $this->used_limit){
+        if ($this->total_limit <= $this->used_limit) {
             return true;
         }
+
         return false;
     }
 }

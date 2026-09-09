@@ -16,7 +16,8 @@ class CustomerDataSeeder extends Seeder
     }
 
     // Create 5 Customers
-    public function createCustomers() {
+    public function createCustomers()
+    {
         Customer::factory()->count(5)->create();
     }
 }

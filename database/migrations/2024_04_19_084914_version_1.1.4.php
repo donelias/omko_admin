@@ -39,35 +39,33 @@ return new class extends Migration
             $table->string('meta_image')->nullable()->change();
         });
 
-
         // ADD Slug id column in projects table if not exists
-        if (!Schema::hasColumn('projects', 'slug_id')) {
+        if (! Schema::hasColumn('projects', 'slug_id')) {
             Schema::table('projects', function (Blueprint $table) {
                 $table->string('slug_id')->unique();
             });
-        }else{
+        } else {
             Schema::table('projects', function (Blueprint $table) {
                 $table->string('slug_id')->unique()->change();
             });
         }
 
         // ADD categories_id column in projects table if not exists
-        if (!Schema::hasColumn('projects', 'category_id')) {
+        if (! Schema::hasColumn('projects', 'category_id')) {
             Schema::table('projects', function (Blueprint $table) {
                 $table->foreignId('category_id')->references('id')->on('categories')->onDelete('cascade');
             });
         }
 
         // ADD status column in projects table if not exists
-        if (!Schema::hasColumn('projects', 'status')) {
+        if (! Schema::hasColumn('projects', 'status')) {
             Schema::table('projects', function (Blueprint $table) {
                 $table->boolean('status')->default(0);
             });
         }
 
-
         // ADDING propertys_inquiry table if not exists
-        if(!Schema::hasTable('propertys_inquiry')){
+        if (! Schema::hasTable('propertys_inquiry')) {
             Schema::create('propertys_inquiry', function (Blueprint $table) {
                 $table->id();
                 $table->bigInteger('propertys_id')->unsigned();
@@ -80,15 +78,15 @@ return new class extends Migration
         }
 
         // ADDING total_click column in propertys if not exists
-        Schema::table('propertys',function (Blueprint $table){
-            if(!Schema::hasColumn('propertys','total_click')){
+        Schema::table('propertys', function (Blueprint $table) {
+            if (! Schema::hasColumn('propertys', 'total_click')) {
                 $table->bigInteger('total_click')->default(0);
             }
         });
 
         // ADDING total_click column in projects if not exists
-        Schema::table('projects',function (Blueprint $table){
-            if(!Schema::hasColumn('projects','total_click')){
+        Schema::table('projects', function (Blueprint $table) {
+            if (! Schema::hasColumn('projects', 'total_click')) {
                 $table->bigInteger('total_click')->default(0);
             }
         });
@@ -107,7 +105,6 @@ return new class extends Migration
         Schema::table('languages', function (Blueprint $table) {
             $table->unique('code');
         });
-
 
     }
 
@@ -145,7 +142,6 @@ return new class extends Migration
             $table->string('meta_image')->nullable(false)->change();
         });
 
-
         // DROP slug_id column from projects table if exists
         if (Schema::hasColumn('projects', 'slug_id')) {
             Schema::table('projects', function (Blueprint $table) {
@@ -168,21 +164,19 @@ return new class extends Migration
             });
         }
 
-
-
         // Drop propertys_inquiry if exists
         Schema::dropIfExists('propertys_inquiry');
 
         // Drop total_click Column in propertys if exists
-        Schema::table('propertys',function (Blueprint $table){
-            if(Schema::hasColumn('propertys','total_click')){
+        Schema::table('propertys', function (Blueprint $table) {
+            if (Schema::hasColumn('propertys', 'total_click')) {
                 $table->dropColumn('total_click');
             }
         });
 
         // Drop total_click Column in projects if exists
-        Schema::table('projects',function (Blueprint $table){
-            if(Schema::hasColumn('projects','total_click')){
+        Schema::table('projects', function (Blueprint $table) {
+            if (Schema::hasColumn('projects', 'total_click')) {
                 $table->dropColumn('total_click');
             }
         });
@@ -201,7 +195,6 @@ return new class extends Migration
         Schema::table('languages', function (Blueprint $table) {
             $table->dropUnique('languages_code_unique');
         });
-
 
         Schema::enableForeignKeyConstraints();
     }

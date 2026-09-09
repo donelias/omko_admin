@@ -48,18 +48,18 @@
 }
 
 /* Additional mobile optimizations */
-@media (max-width: 768px) {
+/* @media (max-width: 768px) { */
     /* Stack map and form vertically on mobile */
-    .row .col-md-6:first-child {
+    /* .row .col-md-6:first-child {
         margin-bottom: 20px;
-    }
+    } */
     
     /* Ensure proper spacing */
-    .card-body .row {
+    /* .card-body .row {
         margin: 0;
     }
     
     .card-body .row > div {
         padding: 0 15px;
     }
-}
+} */

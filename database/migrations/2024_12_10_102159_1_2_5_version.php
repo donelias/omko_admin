@@ -1,13 +1,12 @@
 <?php
 
 use App\Models\Setting;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-
     /** It's 1.2.1 Version */
 
     /**
@@ -18,7 +17,7 @@ return new class extends Migration
         // add is admin listing column and make added by nullable
         Schema::table('projects', function (Blueprint $table) {
             $table->foreignId('added_by')->nullable(true)->change();
-            if (!Schema::hasColumn('projects', 'is_admin_listing')) {
+            if (! Schema::hasColumn('projects', 'is_admin_listing')) {
                 $table->boolean('is_admin_listing')->default(false);
             }
             $table->string('type')->comment('under_construction,upcoming')->change();
@@ -37,16 +36,16 @@ return new class extends Migration
         });
 
         // Add text of property submission
-        $data = array('text_property_submission' => 'Your property has been added and is pending review. The admin will enable it once the review is complete.');
+        $data = ['text_property_submission' => 'Your property has been added and is pending review. The admin will enable it once the review is complete.'];
         foreach ($data as $key => $value) {
             Setting::updateOrCreate(['type' => $key], ['data' => $value]);
         }
 
         // Add Web URL
-        $getWebUrl = Setting::where('type','paypal_web_url')->pluck('data')->first();
-        if(!empty($getWebUrl)){
+        $getWebUrl = Setting::where('type', 'paypal_web_url')->pluck('data')->first();
+        if (! empty($getWebUrl)) {
             Setting::updateOrCreate(['type' => 'web_url'], ['data' => $getWebUrl]);
-        };
+        }
     }
 
     /**

@@ -1,4 +1,5 @@
 <?php
+
 namespace Grav\Plugin\Console;
 
 use Grav\Console\ConsoleCommand;
@@ -7,8 +8,6 @@ use Symfony\Component\Console\Input\InputOption;
 
 /**
  * Class LogCommand
- *
- * @package Grav\Plugin\Console
  */
 class LogCommand extends ConsoleCommand
 {
@@ -16,33 +15,32 @@ class LogCommand extends ConsoleCommand
      * @var string
      */
     protected $logfile;
+
     /**
      * @var array
      */
     protected $options = [];
+
     /**
      * @var array
      */
     protected $colors = [
-        'DEBUG'     => 'green',
-        'INFO'      => 'cyan',
-        'NOTICE'    => 'yellow',
-        'WARNING'   => 'yellow',
-        'ERROR'     => 'red',
-        'CRITICAL'  => 'red',
-        'ALERT'     => 'red',
-        'EMERGENCY' => 'magenta'
+        'DEBUG' => 'green',
+        'INFO' => 'cyan',
+        'NOTICE' => 'yellow',
+        'WARNING' => 'yellow',
+        'ERROR' => 'red',
+        'CRITICAL' => 'red',
+        'ALERT' => 'red',
+        'EMERGENCY' => 'magenta',
     ];
 
-    /**
-     *
-     */
     protected function configure()
     {
-        $this->logfile = LOG_DIR . 'grav.log';
+        $this->logfile = LOG_DIR.'grav.log';
         $this
-            ->setName("log")
-            ->setDescription("Outputs the Error Log")
+            ->setName('log')
+            ->setDescription('Outputs the Error Log')
             ->addOption(
                 'trace',
                 't',
@@ -56,8 +54,7 @@ class LogCommand extends ConsoleCommand
                 'Outputs only the last X amount of errors. Use as --limit 10 / -l 10 [default 5]',
                 5
             )
-            ->setHelp('The <info>log</info> outputs the Errors Log in Console')
-        ;
+            ->setHelp('The <info>log</info> outputs the Errors Log in Console');
     }
 
     /**
@@ -67,18 +64,18 @@ class LogCommand extends ConsoleCommand
     {
         $this->options = [
             'trace' => $this->input->getOption('trace'),
-            'limit' => $this->input->getOption('limit')
+            'limit' => $this->input->getOption('limit'),
         ];
 
-        if (!file_exists($this->logfile)) {
-            $this->output->writeln("\n" . "Log file not found." . "\n");
+        if (! file_exists($this->logfile)) {
+            $this->output->writeln("\n".'Log file not found.'."\n");
             exit;
         }
 
-        $log   = file_get_contents($this->logfile);
+        $log = file_get_contents($this->logfile);
         $lines = explode("\n", $log);
 
-        if (!is_numeric($this->options['limit'])) {
+        if (! is_numeric($this->options['limit'])) {
             $this->options['limit'] = 5;
         }
 
@@ -90,23 +87,21 @@ class LogCommand extends ConsoleCommand
     }
 
     /**
-     * @param $line
-     *
      * @return null|string
      */
     protected function parseLine($line)
     {
-        $bit   = explode(': ', $line);
+        $bit = explode(': ', $line);
         $line1 = explode('] ', $bit[0]);
 
-        if (!$line1[0]) {
+        if (! $line1[0]) {
             return null;
         }
 
         $line2 = explode(' - ', $bit[1]);
 
-        $date  = $line1[0] . ']';
-        $type  = str_replace('grav.', '', $line1[1]);
+        $date = $line1[0].']';
+        $type = str_replace('grav.', '', $line1[1]);
         $color = $this->colors[$type];
         $error = $line2[0];
         $trace = implode(': ', array_slice($bit, 2));
@@ -114,17 +109,16 @@ class LogCommand extends ConsoleCommand
         $output = [];
 
         $output[] = '';
-        $output[] = '<cyan>' . $date . '</cyan>';
-        $output[] = sprintf('  <%s>%s</%s> <white>' . $error . '</white>', $color, $type, $color);
+        $output[] = '<cyan>'.$date.'</cyan>';
+        $output[] = sprintf('  <%s>%s</%s> <white>'.$error.'</white>', $color, $type, $color);
 
         if ($this->options['trace']) {
             $output[] = '  <white>TRACE:</white> ';
-            $output[] = '  ' . $trace;
+            $output[] = '  '.$trace;
         }
 
-        $output[] = '<cyan>' . str_repeat('-', strlen($date)) . '</cyan>';
+        $output[] = '<cyan>'.str_repeat('-', strlen($date)).'</cyan>';
 
         return implode("\n", $output);
     }
 }
-

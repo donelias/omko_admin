@@ -101,8 +101,12 @@
         marker.map = map; // Show marker
     }
 
+    function getLocaleHeader() {
+        return { 'Content-Language': (window.currentLocale || 'en') };
+    }
+
     function fetchPlaceDetails(params) {
-        return $.get('/api/get-map-place-details', params);
+        return $.ajax({ url: '/api/get-map-place-details', data: params, headers: getLocaleHeader() });
     }
 
     function attachAutocomplete($input, selectors, map, marker) {
@@ -114,7 +118,7 @@
             if (!q || q.length < 3) { $suggestions.empty().hide(); return; }
             debounceTimer = setTimeout(function () {
                 showLoader(map);
-                $.get('/api/get-map-places-list', { input: q })
+                $.ajax({ url: '/api/get-map-places-list', data: { input: q }, headers: getLocaleHeader() })
                     .done(function (resp) {
                         var data = resp && resp.data ? resp.data : {};
                         var preds = data.predictions || [];

@@ -1,44 +1,58 @@
 <?php
 
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\FaqController;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Request;
-use Illuminate\Support\Facades\Session;
-use App\Http\Controllers\ChatController;
-use App\Http\Controllers\HomeController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\SliderController;
-use App\Http\Controllers\ArticleController;
-use App\Http\Controllers\PackageController;
-use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\ProjectController;
-use App\Http\Controllers\PropertController;
-use App\Http\Controllers\SettingController;
-use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\AdBannerController;
+use App\Http\Controllers\AdminAppointmentController;
+use App\Http\Controllers\AdminAppointmentReportController;
+use App\Http\Controllers\AdvertisementController;
+use App\Http\Controllers\AgentVerificationFormController;
+use App\Http\Controllers\AgentVerificationFormSectionController;
+use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ChatController;
+use App\Http\Controllers\CityImagesController;
+use App\Http\Controllers\CustomersController;
+use App\Http\Controllers\CrmLeadController;
+use App\Http\Controllers\CustomPageController;
 use App\Http\Controllers\DeepLinkController;
 use App\Http\Controllers\DemoDataController;
-use App\Http\Controllers\LanguageController;
-use App\Http\Controllers\CustomersController;
-use App\Http\Controllers\InstallerController;
-use App\Http\Controllers\ParameterController;
-use App\Http\Controllers\CityImagesController;
-use App\Http\Controllers\SeoSettingsController;
-use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\ReportReasonController;
-use Illuminate\Auth\Notifications\ResetPassword;
-use App\Http\Controllers\AdvertisementController;
-use App\Http\Controllers\PackageFeatureController;
+use App\Http\Controllers\FaqController;
+use App\Http\Controllers\GeminiAIController;
+use App\Http\Controllers\GeminiSettingsController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\HomepageSectionController;
+use App\Http\Controllers\InstallerController;
+use App\Http\Controllers\LanguageController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OutdoorFacilityController;
+use App\Http\Controllers\PackageController;
+use App\Http\Controllers\PackageFeatureController;
+use App\Http\Controllers\ParameterController;
+use App\Http\Controllers\PayAsYouGoController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\AdminShortTermController;
+use App\Http\Controllers\AdminProjectInventoryController;
+use App\Http\Controllers\PropertController;
+use App\Http\Controllers\StoryController;
 use App\Http\Controllers\PropertysInquiryController;
+use App\Http\Controllers\ReportReasonController;
+use App\Http\Controllers\SeoSettingsController;
+use App\Http\Controllers\SettingController;
+use App\Http\Controllers\SliderController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\VerifyCustomerFormController;
+use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BulkImportController;
+use App\Http\Controllers\BulkImportGalleryController;
+use App\Http\Controllers\WebhookController;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Session;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,13 +65,9 @@ use App\Http\Controllers\VerifyCustomerFormController;
 |
 */
 
-
-
 Route::get('customer-privacy-policy', [SettingController::class, 'show_privacy_policy'])->name('customer-privacy-policy');
 
-
 Route::get('customer-terms-conditions', [SettingController::class, 'show_terms_conditions'])->name('customer-terms-conditions');
-
 
 Auth::routes();
 
@@ -70,32 +80,46 @@ Route::post('/webhook/flutterwave', [WebhookController::class, 'flutterwave'])->
 Route::post('/webhook/cashfree', [WebhookController::class, 'cashfree'])->middleware('api.localization')->name('webhook.cashfree');
 Route::post('/webhook/phonepe', [WebhookController::class, 'phonepe'])->middleware('api.localization')->name('webhook.phonepe');
 Route::post('/webhook/midtrans', [WebhookController::class, 'midtrans'])->middleware('api.localization')->name('webhook.midtrans');
+Route::match(['GET', 'POST'], '/webhook/mock', [WebhookController::class, 'mock'])->middleware('api.localization')->name('webhook.mock');
 
 Route::get('payment/success', [PaymentController::class, 'paymentSuccess'])->name('payment.success');
 Route::get('payment/success/web', [PaymentController::class, 'paymentSuccessWeb'])->name('payment.success.web');
+Route::get('payment/gateway/{gateway}/status', [PaymentController::class, 'handleGatewayStatus'])->name('payment.gateway.status');
 Route::get('payment/cancel', [PaymentController::class, 'paymentCancel'])->name('payment.cancel');
 Route::get('payment/cancel/web', [PaymentController::class, 'paymentCancelWeb'])->name('payment.cancel.web');
 
-// Installer routes - disabled for production
-if (app()->isLocal() && env('ENABLE_INSTALLER', false)) {
-    Route::group(['prefix' => 'install'], static function () {
-        Route::get('purchase-code', [InstallerController::class, 'purchaseCodeIndex'])->name('install.purchase-code.index');
-        Route::post('purchase-code', [InstallerController::class, 'checkPurchaseCode'])->name('install.purchase-code.post');
-    });
-}
+// route for payments/responses/paystack.blade.php
+// Route::view('payments.responses.paystack')->name('payment.paystack-response');
+Route::get('/payment/responses/paystack', static function () {
+    return view('payments.responses.paystack');
+})->name('payment.paystack.response');
+
+Route::group(['prefix' => 'install', 'middleware' => ['web', 'installer']], static function () {
+    Route::get('purchase-code', [InstallerController::class, 'purchaseCodeIndex'])->name('install.purchase-code.index');
+    Route::post('purchase-code', [InstallerController::class, 'checkPurchaseCode'])->name('install.purchase-code.post');
+    Route::post('keys', [InstallerController::class, 'setKeys']);
+});
 
 // Redirect "property-details" links to app for mobile devices
 Route::get('property-details/{slug}', [DeepLinkController::class, 'handle']);
 
-
 Route::middleware(['language'])->group(function () {
+    // Route::middleware(['guest'])->group(function () {
     Route::get('/', function () {
+        if (Auth::check()) {
+            return redirect()->route('home');
+        }
+
         return view('auth.login');
     });
+    // });
+
+    //  Route::get('demo', [DemoDataController::class, 'index'])->name('demo');
+    //  Route::post('seed-demo-data', [DemoDataController::class, 'seed'])->name('seed-demo-data');
     Route::middleware(['auth', 'checkLogin'])->group(function () {
         Route::get('render_svg', [HomeController::class, 'render_svg'])->name('render_svg');
-        Route::get('dashboard', [App\Http\Controllers\HomeController::class, 'blank_dashboard'])->name('dashboard');
-        Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
+        Route::get('dashboard', [HomeController::class, 'blank_dashboard'])->name('dashboard');
+        Route::get('/home', [HomeController::class, 'index'])->name('home');
         Route::get('about-us', [SettingController::class, 'index']);
         Route::get('privacy-policy', [SettingController::class, 'index']);
         Route::get('terms-conditions', [SettingController::class, 'index']);
@@ -109,13 +133,13 @@ Route::middleware(['language'])->group(function () {
         Route::post('app-settings', [SettingController::class, 'app_settings']);
 
         // Gemini AI Settings
-        Route::get('gemini-settings', [App\Http\Controllers\GeminiSettingsController::class, 'index'])->name('gemini-settings.index');
-        Route::post('gemini-settings', [App\Http\Controllers\GeminiSettingsController::class, 'update'])->name('gemini-settings.update');
-        Route::post('gemini-settings/clear-cache', [App\Http\Controllers\GeminiSettingsController::class, 'clearCache'])->name('gemini-settings.clear-cache');
+        Route::get('gemini-settings', [GeminiSettingsController::class, 'index'])->name('gemini-settings.index');
+        Route::post('gemini-settings', [GeminiSettingsController::class, 'update'])->name('gemini-settings.update');
+        Route::post('gemini-settings/clear-cache', [GeminiSettingsController::class, 'clearCache'])->name('gemini-settings.clear-cache');
 
         // Gemini AI - Admin Panel Routes
-        Route::post('gemini/generate-description', [App\Http\Controllers\GeminiAIController::class, 'generateDescription'])->name('gemini.generate-description');
-        Route::post('gemini/generate-meta', [App\Http\Controllers\GeminiAIController::class, 'generateMetaDetails'])->name('gemini.generate-meta');
+        Route::post('gemini/generate-description', [GeminiAIController::class, 'generateDescription'])->name('gemini.generate-description');
+        Route::post('gemini/generate-meta', [GeminiAIController::class, 'generateMetaDetails'])->name('gemini.generate-meta');
         Route::get('system-version', [SettingController::class, 'system_version']);
         Route::post('web-settings', [SettingController::class, 'web_settings']);
         Route::get('notification-settings', [SettingController::class, 'notificationSettingIndex'])->name('notification-setting-index');
@@ -144,76 +168,85 @@ Route::middleware(['language'])->group(function () {
         /** Admin Appointment Settings */
         Route::prefix('admin/appointment')->group(function () {
             // Index
-            Route::get('/', [App\Http\Controllers\AdminAppointmentController::class, 'index'])->name('admin.appointment.index');
+            Route::get('/', [AdminAppointmentController::class, 'index'])->name('admin.appointment.index');
 
             // Preferences
-            Route::get('preferences', [App\Http\Controllers\AdminAppointmentController::class, 'preferencesIndex'])->name('admin.appointment.preferences.index');
-            Route::post('preferences', [App\Http\Controllers\AdminAppointmentController::class, 'storePreferences'])->name('admin.appointment.preferences.store');
+            Route::get('preferences', [AdminAppointmentController::class, 'preferencesIndex'])->name('admin.appointment.preferences.index');
+            Route::post('preferences', [AdminAppointmentController::class, 'storePreferences'])->name('admin.appointment.preferences.store');
 
             // Time Schedule
-            Route::get('time-schedule', [App\Http\Controllers\AdminAppointmentController::class, 'timeScheduleIndex'])->name('admin.appointment.time-schedule.index');
-            Route::post('time-schedule', [App\Http\Controllers\AdminAppointmentController::class, 'storeTimeSchedule'])->name('admin.appointment.time-schedule.store');
-            Route::delete('time-schedule/{id}/remove', [App\Http\Controllers\AdminAppointmentController::class, 'removeTimeSchedule'])->name('admin.appointment.time-schedule.remove');
-            Route::post('time-schedule/toggle-day', [App\Http\Controllers\AdminAppointmentController::class, 'toggleDayActive'])->name('admin.appointment.time-schedule.toggle-day');
+            Route::get('time-schedule', [AdminAppointmentController::class, 'timeScheduleIndex'])->name('admin.appointment.time-schedule.index');
+            Route::post('time-schedule', [AdminAppointmentController::class, 'storeTimeSchedule'])->name('admin.appointment.time-schedule.store');
+            Route::delete('time-schedule/{id}/remove', [AdminAppointmentController::class, 'removeTimeSchedule'])->name('admin.appointment.time-schedule.remove');
+            Route::post('time-schedule/toggle-day', [AdminAppointmentController::class, 'toggleDayActive'])->name('admin.appointment.time-schedule.toggle-day');
 
             // Extra Time Slots
-            Route::get('extra-time-slots', [App\Http\Controllers\AdminAppointmentController::class, 'extraTimeSlotsIndex'])->name('admin.appointment.extra-time-slots.index');
-            Route::get('extra-time-slots/list', [App\Http\Controllers\AdminAppointmentController::class, 'getExtraTimeSlotsList'])->name('admin.appointment.extra-time-slots.list');
-            Route::post('extra-time-slots', [App\Http\Controllers\AdminAppointmentController::class, 'storeExtraTimeSlot'])->name('admin.appointment.extra-time-slots.store');
-            Route::delete('extra-time-slots/{id}/delete', [App\Http\Controllers\AdminAppointmentController::class, 'deleteExtraTimeSlot'])->name('admin.appointment.extra-time-slots.delete');
+            Route::get('extra-time-slots', [AdminAppointmentController::class, 'extraTimeSlotsIndex'])->name('admin.appointment.extra-time-slots.index');
+            Route::get('extra-time-slots/list', [AdminAppointmentController::class, 'getExtraTimeSlotsList'])->name('admin.appointment.extra-time-slots.list');
+            Route::post('extra-time-slots', [AdminAppointmentController::class, 'storeExtraTimeSlot'])->name('admin.appointment.extra-time-slots.store');
+            Route::delete('extra-time-slots/{id}/delete', [AdminAppointmentController::class, 'deleteExtraTimeSlot'])->name('admin.appointment.extra-time-slots.delete');
 
             // Unavailability
-            Route::get('unavailability', [App\Http\Controllers\AdminAppointmentController::class, 'unavailabilityIndex'])->name('admin.appointment.unavailability.index');
-            Route::post('unavailability', [App\Http\Controllers\AdminAppointmentController::class, 'storeUnavailability'])->name('admin.appointment.unavailability.store');
-            Route::get('unavailability/{id}/delete', [App\Http\Controllers\AdminAppointmentController::class, 'deleteUnavailability'])->name('admin.appointment.unavailability.delete');
+            Route::get('unavailability', [AdminAppointmentController::class, 'unavailabilityIndex'])->name('admin.appointment.unavailability.index');
+            Route::post('unavailability', [AdminAppointmentController::class, 'storeUnavailability'])->name('admin.appointment.unavailability.store');
+            Route::get('unavailability/{id}/delete', [AdminAppointmentController::class, 'deleteUnavailability'])->name('admin.appointment.unavailability.delete');
         });
         /** End Admin Appointment Settings */
 
         /** Appointment Management */
         Route::prefix('appointment-management')->group(function () {
-            Route::get('/', [App\Http\Controllers\AdminAppointmentController::class, 'appointmentManagementIndex'])->name('appointment-management.index');
-            Route::get('/list', [App\Http\Controllers\AdminAppointmentController::class, 'getAppointmentsList'])->name('appointment-management.list');
-            Route::post('/update-status', [App\Http\Controllers\AdminAppointmentController::class, 'appointmentManagementUpdateStatus'])->name('appointment-management.update-status');
-            Route::post('/available-slots', [App\Http\Controllers\AdminAppointmentController::class, 'getAvailableSlots'])->name('appointment-management.available-slots');
-            Route::delete('/{id}', [App\Http\Controllers\AdminAppointmentController::class, 'appointmentManagementDestroy'])->name('appointment-management.destroy');
+            Route::get('/', [AdminAppointmentController::class, 'appointmentManagementIndex'])->name('appointment-management.index');
+            Route::get('/list', [AdminAppointmentController::class, 'getAppointmentsList'])->name('appointment-management.list');
+            Route::post('/update-status', [AdminAppointmentController::class, 'appointmentManagementUpdateStatus'])->name('appointment-management.update-status');
+            Route::post('/available-slots', [AdminAppointmentController::class, 'getAvailableSlots'])->name('appointment-management.available-slots');
+            Route::delete('/{id}', [AdminAppointmentController::class, 'appointmentManagementDestroy'])->name('appointment-management.destroy');
         });
         /** End Appointment Management */
 
         /** Appointment Reports Management */
         Route::prefix('admin/appointment/reports')->group(function () {
-            Route::get('/', [App\Http\Controllers\AdminAppointmentReportController::class, 'index'])->name('admin.appointment.reports.index');
-            Route::get('/list', [App\Http\Controllers\AdminAppointmentReportController::class, 'getReportsList'])->name('admin.appointment.reports.list');
-            Route::post('/update-status', [App\Http\Controllers\AdminAppointmentReportController::class, 'updateReportStatus'])->name('admin.appointment.reports.update-status');
-            Route::post('/block-user', [App\Http\Controllers\AdminAppointmentReportController::class, 'blockUser'])->name('admin.appointment.reports.block-user');
+            Route::get('/', [AdminAppointmentReportController::class, 'index'])->name('admin.appointment.reports.index');
+            Route::get('/list', [AdminAppointmentReportController::class, 'getReportsList'])->name('admin.appointment.reports.list');
+            Route::post('/update-status', [AdminAppointmentReportController::class, 'updateReportStatus'])->name('admin.appointment.reports.update-status');
+            Route::post('/block-user', [AdminAppointmentReportController::class, 'blockUser'])->name('admin.appointment.reports.block-user');
 
             // Blocked Users Management
-            Route::get('/blocked-users', [App\Http\Controllers\AdminAppointmentReportController::class, 'blockedUsersIndex'])->name('admin.appointment.reports.blocked-users');
-            Route::get('/blocked-users/list', [App\Http\Controllers\AdminAppointmentReportController::class, 'getBlockedUsersList'])->name('admin.appointment.reports.blocked-users.list');
-            Route::post('/unblock-user', [App\Http\Controllers\AdminAppointmentReportController::class, 'unblockUser'])->name('admin.appointment.reports.unblock-user');
+            Route::get('/blocked-users', [AdminAppointmentReportController::class, 'blockedUsersIndex'])->name('admin.appointment.reports.blocked-users');
+            Route::get('/blocked-users/list', [AdminAppointmentReportController::class, 'getBlockedUsersList'])->name('admin.appointment.reports.blocked-users.list');
+            Route::post('/unblock-user', [AdminAppointmentReportController::class, 'unblockUser'])->name('admin.appointment.reports.unblock-user');
         });
         /** End Appointment Reports Management */
 
+        /** CRM Leads Management */
+        Route::prefix('admin/crm/leads')->group(function () {
+            Route::get('/', [CrmLeadController::class, 'index'])->name('admin.crm.leads.index');
+            Route::get('/list', [CrmLeadController::class, 'getLeadsList'])->name('admin.crm.leads.list');
+            Route::post('/update-status', [CrmLeadController::class, 'updateStatus'])->name('admin.crm.leads.update-status');
+            Route::get('/show', [CrmLeadController::class, 'show'])->name('admin.crm.leads.show');
+            Route::delete('/{id}', [CrmLeadController::class, 'destroy'])->name('admin.crm.leads.destroy');
+        });
+        /** End CRM Leads Management */
+
         Route::post('system-version-setting', [SettingController::class, 'system_version_setting']);
 
-        /// START :: HOME ROUTE
-        Route::get('change-password', [App\Http\Controllers\HomeController::class, 'change_password'])->name('changepassword');
-        Route::post('check-password', [App\Http\Controllers\HomeController::class, 'check_password'])->name('checkpassword');
-        Route::post('store-password', [App\Http\Controllers\HomeController::class, 'store_password'])->name('changepassword.store');
+        // / START :: HOME ROUTE
+        Route::get('change-password', [HomeController::class, 'change_password'])->name('changepassword');
+        Route::post('check-password', [HomeController::class, 'check_password'])->name('checkpassword');
+        Route::post('store-password', [HomeController::class, 'store_password'])->name('changepassword.store');
         Route::get('changeprofile', [HomeController::class, 'changeprofile'])->name('changeprofile');
         Route::post('updateprofile', [HomeController::class, 'update_profile'])->name('updateprofile');
         Route::post('firebase_messaging_settings', [HomeController::class, 'firebase_messaging_settings'])->name('firebase_messaging_settings');
 
-        /// END :: HOME ROUTE
+        // / END :: HOME ROUTE
 
-        /// START :: SETTINGS ROUTE
+        // / START :: SETTINGS ROUTE
 
         Route::post('settings', [SettingController::class, 'settings']);
         Route::post('store-settings', [SettingController::class, 'system_settings'])->name('store-settings');
         Route::post('store-payment-gateway-settings', [SettingController::class, 'payment_gateway_settings'])->name('store-payment-gateway-settings');
-        /// END :: SETTINGS ROUTE
+        // / END :: SETTINGS ROUTE
 
-        /// START :: LANGUAGES ROUTE
-
+        // / START :: LANGUAGES ROUTE
 
         Route::get('language_list', [LanguageController::class, 'show']);
         Route::get('set-language/{lang}', [LanguageController::class, 'set_language']);
@@ -226,19 +259,18 @@ Route::middleware(['language'])->group(function () {
         Route::post('update-language-status', [LanguageController::class, 'updateStatus'])->name('update-language-status');
         Route::resource('language', LanguageController::class);
         Route::post('language_update', [LanguageController::class, 'update'])->name('language_update');
-        Route::get('language-destory/{id}', [LanguageController::class, 'destroy'])->name('language.destroy');
 
-        /// END :: LANGUAGES ROUTE
+        // / END :: LANGUAGES ROUTE
 
-        /// START :: PAYMENT ROUTE
+        // / START :: PAYMENT ROUTE
 
         Route::get('payment-list', [PaymentController::class, 'paymentList'])->name('payment.list');
         Route::get('payment', [PaymentController::class, 'index'])->name('payment.index');
         Route::post('payment-status', [PaymentController::class, 'updateStatus'])->name('payment.status');
         Route::get('payment-receipt/{id}/view', [PaymentController::class, 'viewReceipt'])->name('payment.receipt.view');
-        /// END :: PAYMENT ROUTE
+        // / END :: PAYMENT ROUTE
 
-        /// START :: USER ROUTE
+        // / START :: USER ROUTE
 
         Route::resource('users', UserController::class);
         Route::post('users-update', [UserController::class, 'update']);
@@ -246,67 +278,78 @@ Route::middleware(['language'])->group(function () {
         Route::get('userList', [UserController::class, 'userList']);
         Route::get('get_users_inquiries', [UserController::class, 'users_inquiries']);
         Route::get('users_inquiries', [UserController::class, function () {
-            if (!has_permissions('read', 'users_inquiries')) {
+            if (! has_permissions('read', 'users_inquiries')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
+
             return view('users.users_inquiries');
         }]);
         Route::get('destroy_contact_request/{id}', [UserController::class, 'destroy_contact_request'])->name('destroy_contact_request');
 
+        // / END :: PAYMENT ROUTE
 
-
-
-        /// END :: PAYMENT ROUTE
-
-        /// START :: PAYMENT ROUTE
+        // / START :: PAYMENT ROUTE
 
         Route::resource('customer', CustomersController::class);
         Route::get('customerList', [CustomersController::class, 'customerList']);
         Route::post('customerstatus', [CustomersController::class, 'update'])->name('customer.customerstatus');
         Route::post('customer/change-password', [CustomersController::class, 'changePassword'])->name('customer.change-password');
-        /// END :: CUSTOMER ROUTE
+        // / END :: CUSTOMER ROUTE
 
-        /// START :: SLIDER ROUTE
+        // / START :: SLIDER ROUTE
 
         Route::resource('slider', SliderController::class);
         // Route::post('slider-order', [SliderController::class, 'update'])->name('slider.slider-order');
-        Route::get('slider-destroy/{id}', [SliderController::class, 'destroy'])->name('slider.destroy');
+        Route::get('slider-destroy/{id}', [SliderController::class, 'destroy'])->name('slider.destroy.url');
         Route::get('sliderList', [SliderController::class, 'sliderList']);
-        /// END :: SLIDER ROUTE
+        // / END :: SLIDER ROUTE
 
-        /// START :: ARTICLE ROUTE
+        // / START :: ARTICLE ROUTE
 
         Route::resource('article', ArticleController::class);
         Route::get('article_list', [ArticleController::class, 'show'])->name('article_list');
         Route::get('add_article', [ArticleController::class, 'create'])->name('add_article');
-        Route::delete('article-destroy/{id}', [ArticleController::class, 'destroy'])->name('article.destroy');
+        Route::delete('article-destroy/{id}', [ArticleController::class, 'destroy'])->name('article.destroy.url');
         Route::post('article/generate-slug', [ArticleController::class, 'generateAndCheckSlug'])->name('article.generate-slug');
-        /// END :: ARTICLE ROUTE
+        // / END :: ARTICLE ROUTE
 
-        /// START :: AD BANNERS ROUTE
+        // / START :: AD BANNERS ROUTE
         Route::post('ad-banners/update-status', [AdBannerController::class, 'updateStatus'])->name('ad-banners.update-status');
         Route::get('properties/by-category', [AdBannerController::class, 'getPropertiesByCategory'])->name('properties.by-category');
         Route::post('ad-banners/update/{id}', [AdBannerController::class, 'update'])->name('ad-banners.update');
         Route::resource('ad-banners', AdBannerController::class)->except(['update']);
-        /// END :: AD BANNERS ROUTE
+        // / END :: AD BANNERS ROUTE
 
-        /// START :: ADVERTISEMENT ROUTE
+        // / START :: ADVERTISEMENT ROUTE
 
         Route::resource('featured_properties', AdvertisementController::class);
         Route::get('featured_properties_list', [AdvertisementController::class, 'show']);
         Route::post('featured_properties_status', [AdvertisementController::class, 'updateStatus'])->name('featured_properties.update-advertisement-status');
         Route::post('adv-status-update', [AdvertisementController::class, 'update'])->name('adv-status-update');
-        /// END :: ADVERTISEMENT ROUTE
+        // / END :: ADVERTISEMENT ROUTE
 
-        /// START :: PACKAGE ROUTE
+        // / START :: PACKAGE ROUTE
+        // Agent Specific
+        Route::post('agent-package-features/status-update', [PackageFeatureController::class, 'updateStatus'])->name('agent-package-features.status-update');
+        Route::get('agent-package-features/translated-names/{id}', [PackageFeatureController::class, 'translatedNames'])->name('agent-package-features.translated-names');
+        Route::post('agent-package-features/update-translated-names', [PackageFeatureController::class, 'updateTranslatedNames'])->name('agent-package-features.update-translated-names');
+        Route::resource('agent-package-features', PackageFeatureController::class)->parameters(['agent-package-features' => 'package_feature']);
 
+        Route::post('agent-package-status', [PackageController::class, 'updatestatus'])->name('agent-packages.updatestatus');
+        Route::get('agent-user-packages', [PackageController::class, 'userPackages'])->name('agent-user-packages.index');
+        Route::get('agent-user-package-list', [PackageController::class, 'getUserPackageList'])->name('agent-user-packages.list');
+        Route::get('assign-agent-package', [PackageController::class, 'assignPackageToUserIndex'])->name('assign-agent-package.index');
+        Route::post('assign-agent-package', [PackageController::class, 'assignPackageToUser'])->name('assign-agent-package.store');
+        Route::resource('agent-packages', PackageController::class)->parameters(['agent-packages' => 'package']);
+
+        // User Specific
         Route::post('package-features/status-update', [PackageFeatureController::class, 'updateStatus'])->name('package-features.status-update');
         Route::get('package-features/translated-names/{id}', [PackageFeatureController::class, 'translatedNames'])->name('package-features.translated-names');
         Route::post('package-features/update-translated-names', [PackageFeatureController::class, 'updateTranslatedNames'])->name('package-features.update-translated-names');
-        Route::resource('package-features',PackageFeatureController::class);
+        Route::resource('package-features', PackageFeatureController::class);
 
         Route::post('package-status', [PackageController::class, 'updatestatus'])->name('package.updatestatus');
-        Route::get('user-packages', [PackageController::class,'userPackageIndex'])->name('user-packages.index');
+        Route::get('user-packages', [PackageController::class, 'userPackages'])->name('user-packages.index');
         Route::get('user-package-list', [PackageController::class, 'getUserPackageList'])->name('user-packages.list');
         Route::get('assign-package', [PackageController::class, 'assignPackageToUserIndex'])->name('assign-package.index');
         Route::post('assign-package', [PackageController::class, 'assignPackageToUser'])->name('assign-package.store');
@@ -315,35 +358,40 @@ Route::middleware(['language'])->group(function () {
         Route::get('select2/customers', [PackageController::class, 'selectCustomers'])->name('select2.customers');
         Route::resource('package', PackageController::class);
 
+        // / START :: PAY AS YOU GO ROUTE
+        Route::get('pay-as-you-go/show', [PayAsYouGoController::class, 'show'])->name('pay-as-you-go.show');
+        Route::post('pay-as-you-go/status', [PayAsYouGoController::class, 'updateStatus'])->name('pay-as-you-go.updatestatus');
+        Route::post('pay-as-you-go/{id}', [PayAsYouGoController::class, 'update'])->name('pay-as-you-go.update-post');
+        Route::resource('pay-as-you-go', PayAsYouGoController::class)->only(['index', 'update']);
+        // / END :: PAY AS YOU GO ROUTE
 
-        /// END :: PACKAGE ROUTE
+        // / END :: PACKAGE ROUTE
 
-
-        /// START :: CATEGORY ROUTE
+        // / START :: CATEGORY ROUTE
         Route::resource('categories', CategoryController::class);
         Route::get('categoriesList', [CategoryController::class, 'categoryList']);
         Route::post('categories-update', [CategoryController::class, 'update']);
         Route::post('categorystatus', [CategoryController::class, 'updateCategory'])->name('categorystatus');
         Route::post('category/generate-slug', [CategoryController::class, 'generateAndCheckSlug'])->name('category.generate-slug');
-        /// END :: CATEGORYW ROUTE
+        Route::get('/reorder-facilities/{id}', [CategoryController::class, 'reorderFacilities'])->name('categories.reorder-facilities');
+        Route::post('/save-facility-order', [CategoryController::class, 'saveFacilityOrder'])->name('categories.save-facility-order');
+        // / END :: CATEGORYW ROUTE
 
-
-        /// START :: PARAMETER FACILITY ROUTE
+        // / START :: PARAMETER FACILITY ROUTE
 
         Route::resource('parameters', ParameterController::class);
         Route::get('parameter-list', [ParameterController::class, 'show']);
         Route::post('parameter-update', [ParameterController::class, 'update']);
-        /// END :: PARAMETER FACILITY ROUTE
+        // / END :: PARAMETER FACILITY ROUTE
 
-        /// START :: OUTDOOR FACILITY ROUTE
+        // / START :: OUTDOOR FACILITY ROUTE
         Route::resource('outdoor_facilities', OutdoorFacilityController::class);
         Route::get('facility-list', [OutdoorFacilityController::class, 'show']);
         Route::post('facility-update', [OutdoorFacilityController::class, 'update']);
-        Route::get('facility-delete/{id}', [OutdoorFacilityController::class, 'destroy'])->name('outdoor_facilities.destroy');
-        /// END :: OUTDOOR FACILITY ROUTE
+        Route::get('facility-delete/{id}', [OutdoorFacilityController::class, 'destroy'])->name('outdoor_facilities.destroy.url');
+        // / END :: OUTDOOR FACILITY ROUTE
 
-
-        /// START :: PROPERTY ROUTE
+        // / START :: PROPERTY ROUTE
 
         Route::prefix('property')->group(function () {
             Route::post('generate-slug', [PropertController::class, 'generateAndCheckSlug'])->name('property.generate-slug');
@@ -356,51 +404,75 @@ Route::middleware(['language'])->group(function () {
         Route::post('updatepropertystatus', [PropertController::class, 'updateStatus'])->name('updatepropertystatus');
         Route::post('property-gallery', [PropertController::class, 'removeGalleryImage'])->name('property.removeGalleryImage');
         Route::get('get-state-by-country', [PropertController::class, 'getStatesByCountry'])->name('property.getStatesByCountry');
-        Route::get('property-destroy/{id}', [PropertController::class, 'destroy'])->name('property.destroy');
+        Route::get('property-destroy/{id}', [PropertController::class, 'destroy'])->name('property.destroy.url');
         Route::get('getFeaturedPropertyList', [PropertController::class, 'getFeaturedPropertyList']);
         Route::post('updateaccessability', [PropertController::class, 'updateaccessability'])->name('updateaccessability');
         Route::post('update-property-request-status', [PropertController::class, 'updateRequestStatus'])->name('update-property-request-status');
 
         Route::get('updateFCMID', [UserController::class, 'updateFCMID']);
-        /// END :: PROPERTY ROUTE
+        // / END :: PROPERTY ROUTE
 
-
-        /// START :: PROPERTY INQUIRY
+        // / START :: PROPERTY INQUIRY
         Route::resource('property-inquiry', PropertysInquiryController::class);
         Route::get('getPropertyInquiryList', [PropertysInquiryController::class, 'getPropertyInquiryList']);
         Route::post('property-inquiry-status', [PropertysInquiryController::class, 'updateStatus'])->name('property-inquiry.updateStatus');
-        /// ENND :: PROPERTY INQUIRY
+        // / ENND :: PROPERTY INQUIRY
 
-        /// START :: REPORTREASON
+        // / START :: REPORTREASON
         Route::resource('report-reasons', ReportReasonController::class);
         Route::get('report-reasons-list', [ReportReasonController::class, 'show']);
         Route::post('report-reasons-update', [ReportReasonController::class, 'update']);
         Route::get('report-reasons-destroy/{id}', [ReportReasonController::class, 'destroy'])->name('reasons.destroy');
         Route::get('users_reports', [ReportReasonController::class, 'users_reports']);
         Route::get('user_reports_list', [ReportReasonController::class, 'user_reports_list']);
-        /// END :: REPORTREASON
+        // / END :: REPORTREASON
 
         Route::resource('property-inquiry', PropertysInquiryController::class);
 
-
-        /// START :: CHAT ROUTE
+        // / START :: CHAT ROUTE
 
         Route::get('get-chat-list', [ChatController::class, 'getChats'])->name('get-chat-list');
         Route::post('store_chat', [ChatController::class, 'store']);
         Route::get('getAllMessage', [ChatController::class, 'getAllMessage']);
-        Route::post('block-user/{c_id}', [ChatController::class,'blockUser'])->name('block-user');
-        Route::post('unblock-user/{c_id}', [ChatController::class,'unBlockUser'])->name('unblock-user');
-        /// END :: CHAT ROUTE
+        Route::post('block-user/{c_id}', [ChatController::class, 'blockUser'])->name('block-user');
+        Route::post('unblock-user/{c_id}', [ChatController::class, 'unBlockUser'])->name('unblock-user');
+        // / END :: CHAT ROUTE
 
-
-        /// START :: NOTIFICATION
+        // / START :: NOTIFICATION
         Route::resource('notification', NotificationController::class);
         Route::get('notificationList', [NotificationController::class, 'notificationList']);
         Route::get('notification-delete', [NotificationController::class, 'destroy']);
         Route::post('notification-multiple-delete', [NotificationController::class, 'multiple_delete']);
-        /// END :: NOTIFICATION
+        // / END :: NOTIFICATION
 
-        /// START :: PROJECT
+        // / START :: BULK IMPORT
+        Route::prefix('bulk-import')->name('bulk-import.')->group(function () {
+            // Pages
+            Route::get('property', [BulkImportController::class, 'propertyIndex'])->name('property');
+            Route::get('project', [BulkImportController::class, 'projectIndex'])->name('project');
+
+            // Example CSV downloads
+            Route::get('download/property-csv', [BulkImportController::class, 'downloadPropertyCsv'])->name('download.property');
+            Route::get('download/project-csv', [BulkImportController::class, 'downloadProjectCsv'])->name('download.project');
+            Route::get('download/categories-csv', [BulkImportController::class, 'downloadCategoriesCsv'])->name('download.categories');
+
+            // CSV processing
+            Route::post('process/property', [BulkImportController::class, 'processPropertyCsv'])->name('process.property');
+            Route::post('process/project', [BulkImportController::class, 'processProjectCsv'])->name('process.project');
+
+            // Customer search (Select2) + info for "upload for customer" mode
+            Route::get('customer-search', [BulkImportController::class, 'searchCustomers'])->name('customer.search');
+            Route::get('customer-info', [BulkImportController::class, 'getCustomerInfo'])->name('customer.info');
+
+            // Gallery (shared between property and project import)
+            Route::get('gallery', [BulkImportGalleryController::class, 'index'])->name('gallery.index');
+            Route::post('gallery/upload', [BulkImportGalleryController::class, 'upload'])->name('gallery.upload');
+            Route::post('gallery/upload-video', [BulkImportGalleryController::class, 'uploadVideo'])->name('gallery.upload-video');
+            Route::post('gallery/destroy', [BulkImportGalleryController::class, 'destroy'])->name('gallery.destroy');
+        });
+        // / END :: BULK IMPORT
+
+        // / START :: PROJECT
         Route::post('project-generate-slug', [ProjectController::class, 'generateAndCheckSlug'])->name('project.generate-slug');
         Route::post('updateProjectStatus', [ProjectController::class, 'updateStatus'])->name('updateProjectStatus');
         Route::post('project-gallery', [ProjectController::class, 'removeGalleryImage'])->name('project.remove-gallary-images');
@@ -408,35 +480,49 @@ Route::middleware(['language'])->group(function () {
         Route::delete('remove-project-floor/{id}', [ProjectController::class, 'removeFloorPlan'])->name('project.remove-floor-plan');
         Route::post('update-project-request-status', [ProjectController::class, 'updateRequestStatus'])->name('update-project-request-status');
         Route::resource('project', ProjectController::class);
-        /// END :: PROJECT
 
-        /// START :: SEO SETTINGS
+        /** Stories */
+        Route::get('story', [StoryController::class, 'index'])->name('story.index');
+        Route::get('getStoryList', [StoryController::class, 'getStoryList']);
+        Route::get('story/create', [StoryController::class, 'create'])->name('story.create');
+        Route::get('story/entity-media', [StoryController::class, 'getEntityMedia'])->name('story.entity-media');
+        Route::post('story', [StoryController::class, 'store'])->name('story.store');
+        Route::get('story/{id}', [StoryController::class, 'destroy'])->name('story.destroy');
+        // / END :: PROJECT
+
+        /** Audit Logs */
+        Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+        Route::get('audit-logs/list', [AuditLogController::class, 'list'])->name('audit-logs.list');
+
+        // / START :: SEO SETTINGS
         Route::resource('seo_settings', SeoSettingsController::class);
-        Route::get('seo-settings-destroy/{id}', [SeoSettingsController::class, 'destroy'])->name('seo_settings.destroy');
-        /// END :: SEO SETTINGS
+        Route::get('seo-settings-destroy/{id}', [SeoSettingsController::class, 'destroy'])->name('seo_settings.destroy.url');
+        // / END :: SEO SETTINGS
 
-        /// START :: FAQs
+        // / START :: FAQs
         Route::post('faq/status-update', [FaqController::class, 'statusUpdate'])->name('faqs.status-update');
         Route::resource('faqs', FaqController::class);
-        /// END :: FAQs
+        // / END :: FAQs
 
-        /// START :: City Images
+        // / START :: City Images
         Route::post('city-images/status-update', [CityImagesController::class, 'statusUpdate'])->name('city-images.status-update');
         Route::post('city-image-settings', [CityImagesController::class, 'cityImageSettings'])->name('city-image-settings');
         Route::resource('city-images', CityImagesController::class);
-        /// END :: City Images
+        // / END :: City Images
 
-        /// START :: Homepage Sections
+        // / START :: Homepage Sections
+        Route::post('homepage-sections/update-toggles', [HomepageSectionController::class, 'updateToggles'])->name('homepage-sections.update-toggles');
         Route::post('homepage-sections/status-update', [HomepageSectionController::class, 'statusUpdate'])->name('homepage-sections.status-update');
         Route::post('homepage-sections/update-order', [HomepageSectionController::class, 'updateOrder'])->name('homepage-sections.update-order');
+        Route::get('homepage-sections/change-order', [HomepageSectionController::class, 'changeOrder'])->name('homepage-sections.change-order');
         Route::resource('homepage-sections', HomepageSectionController::class);
-        /// END :: Homepage Sections
-
+        // / END :: Homepage Sections
 
         Route::get('calculator', function () {
-            if (!has_permissions('read', 'calculator')) {
+            if (! has_permissions('read', 'calculator')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
+
             return view('Calculator.calculator');
         });
 
@@ -444,12 +530,20 @@ Route::middleware(['language'])->group(function () {
         Route::post('admin/cache/gmaps/clear', function () {
             Log::info('Google Maps cache cleared');
             Cache::store('gplaces')->clear();
+
             return true;
         })->name('cache.gmaps.clear');
 
+        // Flush only the Open Street Maps cache store (osmmaps)
+        Route::post('admin/cache/osm/clear', function () {
+            Log::info('Open Street Maps cache cleared');
+            Cache::store('osmmaps')->clear();
 
-        /// Start :: User Verification Form
-        Route::prefix('verify-customer')->group(function(){
+            return true;
+        })->name('cache.osm.clear');
+
+        // / Start :: User Verification Form
+        Route::prefix('verify-customer')->group(function () {
             Route::get('/custom-form', [VerifyCustomerFormController::class, 'verifyCustomerFormIndex'])->name('verify-customer.form');
             Route::post('/save-custom-form', [VerifyCustomerFormController::class, 'verifyCustomerFormStore'])->name('verify-customer-form.store');
             Route::get('/list-custom-form', [VerifyCustomerFormController::class, 'verifyCustomerFormShow'])->name('verify-customer-form.show');
@@ -459,93 +553,192 @@ Route::middleware(['language'])->group(function () {
             Route::delete('/delete-custom-form-option/{id}', [VerifyCustomerFormController::class, 'verifyCustomerFormOptionDestroy'])->name('verify-customer-form.delete-option');
         });
 
+        Route::prefix('agent-verification-form-sections')->group(function () {
+            Route::get('/', [AgentVerificationFormSectionController::class, 'index'])->name('agent-verification-form-sections.index');
+            Route::post('/store', [AgentVerificationFormSectionController::class, 'store'])->name('agent-verification-form-sections.store');
+            Route::get('/list', [AgentVerificationFormSectionController::class, 'show'])->name('agent-verification-form-sections.show');
+            Route::post('/update', [AgentVerificationFormSectionController::class, 'update'])->name('agent-verification-form-sections.update');
+            Route::post('/status', [AgentVerificationFormSectionController::class, 'status'])->name('agent-verification-form-sections.status');
+            Route::delete('/delete/{id}', [AgentVerificationFormSectionController::class, 'destroy'])->name('agent-verification-form-sections.destroy');
+            Route::post('/update-sequence', [AgentVerificationFormSectionController::class, 'updateSequence'])->name('agent-verification-form-sections.update-sequence');
+            Route::get('/reorder-fields/{id}', [AgentVerificationFormSectionController::class, 'reorderFields'])->name('agent-verification-form-sections.reorder-fields');
+            Route::post('/save-field-order', [AgentVerificationFormSectionController::class, 'saveFieldOrder'])->name('agent-verification-form-sections.save-field-order');
+        });
+
+        Route::prefix('agent-verification-form-fields')->group(function () {
+            Route::get('/', [AgentVerificationFormController::class, 'index'])->name('agent-verification-form-fields.index');
+            Route::post('/store', [AgentVerificationFormController::class, 'store'])->name('agent-verification-form-fields.store');
+            Route::get('/list', [AgentVerificationFormController::class, 'show'])->name('agent-verification-form-fields.show');
+            Route::post('/update', [AgentVerificationFormController::class, 'update'])->name('agent-verification-form-fields.update');
+            Route::post('/status', [AgentVerificationFormController::class, 'status'])->name('agent-verification-form-fields.status');
+            Route::delete('/delete/{id}', [AgentVerificationFormController::class, 'destroy'])->name('agent-verification-form-fields.destroy');
+            Route::post('/update-sequence', [AgentVerificationFormController::class, 'updateSequence'])->name('agent-verification-form-fields.update-sequence');
+        });
+
         Route::prefix('agent-verification')->group(function () {
             Route::get('/', [VerifyCustomerFormController::class, 'agentVerificationListIndex'])->name('agent-verification.index');
             Route::get('/list', [VerifyCustomerFormController::class, 'agentVerificationList'])->name('agent-verification.list');
             Route::get('/submitted-form/{id}', [VerifyCustomerFormController::class, 'getAgentSubmittedForm'])->name('agent-verification.show-form');
-            Route::post('/update-verification-status', [VerifyCustomerFormController::class,'updateVerificationStatus'])->name('agent-verification.change-status');
-            Route::post('/auto-approve-settings', [VerifyCustomerFormController::class,'autoApproveSettings'])->name('agent-verification.auto-approve');
-            Route::post('/verification-required-for-user-settings', [VerifyCustomerFormController::class,'verificationRequiredForUserSettings'])->name('agent-verification.verification-required-for-user');
+            Route::post('/update-verification-status', [VerifyCustomerFormController::class, 'updateVerificationStatus'])->name('agent-verification.change-status');
+            Route::post('/auto-approve-settings', [VerifyCustomerFormController::class, 'agentAutoApproveSettings'])->name('agent-verification.auto-approve');
+            Route::post('/verification-required-for-agent-settings', [VerifyCustomerFormController::class, 'verificationRequiredForAgentSettings'])->name('agent-verification.verification-required-for-agent');
         });
 
-        /// START :: DEMO DATA MANAGEMENT
+        Route::prefix('user-verification')->group(function () {
+            Route::get('/', [VerifyCustomerFormController::class, 'userVerificationListIndex'])->name('user-verification.index');
+            Route::get('/list', [VerifyCustomerFormController::class, 'userVerificationList'])->name('user-verification.list');
+            Route::get('/submitted-form/{id}', [VerifyCustomerFormController::class, 'getUserSubmittedForm'])->name('user-verification.show-form');
+            Route::post('/update-verification-status', [VerifyCustomerFormController::class, 'updateUserVerificationStatus'])->name('user-verification.change-status');
+            Route::post('/auto-approve-settings', [VerifyCustomerFormController::class, 'userAutoApproveSettings'])->name('user-verification.auto-approve');
+            Route::post('/verification-required-for-user-settings', [VerifyCustomerFormController::class, 'verificationRequiredForUserSettings'])->name('user-verification.verification-required-for-user');
+        });
+
+        // / START :: DEMO DATA MANAGEMENT
         Route::prefix('demo-data')->group(function () {
             Route::get('/', [DemoDataController::class, 'index'])->name('demo-data.index');
             Route::post('/seed', [DemoDataController::class, 'seedDemoData'])->name('demo-data.seed');
             Route::post('/clear', [DemoDataController::class, 'clearDemoData'])->name('demo-data.clear');
             Route::post('/reset', [DemoDataController::class, 'resetDemoData'])->name('demo-data.reset');
         });
-        /// END :: DEMO DATA MANAGEMENT
+        // / END :: DEMO DATA MANAGEMENT
+
+        // / START :: CUSTOM PAGES ROUTE
+        Route::resource('custom-page', CustomPageController::class);
+        Route::post('update-custom-page-status', [CustomPageController::class, 'updateStatus'])->name('update-custom-page-status');
+        Route::post('custom-page/generate-slug', [CustomPageController::class, 'generateAndCheckSlug'])->name('custom-page.generate-slug');
+        // / END :: CUSTOM PAGES ROUTE
+
+        /** Vacation Rentals (FASE 8, T1) */
+        Route::prefix('admin/short-term')->group(function () {
+            Route::get('/reservations', [AdminShortTermController::class, 'reservationsIndex'])->name('admin.short-term.reservations.index');
+            Route::get('/reservations/list', [AdminShortTermController::class, 'getReservationsList'])->name('admin.short-term.reservations.list');
+            Route::post('/reservations/update-status', [AdminShortTermController::class, 'updateReservationStatus'])->name('admin.short-term.reservations.update-status');
+            Route::delete('/reservations/{id}', [AdminShortTermController::class, 'deleteReservation'])->name('admin.short-term.reservations.delete');
+
+            Route::get('/availability', [AdminShortTermController::class, 'availabilityIndex'])->name('admin.short-term.availability.index');
+            Route::get('/availability/list', [AdminShortTermController::class, 'getAvailabilityList'])->name('admin.short-term.availability.list');
+            Route::post('/availability', [AdminShortTermController::class, 'storeAvailability'])->name('admin.short-term.availability.store');
+            Route::delete('/availability/{id}', [AdminShortTermController::class, 'deleteAvailability'])->name('admin.short-term.availability.delete');
+        });
+
+        /** On-Plan Inventory (FASE 8, T2) */
+        Route::prefix('admin/project-inventory')->group(function () {
+            Route::get('/', [AdminProjectInventoryController::class, 'index'])->name('admin.project-inventory.index');
+            Route::get('/list', [AdminProjectInventoryController::class, 'getList'])->name('admin.project-inventory.list');
+            Route::post('/adjust', [AdminProjectInventoryController::class, 'adjust'])->name('admin.project-inventory.adjust');
+            Route::get('/movements/{id}', [AdminProjectInventoryController::class, 'movements'])->name('admin.project-inventory.movements');
+        });
 
     });
 
-    Route::get('get-currency-symbol',[SettingController::class, 'getCurrencySymbol'])->name('get-currency-symbol');
+    Route::get('get-currency-symbol', [SettingController::class, 'getCurrencySymbol'])->name('get-currency-symbol');
     // Reset Password
-    Route::get('reset-password',[CustomersController::class, 'resetPasswordIndex']);
-    Route::post('change-password',[CustomersController::class, 'resetPassword'])->name('customer.reset-password');
+    Route::get('reset-password', [CustomersController::class, 'resetPasswordIndex']);
+    Route::post('change-password', [CustomersController::class, 'resetPassword'])->name('customer.reset-password');
+
+    // Public Custom Page Render
+    Route::get('page/{slug}', [CustomPageController::class, 'renderPage'])->name('custom-page.render');
 });
-Route::get('deep-link', function(){
+Route::get('deep-link', function () {
     return view('settings.deep-link');
 });
 // Local Language Values for JS
 Route::get('/js/lang', static function () {
     //    https://medium.com/@serhii.matrunchyk/using-laravel-localization-with-javascript-and-vuejs-23064d0c210e
     header('Content-Type: text/javascript');
-    $labels = \Illuminate\Support\Facades\Cache::remember('lang.js', 3600, static function () {
+    $labels = Cache::remember('lang.js', 3600, static function () {
         $lang = Session::get('locale') ?? 'en';
-        $files = resource_path('lang/' . $lang . '.json');
+        $files = resource_path('lang/'.$lang.'.json');
+
         return File::get($files);
     });
-    echo('window.trans = ' . $labels);
+    echo 'window.trans = '.$labels;
     exit();
 })->name('assets.lang');
 
-
 // Add New Migration Route
-// Route::get('migrate', function () {
-//     Artisan::call('migrate');
-//     $output = Artisan::output();
-//     echo nl2br($output); // Convert newlines to <br> for better readability in HTML
-// });
+// Operative utility routes used by the admin panel installer/settings.
+// These can alter the DB or cache, so they are gated: only reachable when
+// the app is NOT in production, or the authenticated user is an admin.
+Route::get('migrate', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
 
-// Route::get('migrate-status', function () {
-//     Artisan::call('migrate:status');
-//     $output = Artisan::output();
-//     echo nl2br($output); // Convert newlines to <br> for better readability in HTML
-// });
+    Artisan::call('migrate');
+    $output = Artisan::output();
+    echo nl2br($output); // Convert newlines to <br> for better readability in HTML
+});
+
+Route::get('migrate-status', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
+    Artisan::call('migrate:status');
+    $output = Artisan::output();
+    echo nl2br($output); // Convert newlines to <br> for better readability in HTML
+});
 
 // // Rollback last step Migration Route
-// Route::get('/rollback', function () {
-//     Artisan::call('migrate:rollback');
-//     return redirect()->back();
-// });
+Route::get('/rollback', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
 
-// // Storage Link
-// Route::get('/storage-link', function () {
-//     Artisan::call('storage:link');
-//     return redirect()->back();
-// });
+    Artisan::call('migrate:rollback');
 
-// Clear Config
-Route::get('/clear', function () {
-    Artisan::call('optimize:clear');
     return redirect()->back();
 });
 
-Route::get('/add-url', function(){
+// // Storage Link
+Route::get('/storage-link', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
+    Artisan::call('storage:link');
+
+    return redirect()->back();
+});
+
+// Clear Config
+Route::get('/clear', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
+    Artisan::call('optimize:clear');
+
+    return redirect()->back();
+});
+
+Route::get('/add-url', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     $envUpdates = [
         'APP_URL' => Request::root(),
     ];
     updateEnv($envUpdates);
 })->name('add-url-in-env');
 
-Route::get('/seed-demo-data', function(){
+Route::get('/seed-demo-data', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     Artisan::call('db:seed', ['--class' => 'DemoDataSeeder']);
     $output = Artisan::output();
     echo nl2br($output); // Convert newlines to <br> for better readability in HTML
 });
 
 Route::get('/run-scheduler', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     if (Cache::has('scheduler_running')) {
         return response()->json(['status' => 'Already processed recently']);
     }
@@ -553,9 +746,8 @@ Route::get('/run-scheduler', function () {
     Cache::put('scheduler_running', true, 60); // 1 minute lock
 
     Artisan::call('schedule:run', ['--quiet' => true]);
+
     return response()->json(['status' => 'Scheduler processed']);
 });
-
-
 
 

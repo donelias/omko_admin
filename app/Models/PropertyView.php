@@ -8,12 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 class PropertyView extends Model
 {
     use HasFactory;
+
     protected $table = 'property_views';
+
     protected $fillable = [
         'user_id',
         'property_id',
         'date',
-        'views'
+        'views',
     ];
 
     public function property()

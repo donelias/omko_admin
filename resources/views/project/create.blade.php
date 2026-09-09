@@ -33,7 +33,13 @@
     </div>
 @endsection
 @section('content')
-    {!! Form::open(['route' => 'project.store', 'data-parsley-validate', 'id' => 'create-form', 'files' => true,'data-success-function'=> "formSuccessFunction"]) !!}
+    {!! Form::open([
+        'route' => 'project.store',
+        'data-parsley-validate',
+        'id' => 'create-form',
+        'files' => true,
+        'data-success-function' => 'formSuccessFunction',
+    ]) !!}
     <div class='row'>
         <div class='col-md-6'>
             <div class="card">
@@ -46,7 +52,8 @@
                 <div class="card-body">
                     <div class="col-md-12 col-12 form-group mandatory">
                         {{ Form::label('category', __('Category'), ['class' => 'form-label col-12 ']) }}
-                        <select name="category_id" class="form-select form-control-sm" data-parsley-minSelect='1' id="project-category" required>
+                        <select name="category_id" class="form-select form-control-sm" data-parsley-minSelect='1'
+                            id="project-category" required>
                             <option value="" selected>{{ __('Choose Category') }}</option>
                             @foreach ($category as $row)
                                 <option value="{{ $row->id }}" data-parametertypes='{{ $row->parameter_types }}'>
@@ -59,27 +66,29 @@
                     {{-- Title --}}
                     <div class="col-md-12 col-12 form-group mandatory">
                         {{ Form::label('title', __('Title'), ['class' => 'form-label col-12 ']) }}
-                        {{ Form::text('title', '', [ 'class' => 'form-control ', 'placeholder' =>  __('Title'), 'required' => 'true', 'id' => 'title', ]) }}
+                        {{ Form::text('title', '', ['class' => 'form-control ', 'placeholder' => __('Title'), 'required' => 'true', 'id' => 'title']) }}
                     </div>
 
                     {{-- Slug --}}
                     <div class="col-md-12 col-12 form-group">
                         {{ Form::label('slug', __('Slug'), ['class' => 'form-label col-12 ']) }}
-                        {{ Form::text('slug', '', [ 'class' => 'form-control ', 'placeholder' =>  __('Slug'), 'id' => 'slug', ]) }}
-                        <small class="text-danger text-sm">{{ __("Only Small English Characters, Numbers And Hypens Allowed") }}</small>
+                        {{ Form::text('slug', '', ['class' => 'form-control ', 'placeholder' => __('Slug'), 'id' => 'slug']) }}
+                        <small
+                            class="text-danger text-sm">{{ __('Only Small English Characters, Numbers And Hypens Allowed') }}</small>
                     </div>
 
                     {{-- Description --}}
                     <div class="col-md-12 col-12 form-group mandatory">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             {{ Form::label('description', __('Description'), ['class' => 'form-label mb-0']) }}
-                            @if(isset($geminiEnabled) && $geminiEnabled)
-                            <button type="button" class="btn btn-sm btn-outline-primary" id="generate-description-btn" title="{{ __('Generate with AI') }}">
-                                <i class="bi bi-robot"></i> {{ __('Generate with AI') }}
-                            </button>
+                            @if (isset($geminiEnabled) && $geminiEnabled)
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="generate-description-btn"
+                                    title="{{ __('Generate with AI') }}">
+                                    <i class="bi bi-robot"></i> {{ __('Generate with AI') }}
+                                </button>
                             @endif
                         </div>
-                        {{ Form::textarea('description', '', [ 'class' => 'form-control mb-3', 'rows' => '5', 'id' => 'description', 'required' => 'true', 'placeholder' => __('Description') ]) }}
+                        {{ Form::textarea('description', '', ['class' => 'form-control mb-3', 'rows' => '5', 'id' => 'description', 'required' => 'true', 'placeholder' => __('Description')]) }}
                         <div id="description-loading" class="d-none text-primary">
                             <small><i class="bi bi-hourglass-split"></i> {{ __('Generating description...') }}</small>
                         </div>
@@ -91,15 +100,15 @@
                             {{ Form::label('', __('Project Type'), ['class' => 'form-label col-12 ']) }}
 
                             {{-- Upcoming --}}
-                            <div class="col-md-6">
-                                {{ Form::radio('project_type', 'upcoming', null, [ 'class' => 'form-check-input', 'id' => 'upcoming', 'required' => true, 'checked' => true ]) }}
-                                {{ Form::label('project_type', __('Upcoming'), ['class' => 'form-check-label','for' => 'upcoming']) }}
+                            <div class="col-md-4">
+                                {{ Form::radio('project_type', 'upcoming', null, ['class' => 'form-check-input', 'id' => 'upcoming', 'required' => true, 'checked' => true]) }}
+                                {{ Form::label('project_type', __('Upcoming'), ['class' => 'form-check-label', 'for' => 'upcoming']) }}
                             </div>
 
                             {{-- Under Construction --}}
-                            <div class="col-md-6">
-                                {{ Form::radio('project_type', 'under_construction', null, [ 'class' => 'form-check-input', 'id' => 'under_construction', 'required' => true, ]) }}
-                                {{ Form::label('project_type', __('Under Construction'), ['class' => 'form-check-label','for' => 'under_construction']) }}
+                            <div class="col-md-4">
+                                {{ Form::radio('project_type', 'under_construction', null, ['class' => 'form-check-input', 'id' => 'under_construction', 'required' => true]) }}
+                                {{ Form::label('project_type', __('Under Construction'), ['class' => 'form-check-label', 'for' => 'under_construction']) }}
                             </div>
                         </div>
                     </div>
@@ -110,10 +119,11 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h3 class="mb-0">{{ __('SEO Details') }}</h3>
-                    @if(isset($geminiEnabled) && $geminiEnabled)
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="generate-meta-btn" title="{{ __('Generate Meta Details with AI') }}">
-                        <i class="bi bi-robot"></i> {{ __('Generate with AI') }}
-                    </button>
+                    @if (isset($geminiEnabled) && $geminiEnabled)
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="generate-meta-btn"
+                            title="{{ __('Generate Meta Details with AI') }}">
+                            <i class="bi bi-robot"></i> {{ __('Generate with AI') }}
+                        </button>
                     @endif
                 </div>
                 <hr>
@@ -122,24 +132,29 @@
                     {{-- SEO Title --}}
                     <div class="col-12 form-group">
                         {{ Form::label('title', __('Title'), ['class' => 'form-label text-center']) }}
-                        <textarea id="meta_title" name="meta_title" class="form-control" rows="2" style="height: 75px" placeholder="{{ __('Title') }}"></textarea>
-                        <span class="small text-muted">{{ __("Recommended: 55-60 characters, Max size: 255 characters") }}</span>
+                        <textarea id="meta_title" name="meta_title" class="form-control" rows="2" style="height: 75px"
+                            placeholder="{{ __('Title') }}"></textarea>
+                        <span
+                            class="small text-muted">{{ __('Recommended: 55-60 characters, Max size: 255 characters') }}</span>
                         <br>
                     </div>
 
                     {{-- SEO Image --}}
                     <div class="col-12 form-group card">
                         {{ Form::label('meta_image', __('Image'), ['class' => 'form-label']) }}
-                        <input type="file" name="meta_image" id="meta_image" class="filepond from-control" placeholder="{{ __('Image') }}">
-                        <span class="small text-muted">{{ __("Allowed: JPG, PNG, JPEG, Max size: 5MB") }}</span>
+                        <input type="file" name="meta_image" id="meta_image" class="filepond from-control"
+                            placeholder="{{ __('Image') }}">
+                        <span class="small text-muted">{{ __('Allowed: JPG, PNG, JPEG, Max size: 5MB') }}</span>
                         <div class="img_error"></div>
                     </div>
 
                     {{-- SEO Description --}}
                     <div class="col-12 form-group">
                         {{ Form::label('description', __('Description'), ['class' => 'form-label text-center']) }}
-                        <textarea id="meta_description" name="meta_description" class="form-control" rows="3" placeholder="{{ __('Description') }}"></textarea>
-                        <span class="small text-muted">{{ __("Recommended: 155-160 characters, Max size: 255 characters") }}</span>
+                        <textarea id="meta_description" name="meta_description" class="form-control" rows="3"
+                            placeholder="{{ __('Description') }}"></textarea>
+                        <span
+                            class="small text-muted">{{ __('Recommended: 155-160 characters, Max size: 255 characters') }}</span>
                         <br>
                     </div>
 
@@ -147,8 +162,8 @@
                     <div class="col-12 form-group">
                         {{ Form::label('keywords', __('Keywords'), ['class' => 'form-label']) }}
                         <textarea name="keywords" id="keywords" class="form-control" rows="3" placeholder="{{ __('Keywords') }}"></textarea>
-                        <span class="small text-muted">{{ __("Max size: 255 characters") }}</span>
-                        (add comma separated keywords)
+                        <span class="small text-muted">{{ __('Max size: 255 characters') }}</span>
+                        {{ __('(add comma separated keywords)') }}
                     </div>
                     <div id="meta-loading" class="col-12 d-none text-primary">
                         <small><i class="bi bi-hourglass-split"></i> {{ __('Generating meta details...') }}</small>
@@ -177,7 +192,7 @@
                                     {{ Form::label('city', __('City'), ['class' => 'form-label col-12 ']) }}
                                     {!! Form::hidden('city', '', ['class' => 'form-control ', 'id' => 'city']) !!}
                                     <input id="searchInput" class="controls form-control" type="text" placeholder="{{ __('City') }}" required>
-                                    {{-- {{ Form::text('city', '', ['class' => 'form-control ', 'placeholder' => 'City', 'id' => 'city', 'required' => true]) }} --}}
+                                     {{-- {{ Form::text('city', '', ['class' => 'form-control ', 'placeholder' => 'City', 'id' => 'city', 'required' => true]) }}  --}}
                                 </div>
                                 <div class="col-md-6 form-group mandatory">
                                     {{ Form::label('country', __('Country'), ['class' => 'form-label col-12 ']) }}
@@ -189,11 +204,25 @@
                                 </div>
                                 <div class="col-md-6 form-group mandatory">
                                     {{ Form::label('latitude', __('Latitude'), ['class' => 'form-label col-12 ']) }}
-                                    {!! Form::text('latitude', '', ['class' => 'form-control', 'id' => 'latitude', 'step' => 'any', 'readonly' => true, 'required' => true, 'placeholder' => __('Latitude')]) !!}
+                                    {!! Form::text('latitude', '', [
+                                        'class' => 'form-control',
+                                        'id' => 'latitude',
+                                        'step' => 'any',
+                                        'readonly' => true,
+                                        'required' => true,
+                                        'placeholder' => __('Latitude'),
+                                    ]) !!}
                                 </div>
                                 <div class="col-md-6 form-group mandatory">
                                     {{ Form::label('longitude', __('Longitude'), ['class' => 'form-label col-12 ']) }}
-                                    {!! Form::text('longitude', '', ['class' => 'form-control', 'id' => 'longitude', 'step' => 'any', 'readonly' => true, 'required' => true, 'placeholder' => __('Longitude')]) !!}
+                                    {!! Form::text('longitude', '', [
+                                        'class' => 'form-control',
+                                        'id' => 'longitude',
+                                        'step' => 'any',
+                                        'readonly' => true,
+                                        'required' => true,
+                                        'placeholder' => __('Longitude'),
+                                    ]) !!}
                                 </div>
                                 <div class="col-md-12 col-12 form-group mandatory">
                                     {{ Form::label('address', __('Address'), ['class' => 'form-label col-12 ']) }}
@@ -224,17 +253,22 @@
                         <div class="row floor-section" data-repeater-item>
                             {{-- Floor Title --}}
                             <div class="form-group col-md-5">
-                                <label class="form-label">{{ __('Floor') }} - <span class="floor-number">1</span> <span class="text-danger">*</span></label>
-                                <input type="text" name="title" placeholder="{{__('Enter Floor Title')}}" class="form-control" required>
+                                <label class="form-label">{{ __('Floor') }} - <span class="floor-number">1</span> <span
+                                        class="text-danger">*</span></label>
+                                <input type="text" name="title" placeholder="{{ __('Enter Floor Title') }}"
+                                    class="form-control" required>
                             </div>
 
                             {{-- Floor Image --}}
                             <div class="form-group col-md-6">
                                 {{ Form::label('floor-image', __('Floor Image'), ['class' => 'form-label']) }}
-                                <input type="file" class="form-control" name="floor_image" accept="image/jpg,image/png,image/jpeg,image/webp" required>
+                                <input type="file" class="form-control" name="floor_image"
+                                    accept="image/jpg,image/png,image/jpeg,image/webp" required>
                             </div>
                             <div class="form-group col-md-1 pl-0 mt-4">
-                                <button data-repeater-delete type="button" class="btn btn-icon btn-danger remove-default-floor" title="{{__('Remove Floor')}}">
+                                <button data-repeater-delete type="button"
+                                    class="btn btn-icon btn-danger remove-default-floor"
+                                    title="{{ __('Remove Floor') }}">
                                     <i class="fa fa-times"></i>
                                 </button>
                             </div>
@@ -242,8 +276,9 @@
                     </div>
                     {{-- Add New Floor Button --}}
                     <div class="col-md-5 pl-0 mb-4">
-                        <button type="button" class="btn btn-success add-new-floor" data-repeater-create title="{{__('Add New Floor')}}">
-                            <span><i class="fa fa-plus"></i> {{__('Add New Floor')}}</span>
+                        <button type="button" class="btn btn-success add-new-floor" data-repeater-create
+                            title="{{ __('Add New Floor') }}">
+                            <span><i class="fa fa-plus"></i> {{ __('Add New Floor') }}</span>
                         </button>
                     </div>
                 </div>
@@ -251,42 +286,103 @@
         </div>
 
 
-        {{-- Images, Videos and Documents --}}
+        {{-- Images and Documents --}}
         <div class="col-md-12">
             <div class="card">
-                <h3 class="card-header">{{ __('Images, Videos and Documents') }}</h3>
+                <h3 class="card-header">{{ __('Images and Documents') }}</h3>
                 <hr>
                 <div class="card-body">
                     <div class="row">
                         {{-- Title Image --}}
-                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3  form-group mandatory">
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 form-group mandatory">
                             {{ Form::label('title-image', __('Title Image'), ['class' => 'form-label']) }}
-                            <input type="file" class="filepond" id="title-image" name="image" accept="image/jpg,image/png,image/jpeg,image/webp" required>
+                            <input type="file" class="filepond" id="title-image" name="image"
+                                accept="image/jpg,image/png,image/jpeg,image/webp" required>
                         </div>
 
                         {{-- Gallery Images --}}
                         <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3">
                             {{ Form::label('gallary-images', __('Gallery Images'), ['class' => 'form-label']) }}
-                            <input type="file" class="filepond" id="gallary-images" name="gallery_images[]" multiple accept="image/jpg,image/png,image/jpeg,image/webp">
+                            <input type="file" class="filepond" id="gallary-images" name="gallery_images[]" multiple
+                                accept="image/jpg,image/png,image/jpeg,image/webp">
                         </div>
 
                         {{-- Documents --}}
                         <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3">
                             {{ Form::label('documents', __('Documents'), ['class' => 'form-label ']) }}
-                            <input type="file" class="filepond" id="documents" name="documents[]" multiple accept="application/pdf,application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                            <input type="file" class="filepond" id="documents" name="documents[]" multiple
+                                accept="application/pdf,application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document">
                         </div>
-
-                        {{-- Video Link --}}
-                        <div class="col-md-3">
-                            {{ Form::label('video_link', __('Video Link'), ['class' => 'form-label']) }}
-                            {{ Form::text('video_link', isset($list->video_link) ? $list->video_link : '', [ 'class' => 'form-control ', 'placeholder' => trans('Video Link'), 'id' => 'address', 'autocomplete' => 'off', ]) }}
+                      
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        @if(isset($languages) && $languages->count() > 0)
+        {{-- Video --}}
+        <div class="col-md-12">
+            <div class="card">
+                <h3 class="card-header">{{ __('Video') }}</h3>
+                <hr>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3">
+                        {{ Form::label('video_type', __('Video Type'), ['class' => 'form-label col-12 ']) }}
+                        <select name="video_type" class="form-select" data-parsley-minSelect='1'
+                            id="project-category">
+                            <option value="" selected>{{ __('Choose Video Type') }}</option>
+                                @if(system_setting('show_direct_video_upload') == 1)
+                                    <option value="0" name="video_type" >
+                                        {{ __('Custom') }}
+                                    </option>
+                                @endif
+                                <option value="1" name="video_type" >
+                                    {{ __('Youtube') }}
+                                </option>
+                                <option value="2" name="video_type" >
+                                    {{ __('Vimeo') }}
+                                </option>
+                
+                        </select>
+                                        </div>
+                        {{-- Video Link --}}
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 mt-3 mt-sm-0" id="video_link_div" style="display:none">
+                            {{ Form::label('video_link', __('Video Link'), ['class' => 'form-label']) }}
+                            {{ Form::text('video_link', '', ['class' => 'form-control ', 'placeholder' => trans('Video Link'), 'id' => 'video_link', 'autocomplete' => 'off']) }}
+                        </div>
+
+                        {{-- Custom Video --}}
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 mt-3 mt-sm-0"  id="custom_video_div" style="display:none">
+                            {{ Form::label('custom_video', __('Custom Video'), ['class' => 'form-label']) }}
+                            <input type="file" class="filepond" name="custom_video" id="custom_video"
+                                accept="video/mp4,video/webm,video/ogg">
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="card">
+            <h3 class="card-header">{{ __('accessibility') }}</h3>
+            <hr>
+            <div class="card-body">
+                <div class="col-sm-12 col-md-12 col-xs-12 d-flex">
+                    <label class="form-check-label mandatory mt-3">{{ __('Is Premium?') }}</label>
+
+                    <div class="form-check form-switch mt-3 ms-3">
+
+                        <input type="hidden" name="is_premium" id="is_premium" value="0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="is_premium_switch">
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (isset($languages) && $languages->count() > 0)
             {{-- Translations Div --}}
             <div class="translation-div">
                 <div class="card">
@@ -294,27 +390,42 @@
                     <hr>
                     <div class="card-body">
                         {{-- Fields for Translations --}}
-                        @foreach($languages as $key =>$language)
+                        @foreach ($languages as $key => $language)
                             <div class="bg-light p-3 mt-2 rounded">
                                 <h5 class="text-center">{{ $language->name }}</h5>
                                 <label for="translation-title-{{ $language->id }}">{{ __('Title') }}</label>
                                 <div class="form-group">
-                                    <input type="hidden" name="translations[{{ $key }}][title][language_id]" value="{{ $language->id }}">
-                                    <input type="text" name="translations[{{ $key }}][title][value]" id="translation-title-{{ $language->id }}" class="form-control" placeholder="{{ __('Enter Title') }}">
+                                    <input type="hidden" name="translations[{{ $key }}][title][language_id]"
+                                        value="{{ $language->id }}">
+                                    <input type="text" name="translations[{{ $key }}][title][value]"
+                                        id="translation-title-{{ $language->id }}" class="form-control"
+                                        placeholder="{{ __('Enter Title') }}">
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label for="translation-project-description-{{ $language->id }}">{{ __('Description') }}</label>
-                                    @if(isset($geminiEnabled) && $geminiEnabled)
-                                    <button type="button" class="btn btn-sm btn-outline-primary generate-translation-description-btn" data-language-id="{{ $language->id }}" data-language-name="{{ $language->name }}" data-language-code="{{ $language->code ?? $language->name }}" title="{{ __('Generate with AI') }}">
-                                        <i class="bi bi-robot"></i> {{ __('Generate with AI') }}
-                                    </button>
+                                    <label
+                                        for="translation-project-description-{{ $language->id }}">{{ __('Description') }}</label>
+                                    @if (isset($geminiEnabled) && $geminiEnabled)
+                                        <button type="button"
+                                            class="btn btn-sm btn-outline-primary generate-translation-description-btn"
+                                            data-language-id="{{ $language->id }}"
+                                            data-language-name="{{ $language->name }}"
+                                            data-language-code="{{ $language->code ?? $language->name }}"
+                                            title="{{ __('Generate with AI') }}">
+                                            <i class="bi bi-robot"></i> {{ __('Generate with AI') }}
+                                        </button>
                                     @endif
                                 </div>
                                 <div class="form-group">
-                                    <input type="hidden" name="translations[{{ $key }}][description][language_id]" value="{{ $language->id }}">
-                                    <textarea name="translations[{{ $key }}][description][value]" id="translation-project-description-{{ $language->id }}" class="form-control" placeholder="{{ __('Enter Description') }}"></textarea>
-                                    <div id="translation-project-description-loading-{{ $language->id }}" class="d-none text-primary mt-2">
-                                        <small><i class="bi bi-hourglass-split"></i> {{ __('Generating description...') }}</small>
+                                    <input type="hidden"
+                                        name="translations[{{ $key }}][description][language_id]"
+                                        value="{{ $language->id }}">
+                                    <textarea name="translations[{{ $key }}][description][value]"
+                                        id="translation-project-description-{{ $language->id }}" class="form-control"
+                                        placeholder="{{ __('Enter Description') }}"></textarea>
+                                    <div id="translation-project-description-loading-{{ $language->id }}"
+                                        class="d-none text-primary mt-2">
+                                        <small><i class="bi bi-hourglass-split"></i>
+                                            {{ __('Generating description...') }}</small>
                                     </div>
                                 </div>
                             </div>
@@ -328,22 +439,32 @@
         {{-- Save --}}
         <div class='col-md-12 d-flex justify-content-end mb-3'>
             <input type="submit" class="btn btn-primary" value="{{ __('Save') }}"> &nbsp;&nbsp;
-            <button class="btn btn-secondary" type="button" onclick="myForm.reset();">{{ __('Reset') }}</button>
+            <button class="btn btn-secondary" type="button" onclick="document.getElementById('create-form').reset(); document.getElementById('project-category').focus();">{{ __('Reset') }}</button>
         </div>
     </div>
 
     {!! Form::close() !!}
 @endsection
 @section('script')
-    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
-    <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @if (system_setting('map_service_provider') === 'open_street_maps')
+        <script>window.MAP_SERVICE_PROVIDER = 'open_street_maps';</script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="{{ asset('assets/js/osm-maps-helper.js') }}"></script>
+    @else
+        <script>window.MAP_SERVICE_PROVIDER = 'google_maps';</script>
+        <script type="text/javascript"
+            src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap"
+            async defer></script>
+        <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @endif
     <script type="text/javascript">
         jQuery(document).ready(function() {
             initMap();
         });
 
         function initMap() {
-            window.initBackendPlacesMap({
+            var mapOptions = {
                 mapElementId: 'map',
                 inputSelector: '#searchInput',
                 citySelector: '#city',
@@ -354,7 +475,12 @@
                 longitudeSelector: '#longitude',
                 defaultLatitudeSelector: '#default-latitude',
                 defaultLongitudeSelector: '#default-longitude'
-            });
+            };
+            if (window.MAP_SERVICE_PROVIDER === 'open_street_maps') {
+                window.initOsmPlacesMap(mapOptions);
+            } else {
+                window.initBackendPlacesMap(mapOptions);
+            }
         }
         jQuery(document).ready(function() {
             initMap();
@@ -362,13 +488,14 @@
 
         });
         $(document).ready(function() {
-            FilePond.registerPlugin(FilePondPluginImagePreview, FilePondPluginFileValidateSize,FilePondPluginFileValidateType);
+            FilePond.registerPlugin(FilePondPluginImagePreview, FilePondPluginFileValidateSize,
+                FilePondPluginFileValidateType);
         });
 
-        $("#title").on('keyup',function(e){
+        $("#title").on('keyup', function(e) {
             let title = $(this).val();
             let slugElement = $("#slug");
-            if(title){
+            if (title) {
                 $.ajax({
                     type: 'POST',
                     url: "{{ route('project.generate-slug') }}",
@@ -380,22 +507,22 @@
                         slugElement.attr('readonly', true).val('Please wait....')
                     },
                     success: function(response) {
-                        if(!response.error){
-                            if(response.data){
+                        if (!response.error) {
+                            if (response.data) {
                                 slugElement.removeAttr('readonly').val(response.data);
-                            }else{
+                            } else {
                                 slugElement.removeAttr('readonly').val("")
                             }
                         }
                     }
                 });
-            }else{
+            } else {
                 slugElement.removeAttr('readonly', true).val("")
             }
         });
 
         function formSuccessFunction(response) {
-            if(!response.error){
+            if (!response.error) {
                 setTimeout(() => {
                     window.location.reload();
                 }, 500);
@@ -403,197 +530,235 @@
         }
 
         // Gemini AI Integration
-        @if(isset($geminiEnabled) && $geminiEnabled)
-        $(document).ready(function() {
-            // Generate Description
-            $('#generate-description-btn').on('click', function() {
-                const title = $('#title').val();
-                const city = $('#city').val();
-                const state = $('#state').val();
-                const country = $('#country').val();
-                const address = $('#address').val();
-                const projectType = $('input[name="project_type"]:checked').val();
-                const category_id = $('#project-category').val();
+        @if (isset($geminiEnabled) && $geminiEnabled)
+            $(document).ready(function() {
+                // Generate Description
+                $('#generate-description-btn').on('click', function() {
+                    const title = $('#title').val();
+                    const city = $('#city').val();
+                    const state = $('#state').val();
+                    const country = $('#country').val();
+                    const address = $('#address').val();
+                    const projectType = $('input[name="project_type"]:checked').val();
+                    const category_id = $('#project-category').val();
 
-                if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
-                    return;
-                }
-
-                const btn = $(this);
-                const loadingDiv = $('#description-loading');
-                const descriptionField = $('#description');
-
-                btn.prop('disabled', true);
-                loadingDiv.removeClass('d-none');
-
-                $.ajax({
-                    url: '{{ route("gemini.generate-description") }}',
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                    },
-                    data: {
-                        entity_type: 'project',
-                        title: title,
-                        location: address,
-                        city: city,
-                        state: state,
-                        country: country,
-                        type: projectType,
-                        category_id: category_id
-                    },
-                    success: function(response) {
-                        if (!response.error && response.data && response.data.description) {
-                            descriptionField.val(response.data.description);
-                            if (response.data.cached) {
-                                console.log('{{ __("Used cached result") }}');
-                            }
-                        } else {
-                            alert(response.message || '{{ __("Failed to generate description") }}');
-                        }
-                    },
-                    error: function(xhr) {
-                        const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
-                    },
-                    complete: function() {
-                        btn.prop('disabled', false);
-                        loadingDiv.addClass('d-none');
+                    if (!title) {
+                        showErrorToast('{{ __('Please enter a title first') }}');
+                        return;
                     }
-                });
-            });
 
-            // Generate Meta Details
-            $('#generate-meta-btn').on('click', function() {
-                const title = $('#title').val();
-                const city = $('#city').val();
-                const address = $('#address').val();
+                    const btn = $(this);
+                    const loadingDiv = $('#description-loading');
+                    const descriptionField = $('#description');
 
-                if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
-                    return;
-                }
+                    btn.prop('disabled', true);
+                    loadingDiv.removeClass('d-none');
 
-                const btn = $(this);
-                const loadingDiv = $('#meta-loading');
-                const metaTitleField = $('#meta_title');
-                const metaDescriptionField = $('#meta_description');
-                const metaKeywordsField = $('#keywords');
-
-                btn.prop('disabled', true);
-                loadingDiv.removeClass('d-none');
-
-                $.ajax({
-                    url: '{{ route("gemini.generate-meta") }}',
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                    },
-                    data: {
-                        entity_type: 'project',
-                        title: title,
-                        location: address,
-                        city: city
-                    },
-                    success: function(response) {
-                        if (!response.error && response.data) {
-                            if (response.data.meta_title) {
-                                metaTitleField.val(response.data.meta_title);
+                    $.ajax({
+                        url: '{{ route('gemini.generate-description') }}',
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        data: {
+                            entity_type: 'project',
+                            title: title,
+                            location: address,
+                            city: city,
+                            state: state,
+                            country: country,
+                            type: projectType,
+                            category_id: category_id
+                        },
+                        success: function(response) {
+                            if (!response.error && response.data && response.data.description) {
+                                descriptionField.val(response.data.description);
+                                if (response.data.cached) {
+                                    console.log('{{ __('Used cached result') }}');
+                                }
+                            } else {
+                                showErrorToast(response.message ||
+                                    '{{ __('Failed to generate description') }}');
                             }
-                            if (response.data.meta_description) {
-                                metaDescriptionField.val(response.data.meta_description);
-                            }
-                            if (response.data.meta_keywords) {
-                                metaKeywordsField.val(response.data.meta_keywords);
-                            }
-                            if (response.data.cached) {
-                                console.log('{{ __("Used cached result") }}');
-                            }
-                        } else {
-                            alert(response.message || '{{ __("Failed to generate meta details") }}');
+                        },
+                        error: function(xhr) {
+                            const errorMsg = xhr.responseJSON?.message ||
+                                '{{ __('An error occurred') }}';
+                            showErrorToast(errorMsg);
+                        },
+                        complete: function() {
+                            btn.prop('disabled', false);
+                            loadingDiv.addClass('d-none');
                         }
-                    },
-                    error: function(xhr) {
-                        const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
-                    },
-                    complete: function() {
-                        btn.prop('disabled', false);
-                        loadingDiv.addClass('d-none');
-                    }
+                    });
                 });
-            });
 
-            // Generate Translation Description
-            $('.generate-translation-description-btn').on('click', function() {
-                const languageId = $(this).data('language-id');
-                const languageName = $(this).data('language-name');
-                const languageCode = $(this).data('language-code');
-                const title = $('#title').val();
-                const city = $('#city').val();
-                const state = $('#state').val();
-                const country = $('#country').val();
-                const address = $('#address').val();
-                const projectType = $('input[name="project_type"]:checked').val();
-                const category_id = $('#project-category').val();
-                const descriptionField = $('#translation-project-description-' + languageId);
-                const loadingDiv = $('#translation-project-description-loading-' + languageId);
-                const btn = $(this);
+                // Generate Meta Details
+                $('#generate-meta-btn').on('click', function() {
+                    const title = $('#title').val();
+                    const city = $('#city').val();
+                    const address = $('#address').val();
 
-                if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
-                    return;
-                }
+                    if (!title) {
+                        showErrorToast('{{ __('Please enter a title first') }}');
+                        return;
+                    }
 
-                btn.prop('disabled', true);
-                loadingDiv.removeClass('d-none');
+                    const btn = $(this);
+                    const loadingDiv = $('#meta-loading');
+                    const metaTitleField = $('#meta_title');
+                    const metaDescriptionField = $('#meta_description');
+                    const metaKeywordsField = $('#keywords');
 
-                $.ajax({
-                    url: '{{ route("gemini.generate-description") }}',
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                    },
-                    data: {
-                        entity_type: 'project',
-                        title: title,
-                        location: address,
-                        city: city,
-                        state: state,
-                        country: country,
-                        type: projectType,
-                        category_id: category_id,
-                        language_id: languageId,
-                        language_name: languageName,
-                        language_code: languageCode
-                    },
-                    success: function(response) {
-                        if (!response.error && response.data && response.data.description) {
-                            // const editorId = 'translation-description-' + languageId;
-                            // // Check if TinyMCE editor exists for this field
-                            // if (typeof tinymce !== 'undefined' && tinymce.get(editorId)) {
-                            //     // Use TinyMCE API to set content
-                            //     tinymce.get(editorId).setContent(response.data.description);
-                            // } else {
+                    btn.prop('disabled', true);
+                    loadingDiv.removeClass('d-none');
+
+                    $.ajax({
+                        url: '{{ route('gemini.generate-meta') }}',
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        data: {
+                            entity_type: 'project',
+                            title: title,
+                            location: address,
+                            city: city
+                        },
+                        success: function(response) {
+                            if (!response.error && response.data) {
+                                if (response.data.meta_title) {
+                                    metaTitleField.val(response.data.meta_title);
+                                }
+                                if (response.data.meta_description) {
+                                    metaDescriptionField.val(response.data.meta_description);
+                                }
+                                if (response.data.meta_keywords) {
+                                    metaKeywordsField.val(response.data.meta_keywords);
+                                }
+                                if (response.data.cached) {
+                                    console.log('{{ __('Used cached result') }}');
+                                }
+                            } else {
+                                showErrorToast(response.message ||
+                                    '{{ __('Failed to generate meta details') }}');
+                            }
+                        },
+                        error: function(xhr) {
+                            const errorMsg = xhr.responseJSON?.message ||
+                                '{{ __('An error occurred') }}';
+                            showErrorToast(errorMsg);
+                        },
+                        complete: function() {
+                            btn.prop('disabled', false);
+                            loadingDiv.addClass('d-none');
+                        }
+                    });
+                });
+
+                // Generate Translation Description
+                $('.generate-translation-description-btn').on('click', function() {
+                    const languageId = $(this).data('language-id');
+                    const languageName = $(this).data('language-name');
+                    const languageCode = $(this).data('language-code');
+                    const title = $('#title').val();
+                    const city = $('#city').val();
+                    const state = $('#state').val();
+                    const country = $('#country').val();
+                    const address = $('#address').val();
+                    const projectType = $('input[name="project_type"]:checked').val();
+                    const category_id = $('#project-category').val();
+                    const descriptionField = $('#translation-project-description-' + languageId);
+                    const loadingDiv = $('#translation-project-description-loading-' + languageId);
+                    const btn = $(this);
+
+                    if (!title) {
+                        showErrorToast('{{ __('Please enter a title first') }}');
+                        return;
+                    }
+
+                    btn.prop('disabled', true);
+                    loadingDiv.removeClass('d-none');
+
+                    $.ajax({
+                        url: '{{ route('gemini.generate-description') }}',
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                        },
+                        data: {
+                            entity_type: 'project',
+                            title: title,
+                            location: address,
+                            city: city,
+                            state: state,
+                            country: country,
+                            type: projectType,
+                            category_id: category_id,
+                            language_id: languageId,
+                            language_name: languageName,
+                            language_code: languageCode
+                        },
+                        success: function(response) {
+                            if (!response.error && response.data && response.data.description) {
+                                // const editorId = 'translation-description-' + languageId;
+                                // // Check if TinyMCE editor exists for this field
+                                // if (typeof tinymce !== 'undefined' && tinymce.get(editorId)) {
+                                //     // Use TinyMCE API to set content
+                                //     tinymce.get(editorId).setContent(response.data.description);
+                                // } else {
                                 // Fallback to regular textarea
                                 descriptionField.val(response.data.description);
-                            // }
-                        } else {
-                            alert(response.message || '{{ __("Failed to generate description") }}');
+                                // }
+                            } else {
+                                showErrorToast(response.message ||
+                                    '{{ __('Failed to generate description') }}');
+                            }
+                        },
+                        error: function(xhr) {
+                            const errorMsg = xhr.responseJSON?.message ||
+                                '{{ __('An error occurred') }}';
+                            showErrorToast(errorMsg);
+                        },
+                        complete: function() {
+                            btn.prop('disabled', false);
+                            loadingDiv.addClass('d-none');
                         }
-                    },
-                    error: function(xhr) {
-                        const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
-                    },
-                    complete: function() {
-                        btn.prop('disabled', false);
-                        loadingDiv.addClass('d-none');
-                    }
+                    });
                 });
             });
-        });
         @endif
+
+        document.getElementById('is_premium_switch').addEventListener('change', function() {
+            document.getElementById('is_premium').value = this.checked ? 1 : 0;
+        });
+
+        $(document).ready(function() {
+            // Video Type Change Handler
+            $('select[name="video_type"]').on('change', function() {
+                var videoType = $(this).val();
+                
+                // Reset fields
+                $('#video_link_div').hide();
+                $('#custom_video_div').hide();
+                $('#video_link').prop('required', false);
+                $('#custom_video').prop('required', false);
+
+                if (videoType == '0') { // Custom
+                    $('#custom_video_div').show();
+                    // For FilePond, we don't need to manually set required prop on the input if it's already there
+                    // or if we do, we might need to check if FilePond instance exists.
+                    // However, simplified approach:
+                    $('#custom_video').attr('required', true); 
+                } else if (videoType == '1' || videoType == '2') { // Youtube or Vimeo
+                    $('#video_link_div').show();
+                    $('#video_link').prop('required', true);
+                    $('#custom_video').removeAttr('required');
+                }
+            });
+
+            // Trigger change on load to set initial state if value exists
+            $('select[name="video_type"]').trigger('change');
+        });
     </script>
 @endsection

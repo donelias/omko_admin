@@ -1,12 +1,12 @@
 <?php
 
 use App\Models\Category;
+use App\Models\OutdoorFacilities;
 use App\Models\parameter;
 use App\Models\Property;
-use App\Models\OutdoorFacilities;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -18,28 +18,28 @@ return new class extends Migration
         /** Demo Data flag for demo contents */
 
         // Parameters (facilities)
-        if(!Schema::hasColumn('parameters', 'is_demo')) {
+        if (! Schema::hasColumn('parameters', 'is_demo')) {
             Schema::table('parameters', function (Blueprint $table) {
                 $table->boolean('is_demo')->default(false);
             });
         }
 
         // Categories
-        if(!Schema::hasColumn('categories', 'is_demo')) {
+        if (! Schema::hasColumn('categories', 'is_demo')) {
             Schema::table('categories', function (Blueprint $table) {
                 $table->boolean('is_demo')->default(false);
             });
         }
 
         // Near By places
-        if(!Schema::hasColumn('outdoor_facilities', 'is_demo')) {
+        if (! Schema::hasColumn('outdoor_facilities', 'is_demo')) {
             Schema::table('outdoor_facilities', function (Blueprint $table) {
                 $table->boolean('is_demo')->default(false);
             });
         }
 
         // Properties
-        if(!Schema::hasColumn('propertys', 'is_demo')) {
+        if (! Schema::hasColumn('propertys', 'is_demo')) {
             Schema::table('propertys', function (Blueprint $table) {
                 $table->boolean('is_demo')->default(false);
             });
@@ -54,7 +54,7 @@ return new class extends Migration
         /** Remove Demo Data flag for demo contents with demo data */
 
         // Parameters (facilities)
-        if(Schema::hasColumn('parameters', 'is_demo')) {
+        if (Schema::hasColumn('parameters', 'is_demo')) {
             parameter::where('is_demo', true)->delete();
             Schema::table('parameters', function (Blueprint $table) {
                 $table->dropColumn('is_demo');
@@ -62,7 +62,7 @@ return new class extends Migration
         }
 
         // Categories
-        if(Schema::hasColumn('categories', 'is_demo')) {
+        if (Schema::hasColumn('categories', 'is_demo')) {
             Category::where('is_demo', true)->delete();
             Schema::table('categories', function (Blueprint $table) {
                 $table->dropColumn('is_demo');
@@ -70,7 +70,7 @@ return new class extends Migration
         }
 
         // Near By places
-        if(Schema::hasColumn('outdoor_facilities', 'is_demo')) {
+        if (Schema::hasColumn('outdoor_facilities', 'is_demo')) {
             OutdoorFacilities::where('is_demo', true)->delete();
             Schema::table('outdoor_facilities', function (Blueprint $table) {
                 $table->dropColumn('is_demo');
@@ -78,7 +78,7 @@ return new class extends Migration
         }
 
         // Properties
-        if(Schema::hasColumn('propertys', 'is_demo')) {
+        if (Schema::hasColumn('propertys', 'is_demo')) {
             Property::where('is_demo', true)->delete();
             Schema::table('propertys', function (Blueprint $table) {
                 $table->dropColumn('is_demo');

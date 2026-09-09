@@ -2,26 +2,31 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use Throwable;
-use Carbon\Carbon;
-use Stripe\Webhook;
-use Razorpay\Api\Api;
-use App\Models\Package;
-use App\Models\Usertokens;
-use App\Models\UserPackage;
-use Illuminate\Http\Request;
 use App\Models\Notifications;
+use App\Models\Package;
 use App\Models\PackageFeature;
-use App\Services\HelperService;
-use App\Models\UserPackageLimit;
-use App\Services\ResponseService;
+use App\Models\PayAsYouGo;
 use App\Models\PaymentTransaction;
+use App\Models\Projects;
+use App\Models\Property;
+use App\Models\UserPackage;
+use App\Models\UserPackageLimit;
+use App\Models\UserPayAsYouGoCredit;
+use App\Models\Usertokens;
+use App\Services\HelperService;
+use App\Services\Payment\PayPalPayment;
+use App\Services\ResponseService;
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Services\Payment\PayPalPayment;
+use Illuminate\Support\Str;
 use KingFlamez\Rave\Facades\Rave as Flutterwave;
-
+use Razorpay\Api\Api;
+use Stripe\Exception\SignatureVerificationException;
+use Stripe\Webhook;
+use Throwable;
 
 class WebhookController extends Controller
 {
@@ -29,20 +34,20 @@ class WebhookController extends Controller
     {
         try {
             // only a post with paystack signature header gets our attention
-            if (!array_key_exists('HTTP_X_PAYSTACK_SIGNATURE', $_SERVER) || (strtoupper($_SERVER['REQUEST_METHOD']) != 'POST')) {
-                echo "Signature not found";
+            if (! array_key_exists('HTTP_X_PAYSTACK_SIGNATURE', $_SERVER) || (strtoupper($_SERVER['REQUEST_METHOD']) != 'POST')) {
+                echo 'Signature not found';
                 http_response_code(400);
                 exit(0);
             }
-            $inputJSON = @file_get_contents("php://input");
+            $inputJSON = @file_get_contents('php://input');
             $input = json_decode($inputJSON, true, 512, JSON_THROW_ON_ERROR);
 
             // Calculate HMAC
             $paystackSecretKey = HelperService::getSettingData('paystack_secret_key');
             $headerSignature = $_SERVER['HTTP_X_PAYSTACK_SIGNATURE'];
             $calculatedHMAC = hash_hmac('sha512', $inputJSON, $paystackSecretKey);
-            if (!hash_equals($headerSignature, $calculatedHMAC)) {
-                echo "Signature does not match";
+            if (! hash_equals($headerSignature, $calculatedHMAC)) {
+                echo 'Signature does not match';
                 http_response_code(400);
                 exit(0);
             }
@@ -52,26 +57,27 @@ class WebhookController extends Controller
             $paymentTransactionId = $input['data']['metadata']['payment_transaction_id'];
             switch ($input['event']) {
                 case 'charge.success':
-                    $response = $this->assignPackage($paymentTransactionId,$transactionId);
+                    $response = $this->assignPackage($paymentTransactionId, $transactionId);
                     if ($response['error']) {
-                        Log::error("Paystack Webhook : ", [$response['message']]);
+                        Log::error('Paystack Webhook : ', [$response['message']]);
                     }
                     http_response_code(200);
                     break;
                 case 'charge.failed':
                     $response = $this->failedTransaction($paymentTransactionId);
                     if ($response['error']) {
-                        Log::error("Paystack Webhook : ", [$response['message']]);
+                        Log::error('Paystack Webhook : ', [$response['message']]);
                     }
                     http_response_code(200);
                     break;
             }
-        }catch (Throwable $e) {
-            Log::error("Paystack Webhook : Error occurred", [$e->getMessage() . ' --> ' . $e->getFile() . ' At Line : ' . $e->getLine()]);
+        } catch (Throwable $e) {
+            Log::error('Paystack Webhook : Error occurred', [$e->getMessage().' --> '.$e->getFile().' At Line : '.$e->getLine()]);
             http_response_code(400);
             exit();
         }
     }
+
     public function razorpay(Request $request)
     {
         try {
@@ -82,18 +88,26 @@ class WebhookController extends Controller
 
             // Get Razorpay config
             $razorPayConfigData = HelperService::getMultipleSettingData([
-                'razor_key', 'razor_secret', 'razor_webhook_secret'
+                'razor_key', 'razor_secret', 'razor_webhook_secret',
             ]);
             $razorPayApiKey = $razorPayConfigData['razor_key'];
             $razorPaySecretKey = $razorPayConfigData['razor_secret'];
             $webhookSecret = $razorPayConfigData['razor_webhook_secret'];
 
+            // Fail closed: reject if credentials are not configured
+            if (empty($razorPayApiKey) || empty($razorPaySecretKey) || empty($webhookSecret)) {
+                Log::error('Razorpay Webhook: credentials are not configured, rejecting request');
+
+                return response()->json(['error' => 'Gateway not available'], 503);
+            }
+
             // Validate webhook signature
             $webhookSignature = $request->header('X-Razorpay-Signature');
-            $expectedSignature = hash_hmac("SHA256", $webhookBody, $webhookSecret);
+            $expectedSignature = hash_hmac('SHA256', $webhookBody, $webhookSecret);
 
             if ($expectedSignature !== $webhookSignature) {
-                Log::error("Razorpay Webhook: Signature mismatch — ignoring webhook.");
+                Log::error('Razorpay Webhook: Signature mismatch — ignoring webhook.');
+
                 return response()->json(['error' => true, 'message' => 'Invalid signature'], 400);
             }
 
@@ -113,15 +127,15 @@ class WebhookController extends Controller
 
                         $response = $this->assignPackage($paymentTransactionId, $razorpayPaymentId);
                         if ($response['error']) {
-                            Log::error("Razorpay Webhook [payment_link.paid]: " . $response['message']);
+                            Log::error('Razorpay Webhook [payment_link.paid]: '.$response['message']);
                         }
                     } else {
-                        Log::warning("Razorpay Webhook: payment_link.paid received but payment not captured.");
+                        Log::warning('Razorpay Webhook: payment_link.paid received but payment not captured.');
                     }
-                    Log::info("Razorpay Webhook processed successfully and assigned package");
+                    Log::info('Razorpay Webhook processed successfully and assigned package');
                     break;
 
-                // FAILURE — Payment link cancelled or expired
+                    // FAILURE — Payment link cancelled or expired
                 case 'payment_link.expired':
                 case 'payment_link.cancelled':
                     $paymentLink = $data->payload->payment_link->entity ?? null;
@@ -130,24 +144,26 @@ class WebhookController extends Controller
 
                     $response = $this->failedTransaction($paymentTransactionId);
                     if ($response['error']) {
-                        Log::error("Razorpay Webhook [{$event}]: " . $response['message']);
+                        Log::error("Razorpay Webhook [{$event}]: ".$response['message']);
                     }
-                    Log::info("Razorpay Webhook processed successfully and failed transaction");
+                    Log::info('Razorpay Webhook processed successfully and failed transaction');
                     break;
 
                 default:
-                    Log::info("Razorpay Webhook: Unhandled event — " . $event);
+                    Log::info('Razorpay Webhook: Unhandled event — '.$event);
                     break;
             }
 
             Log::info("Razorpay Webhook processed successfully and event: {$event}");
+
             return response()->json(['success' => true]);
         } catch (Exception $e) {
-            Log::error("Razorpay Webhook Exception", [
+            Log::error('Razorpay Webhook Exception', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ]);
+
             return response()->json(['error' => true, 'message' => 'Webhook processing failed'], 400);
         }
     }
@@ -159,7 +175,7 @@ class WebhookController extends Controller
 
             // Fetch PayPal credentials
             $paypalConfigData = HelperService::getMultipleSettingData([
-                'paypal_client_id', 'paypal_client_secret', 'paypal_currency', 'sandbox_mode', 'paypal_webhook_id'
+                'paypal_client_id', 'paypal_client_secret', 'paypal_currency', 'sandbox_mode', 'paypal_webhook_id',
             ]);
 
             // Initialize PayPal Payment Service
@@ -188,8 +204,9 @@ class WebhookController extends Controller
             // Verify webhook authenticity
             $isValid = $paypal->verifyWebhookSignature($paypalHeaders, $rawBody, $webhookId);
 
-            if (!$isValid) {
+            if (! $isValid) {
                 Log::warning('Invalid PayPal Webhook Signature');
+
                 return response()->json(['status' => 'invalid'], 200); // respond 200 to prevent PayPal retries
             }
 
@@ -202,8 +219,9 @@ class WebhookController extends Controller
 
             // Log::info("PayPal Event: {$eventType}", ['order_id' => $orderId, 'custom_id' => $customId]);
 
-            if (!$orderId && !$customId) {
+            if (! $orderId && ! $customId) {
                 Log::warning('Missing order/custom ID in PayPal webhook');
+
                 return response()->json(['status' => 'missing_order'], 200);
             }
 
@@ -212,8 +230,9 @@ class WebhookController extends Controller
                 ->orWhere('id', $customId)
                 ->first();
 
-            if (!$transaction) {
+            if (! $transaction) {
                 Log::warning('Payment transaction not found', ['order_id' => $orderId, 'custom_id' => $customId]);
+
                 return response()->json(['status' => 'missing_transaction'], 200);
             }
 
@@ -228,10 +247,10 @@ class WebhookController extends Controller
                         $response = $this->assignPackage($paymentTransactionId, $transactionId);
 
                         if ($response['error'] ?? false) {
-                            Log::error("PayPal Webhook (Approved) Error: " . $response['message']);
+                            Log::error('PayPal Webhook (Approved) Error: '.$response['message']);
                         }
                     } else {
-                        Log::info("Transaction already succeeded", ['payment_transaction_id' => $paymentTransactionId]);
+                        Log::info('Transaction already succeeded', ['payment_transaction_id' => $paymentTransactionId]);
                     }
                     break;
 
@@ -241,10 +260,10 @@ class WebhookController extends Controller
                         Log::warning("⚠️ PayPal Payment Failed for Transaction: {$paymentTransactionId}");
                         $response = $this->failedTransaction($paymentTransactionId);
                         if ($response['error'] ?? false) {
-                            Log::error("PayPal Webhook (Failed): " . $response['message']);
+                            Log::error('PayPal Webhook (Failed): '.$response['message']);
                         }
                     } else {
-                        Log::info("Transaction already marked failed", ['payment_transaction_id' => $paymentTransactionId]);
+                        Log::info('Transaction already marked failed', ['payment_transaction_id' => $paymentTransactionId]);
                     }
                     break;
 
@@ -258,6 +277,7 @@ class WebhookController extends Controller
 
         } catch (Throwable $e) {
             Log::error("PayPal Webhook Exception: {$e->getMessage()} in {$e->getFile()} line {$e->getLine()}");
+
             return response()->json(['error' => true, 'message' => 'Webhook processing failed'], 200);
         }
     }
@@ -279,17 +299,17 @@ class WebhookController extends Controller
             // Get Payment Transaction ID
             $paymentTransactionId = $event->data->object->metadata->payment_transaction_id;
             switch ($event->type) {
-                case "payment_intent.succeeded":
-                    $response = $this->assignPackage($paymentTransactionId,$transactionID);
+                case 'payment_intent.succeeded':
+                    $response = $this->assignPackage($paymentTransactionId, $transactionID);
                     if ($response['error']) {
-                        Log::error("Stripe Webhook : ", [$response['message']]);
+                        Log::error('Stripe Webhook : ', [$response['message']]);
                     }
                     http_response_code(200);
                     break;
                 case 'payment_intent.payment_failed':
                     $response = $this->failedTransaction($paymentTransactionId);
                     if ($response['error']) {
-                        Log::error("Stripe Webhook : ", [$response['message']]);
+                        Log::error('Stripe Webhook : ', [$response['message']]);
                     }
                     http_response_code(200);
                     break;
@@ -298,17 +318,19 @@ class WebhookController extends Controller
                     break;
             }
             Log::info('Stripe Webhook received Successfully');
-        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+        } catch (SignatureVerificationException $e) {
             // Invalid Signature Log
             return Log::error('Stripe Webhook verification failed');
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             // Other Error Exception
             return Log::error('Stripe Webhook failed');
         }
     }
-    public function flutterwave(Request $request){
+
+    public function flutterwave(Request $request)
+    {
         try {
-            //This verifies the webhook is sent from Flutterwave
+            // This verifies the webhook is sent from Flutterwave
             $verified = Flutterwave::verifyWebhook();
             $requestData = json_decode($request->getContent(), true, 512, JSON_THROW_ON_ERROR);
 
@@ -320,26 +342,27 @@ class WebhookController extends Controller
                     $transactionId = $data['id'];
                     $metaData = $data['meta'];
                     $paymentTransactionId = $metaData['payment_transaction_id'];
-                    $response = $this->assignPackage($paymentTransactionId,$transactionId);
+                    $response = $this->assignPackage($paymentTransactionId, $transactionId);
                     if ($response['error']) {
-                        Log::error("Flutterwave Webhook : ", [$response['message']]);
+                        Log::error('Flutterwave Webhook : ', [$response['message']]);
                     }
                     http_response_code(200);
+
                     return true;
-                }else{
+                } else {
                     $data = $verificationData['data'];
                     $paymentTransactionId = $data['meta']['payment_transaction_id'] ?? null;
                     if ($paymentTransactionId) {
                         $response = $this->failedTransaction($paymentTransactionId);
                         if ($response['error']) {
-                            Log::error("Flutterwave Webhook : ", [$response['message']]);
+                            Log::error('Flutterwave Webhook : ', [$response['message']]);
                         }
                     } else {
                         Log::error('Flutterwave Webhook: Missing payment_transaction_id in metadata');
                     }
                     Log::error('Flutterwave Webhook Status Not Succeeded');
                 }
-            }else{
+            } else {
                 Log::error('Flutterwave Webhook Verification Error');
 
                 // Try to find the transaction in our database by the transaction reference
@@ -367,7 +390,7 @@ class WebhookController extends Controller
                 if ($paymentTransactionId) {
                     $response = $this->failedTransaction($paymentTransactionId);
                     if ($response['error']) {
-                        Log::error("Flutterwave Webhook (Failed Verification): ", [$response['message']]);
+                        Log::error('Flutterwave Webhook (Failed Verification): ', [$response['message']]);
                     }
                     http_response_code(200);
                 } else {
@@ -375,15 +398,17 @@ class WebhookController extends Controller
                     http_response_code(400);
                 }
             }
-        }catch (\Exception $e) {
+        } catch (Exception $e) {
             // Other Error Exception
-            Log::error('Flutterwave Webhook failed: ' . $e->getMessage());
+            Log::error('Flutterwave Webhook failed: '.$e->getMessage());
             http_response_code(400);
+
             return;
         }
     }
 
-    public function cashfree(Request $request){
+    public function cashfree(Request $request)
+    {
         try {
             $payload = $request->getContent();
             $input = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
@@ -391,18 +416,25 @@ class WebhookController extends Controller
             // Verify webhook signature using client secret
             $clientSecret = HelperService::getSettingData('cashfree_secret_key') ?? '';
 
-            if (!empty($clientSecret)) {
-                $receivedSignature = $request->header('x-webhook-signature');
-                $timestamp = $request->header('x-webhook-timestamp');
+            // Fail closed: reject if credentials are not configured
+            if (empty($clientSecret)) {
+                Log::error('Cashfree Webhook: credentials are not configured, rejecting request');
 
-                if ($receivedSignature && $timestamp) {
-                    $signatureData = $timestamp . $payload;
-                    $calculatedSignature = base64_encode(hash_hmac('sha256', $signatureData, $clientSecret, true));
+                return response()->json(['error' => 'Gateway not available'], 503);
+            }
 
-                    if (!hash_equals($calculatedSignature, $receivedSignature)) {
-                        Log::error('Cashfree Webhook: Signature verification failed');
-                        return response()->json(['error' => 'Invalid signature'], 401);
-                    }
+            // Verify webhook signature
+            $receivedSignature = $request->header('x-webhook-signature');
+            $timestamp = $request->header('x-webhook-timestamp');
+
+            if ($receivedSignature && $timestamp) {
+                $signatureData = $timestamp.$payload;
+                $calculatedSignature = base64_encode(hash_hmac('sha256', $signatureData, $clientSecret, true));
+
+                if (! hash_equals($calculatedSignature, $receivedSignature)) {
+                    Log::error('Cashfree Webhook: Signature verification failed');
+
+                    return response()->json(['error' => 'Invalid signature'], 401);
                 }
             }
 
@@ -410,8 +442,9 @@ class WebhookController extends Controller
             $eventType = $input['type'] ?? $input['event'] ?? null;
             $linkId = $input['data']['link_id'] ?? null;
 
-            if (!$linkId) {
+            if (! $linkId) {
                 Log::error('Cashfree Webhook: Missing link_id');
+
                 return response()->json(['error' => 'Missing link_id'], 400);
             }
 
@@ -420,8 +453,9 @@ class WebhookController extends Controller
                 ->where('payment_gateway', 'Cashfree')
                 ->first();
 
-            if (!$paymentTransaction) {
-                Log::warning('Cashfree Webhook: Transaction not found - ' . $linkId);
+            if (! $paymentTransaction) {
+                Log::warning('Cashfree Webhook: Transaction not found - '.$linkId);
+
                 return response()->json(['error' => 'Transaction not found'], 200);
             }
 
@@ -437,7 +471,7 @@ class WebhookController extends Controller
                     if ($paymentTransaction->payment_status !== 'success') {
                         $response = $this->assignPackage($paymentTransactionId, $transactionId);
                         if ($response['error']) {
-                            Log::error("Cashfree Webhook: " . $response['message']);
+                            Log::error('Cashfree Webhook: '.$response['message']);
                         }
                     }
                     break;
@@ -448,7 +482,7 @@ class WebhookController extends Controller
                     if ($paymentTransaction->payment_status !== 'failed') {
                         $response = $this->failedTransaction($paymentTransactionId);
                         if ($response['error']) {
-                            Log::error("Cashfree Webhook: " . $response['message']);
+                            Log::error('Cashfree Webhook: '.$response['message']);
                         }
                     }
                     break;
@@ -459,7 +493,7 @@ class WebhookController extends Controller
                     if ($paymentTransaction->payment_status !== 'succeed' && $paymentTransaction->payment_status !== 'success') {
                         $response = $this->assignPackage($paymentTransactionId, $transactionId);
                         if ($response['error']) {
-                            Log::error("Cashfree Webhook: " . $response['message']);
+                            Log::error('Cashfree Webhook: '.$response['message']);
                         }
                     }
                     break;
@@ -470,7 +504,7 @@ class WebhookController extends Controller
                     if ($paymentTransaction->payment_status !== 'failed') {
                         $response = $this->failedTransaction($paymentTransactionId);
                         if ($response['error']) {
-                            Log::error("Cashfree Webhook: " . $response['message']);
+                            Log::error('Cashfree Webhook: '.$response['message']);
                         }
                     }
                     break;
@@ -480,7 +514,7 @@ class WebhookController extends Controller
                     if ($paymentTransaction->payment_status !== 'failed') {
                         $response = $this->failedTransaction($paymentTransactionId);
                         if ($response['error']) {
-                            Log::error("Cashfree Webhook: " . $response['message']);
+                            Log::error('Cashfree Webhook: '.$response['message']);
                         }
                     }
                     break;
@@ -490,101 +524,124 @@ class WebhookController extends Controller
 
         } catch (\JsonException $e) {
             Log::error('Cashfree Webhook: Invalid JSON');
+
             return response()->json(['error' => 'Invalid JSON payload'], 400);
 
-        } catch (\Exception $e) {
-            Log::error('Cashfree Webhook: ' . $e->getMessage());
+        } catch (Exception $e) {
+            Log::error('Cashfree Webhook: '.$e->getMessage());
+
             return response()->json(['error' => 'Internal server error'], 500);
         }
     }
 
-    public function phonepe(Request $request) {
+    public function phonepe(Request $request)
+    {
         try {
             Log::info('PhonePe Webhook Called');
             $payload = $request->getContent();
             $data = json_decode($payload, true);
-            
+
             // Authorization Validation
             $authorizationHeader = $request->header('authorization');
-            if (empty($authorizationHeader)) {
-                Log::error('PhonePe Webhook: authorization header missing');
-            }
-            
+            $isAuthorizationValid = false;
+
             // Get credentials
             $phonePeConfig = HelperService::getMultipleSettingData(['phonepe_merchant_id', 'phonepe_webhook_username', 'phonepe_webhook_password']);
-            $userName = $phonePeConfig['phonepe_webhook_username'];
-            $password = $phonePeConfig['phonepe_webhook_password'];
-            // Verify Checksum if provided
-            if(!empty($authorizationHeader) && !empty($userName) && !empty($password)) {
-                $calculatedChecksum = hash('sha256', $userName .":". $password);
-                $isAuthorizationValid = ($calculatedChecksum == $authorizationHeader ? true : false);
-                if(!$isAuthorizationValid) {
+            $userName = $phonePeConfig['phonepe_webhook_username'] ?? null;
+            $password = $phonePeConfig['phonepe_webhook_password'] ?? null;
+            // Webhooks are validated only if credentials are configured. Fail closed otherwise.
+            if (empty($userName) || empty($password)) {
+                Log::error('PhonePe Webhook: webhook credentials are not configured, rejecting request');
+
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
+            // Verify Checksum
+            if (empty($authorizationHeader)) {
+                Log::error('PhonePe Webhook: authorization header missing');
+                $isAuthorizationValid = false;
+            } else {
+                $calculatedChecksum = hash('sha256', $userName.':'.$password);
+                $isAuthorizationValid = ($calculatedChecksum == $authorizationHeader);
+                if (! $isAuthorizationValid) {
                     Log::error('PhonePe Webhook: Invalid authorization webhook');
-                    return false;
-                }else{
+
+                    return response()->json(['error' => 'Invalid authorization'], 401);
+                } else {
                     Log::info('PhonePe Webhook: authorization webhook matched');
                 }
             }
 
-            if($isAuthorizationValid && isset($data) && !empty($data) && isset($data['payload']) && !empty($data['payload'])) {
+            if ($isAuthorizationValid && isset($data) && ! empty($data) && isset($data['payload']) && ! empty($data['payload'])) {
                 $event = $data['event'];
                 $payload = $data['payload'];
                 switch ($event) {
                     case 'checkout.order.completed':
                         $merchantTransactionId = $payload['merchantOrderId'];
                         $transaction = PaymentTransaction::where('order_id', $merchantTransactionId)->first();
-                        if($transaction) {
+                        if ($transaction) {
                             $successfulPayment = collect($payload['paymentDetails'])->firstWhere('state', 'COMPLETED');
                             $status = $successfulPayment['state'];
                             $transactionId = $successfulPayment['transactionId'];
-                            if($status == 'COMPLETED' && ($transaction->payment_status == 'pending' || $transaction->payment_status == 'failed')) {
+                            if ($status == 'COMPLETED' && ($transaction->payment_status == 'pending' || $transaction->payment_status == 'failed')) {
                                 $this->assignPackage($transaction->id, $transactionId);
                             } else {
                                 $this->failedTransaction($transaction->id);
                             }
+
                             return response()->json(['status' => 'success']);
                         } else {
-                            Log::error('PhonePe Webhook: Transaction not found for ' . $merchantTransactionId);
+                            Log::error('PhonePe Webhook: Transaction not found for '.$merchantTransactionId);
                         }
                         break;
                     case 'checkout.order.failed':
                         $merchantTransactionId = $payload['merchantOrderId'];
                         $transaction = PaymentTransaction::where('order_id', $merchantTransactionId)->first();
-                        if($transaction){
+                        if ($transaction) {
                             $this->failedTransaction($transaction->id);
                         }
-                        
+                        break;
                     default:
-                        Log::error('phonepe unknown event:' . $event);
+                        Log::error('phonepe unknown event:'.$event);
                         break;
                 }
             }
-            
+
             return response()->json(['status' => 'success']);
 
         } catch (Throwable $e) {
-            Log::error("PhonePe Webhook Error: " . $e->getMessage());
+            Log::error('PhonePe Webhook Error: '.$e->getMessage());
+
             return response()->json(['error' => 'Internal Server Error'], 500);
         }
     }
 
-    public function midtrans(Request $request){
+    public function midtrans(Request $request)
+    {
         try {
             $payload = $request->all();
             Log::info('Midtrans Webhook Received');
 
             $serverKey = HelperService::getSettingData('midtrans_server_key');
+
+            // Fail closed: reject if credentials are not configured
+            if (empty($serverKey)) {
+                Log::error('Midtrans Webhook: credentials are not configured, rejecting request');
+
+                return response()->json(['error' => 'Gateway not available'], 503);
+            }
+
             $signatureKey = hash(
                 'sha512',
-                $payload['order_id'] .
-                $payload['status_code'] .
-                $payload['gross_amount'] .
+                $payload['order_id'].
+                $payload['status_code'].
+                $payload['gross_amount'].
                 $serverKey
             );
 
             // Verify signature
-            if (!isset($payload['signature_key']) || $payload['signature_key'] !== $signatureKey) {
+            if (! isset($payload['signature_key']) || $payload['signature_key'] !== $signatureKey) {
                 Log::warning('Invalid Midtrans Signature', ['received' => $payload['signature_key'], 'expected' => $signatureKey]);
+
                 return response()->json(['message' => 'Invalid signature'], 403);
             }
 
@@ -605,159 +662,280 @@ class WebhookController extends Controller
 
             return response()->json(['status' => 'success']);
         } catch (Exception $e) {
-            Log::error('Midtrans Webhook Error: ' . $e->getMessage());
+            Log::error('Midtrans Webhook Error: '.$e->getMessage());
+
             return response()->json(['status' => 'error'], 500);
         }
     }
 
     /**
-     * Success Business Login
-     * @param $payment_transaction_id
-     * @param $user_id
-     * @param $package_id
-     * @return array
+     * Mock Gateway Webhook — simulates a successful payment confirmation
+     * without contacting a real gateway. Used by the MockPayment driver.
      */
-    private function assignPackage($paymentTransactionId,$transactionId) {
+    public function mock(Request $request)
+    {
         try {
-            $paymentTransactionData = PaymentTransaction::where('id', $paymentTransactionId)->first();
-            if ($paymentTransactionData == null) {
-                Log::error("Payment Transaction id not found");
-                ResponseService::errorResponse("Payment Transaction id not found");
+            Log::info('Mock Webhook Called');
+            $orderId = $request->input('order_id') ?? $request->query('order_id');
+
+            if (empty($orderId)) {
+                return response()->json(['error' => 'order_id is required'], 400);
             }
 
-            if ($paymentTransactionData->payment_status == "succeed" || $paymentTransactionData->payment_status == "success") {
-                Log::info("Transaction Already Succeed");
-                ResponseService::errorResponse("Transaction Already Succeed");
+            $transaction = PaymentTransaction::where('order_id', $orderId)->first();
+            if (! $transaction) {
+                Log::error('Mock Webhook: transaction not found for '.$orderId);
+
+                return response()->json(['error' => 'Transaction not found'], 404);
             }
 
-            DB::beginTransaction();
-            $paymentTransactionData->update(['transaction_id' => $transactionId,'payment_status' => "success"]);
+            if ($transaction->payment_status != 'success') {
+                DB::beginTransaction();
+                try {
+                    $transaction->update([
+                        'transaction_id' => 'MOCK-'.Str::upper(Str::random(16)),
+                        'payment_status' => 'success',
+                    ]);
 
-            $packageId = $paymentTransactionData->package_id;
-            $userId = $paymentTransactionData->user_id;
+                    if ($transaction->pay_as_you_go_id) {
+                        UserPayAsYouGoCredit::create([
+                            'user_id' => $transaction->user_id,
+                            'pay_as_you_go_id' => $transaction->pay_as_you_go_id,
+                            'payment_transaction_id' => $transaction->id,
+                            'used' => 0,
+                        ]);
 
-
-            $package = Package::findOrFail($packageId);
-
-            if (!empty($package)) {
-                // Assign Package to user
-                $userPackage = UserPackage::create([
-                    'package_id'  => $packageId,
-                    'user_id'     => $userId,
-                    'start_date'  => Carbon::now(),
-                    'end_date'    => $package->package_type == "unlimited" ? null : Carbon::now()->addHours($package->duration),
-                ]);
-
-                // Assign limited count feature to user with limits
-                $packageFeatures = PackageFeature::where(['package_id' => $packageId, 'limit_type' => 'limited'])->get();
-                if(collect($packageFeatures)->isNotEmpty()){
-                    $userPackageLimitData = array();
-                    foreach ($packageFeatures as $key => $feature) {
-                        $userPackageLimitData[] = array(
-                            'user_package_id' => $userPackage->id,
-                            'package_feature_id' => $feature->id,
-                            'total_limit' => $feature->limit,
-                            'used_limit' => 0,
-                            'created_at' => now(),
-                            'updated_at' => now()
-                        );
+                        $payAsYouGo = PayAsYouGo::find($transaction->pay_as_you_go_id);
+                        if ($payAsYouGo && $payAsYouGo->type === 'premium') {
+                            $premiumExpiresAt = Carbon::now()->addDays($payAsYouGo->duration_days ?? 30);
+                            if (! empty($transaction->property_id)) {
+                                Property::where('id', $transaction->property_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                            }
+                            if (! empty($transaction->project_id)) {
+                                Projects::where('id', $transaction->project_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                            }
+                        }
+                    } elseif ($transaction->package_id) {
+                        // FASE 8 (T6 restante): el webhook mock también asigna
+                        // paquetes/planes (Developer/Agencia) con sus límites.
+                        $this->assignPackageToUser($transaction);
                     }
+                    DB::commit();
+                } catch (Throwable $e) {
+                    DB::rollBack();
+                    Log::error('Mock Webhook assign error: '.$e->getMessage());
 
-                    if(!empty($userPackageLimitData)){
-                        UserPackageLimit::insert($userPackageLimitData);
-                    }
+                    return response()->json(['error' => 'Could not complete mock payment'], 500);
                 }
             }
 
-            $userFcmTokensDB = Usertokens::where('customer_id', $userId)->pluck('fcm_id');
-            if(collect($userFcmTokensDB)->isNotEmpty()){
+            $webUrl = config('app.url');
+
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 'success', 'payment_status' => 'success']);
+            }
+
+            return view('payments.status', [
+                'gateway' => 'mock',
+                'status' => 'success',
+                'txnRefId' => $orderId,
+                'webUrl' => $webUrl,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mock Webhook Error: '.$e->getMessage());
+
+            return response()->json(['error' => 'Internal Server Error'], 500);
+        }
+    }
+
+    /**
+     * Success Business Login
+     *
+     * @param  $payment_transaction_id
+     * @param  $user_id
+     * @param  $package_id
+     * @return array
+     */
+    private function assignPackage($paymentTransactionId, $transactionId)
+    {
+        try {
+            $paymentTransactionData = PaymentTransaction::where('id', $paymentTransactionId)->first();
+            if ($paymentTransactionData == null) {
+                Log::error('Payment Transaction id not found');
+                ResponseService::errorResponse('Payment Transaction id not found');
+            }
+
+            if ($paymentTransactionData->payment_status == 'succeed' || $paymentTransactionData->payment_status == 'success') {
+                Log::info('Transaction Already Succeed');
+                ResponseService::errorResponse('Transaction Already Succeed');
+            }
+
+            DB::beginTransaction();
+            $paymentTransactionData->update(['transaction_id' => $transactionId, 'payment_status' => 'success']);
+
+            $this->assignPackageToUser($paymentTransactionData);
+
+            $userFcmTokensDB = Usertokens::where('customer_id', $paymentTransactionData->user_id)->pluck('fcm_id');
+            if (collect($userFcmTokensDB)->isNotEmpty()) {
                 $translatedTitle = 'Package Purchased';
                 $translatedBody = 'Amount :- :amount';
                 $registrationIDs = array_filter($userFcmTokensDB->toArray());
 
-                $fcmMsg = array(
+                $fcmMsg = [
                     'title' => $translatedTitle,
                     'message' => $translatedBody,
-                    "image" => null,
+                    'image' => null,
                     'type' => 'default',
                     'body' => $translatedBody,
                     'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
                     'sound' => 'default',
+                    'role_context' => $paymentTransactionData->role_context ?? 'user',
                     'replace' => [
-                        'amount' => $paymentTransactionData->amount
-                    ]
+                        'amount' => $paymentTransactionData->amount,
+                    ],
 
-                );
+                ];
                 send_push_notification($registrationIDs, $fcmMsg);
 
-                $title = "Package Purchased";
-                $body = 'Amount :- ' . $paymentTransactionData->amount;
+                $title = 'Package Purchased';
+                $body = 'Amount :- '.$paymentTransactionData->amount;
                 Notifications::create([
                     'title' => $title,
                     'message' => $body,
                     'image' => '',
                     'type' => '2',
                     'send_type' => '0',
-                    'customers_id' => $userId,
+                    'customers_id' => $paymentTransactionData->user_id,
+                    'role_context' => $paymentTransactionData->role_context ?? 'user',
                 ]);
             }
             DB::commit();
-            ResponseService::successResponse("Transaction Verified Successfully");
+            ResponseService::successResponse('Transaction Verified Successfully');
 
         } catch (Throwable $th) {
             DB::rollBack();
-            Log::error($th->getMessage() . "WebhookController -> assignPackage");
+            Log::error($th->getMessage().'WebhookController -> assignPackage');
             ResponseService::errorResponse();
         }
     }
 
+    /**
+     * Crea el crédito (pay-as-you-go) o el paquete/plan + límites (package)
+     * a partir de una transacción de pago ya confirmada. Debe ejecutarse
+     * dentro de una transacción DB por el llamador.
+     */
+    private function assignPackageToUser(PaymentTransaction $paymentTransactionData)
+    {
+        $packageId = $paymentTransactionData->package_id;
+        $payAsYouGoId = $paymentTransactionData->pay_as_you_go_id;
+        $userId = $paymentTransactionData->user_id;
+
+        if ($payAsYouGoId) {
+            // Assign Pay As You Go Credit to user
+            UserPayAsYouGoCredit::create([
+                'user_id' => $userId,
+                'pay_as_you_go_id' => $payAsYouGoId,
+                'payment_transaction_id' => $paymentTransactionData->id,
+                'used' => 0,
+            ]);
+
+            // Premium Destaque: activate is_premium on the referenced property/project
+            $payAsYouGo = PayAsYouGo::find($payAsYouGoId);
+            if ($payAsYouGo && $payAsYouGo->type === 'premium') {
+                $premiumExpiresAt = Carbon::now()->addDays($payAsYouGo->duration_days ?? 30);
+                if (! empty($paymentTransactionData->property_id)) {
+                    Property::where('id', $paymentTransactionData->property_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                }
+                if (! empty($paymentTransactionData->project_id)) {
+                    Projects::where('id', $paymentTransactionData->project_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                }
+            }
+        } elseif ($packageId) {
+            $package = Package::findOrFail($packageId);
+
+            if (! empty($package)) {
+                // Assign Package to user
+                $userPackage = UserPackage::create([
+                    'package_id' => $packageId,
+                    'user_id' => $userId,
+                    'start_date' => Carbon::now(),
+                    'end_date' => $package->package_type == 'unlimited' ? null : Carbon::now()->addHours($package->duration),
+                    'role_context' => $package->user_type,
+                ]);
+
+                // Assign limited count feature to user with limits
+                $packageFeatures = PackageFeature::where(['package_id' => $packageId, 'limit_type' => 'limited'])->get();
+                if (collect($packageFeatures)->isNotEmpty()) {
+                    $userPackageLimitData = [];
+                    foreach ($packageFeatures as $key => $feature) {
+                        $userPackageLimitData[] = [
+                            'user_package_id' => $userPackage->id,
+                            'package_feature_id' => $feature->id,
+                            'total_limit' => $feature->limit,
+                            'used_limit' => 0,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                    }
+
+                    if (! empty($userPackageLimitData)) {
+                        UserPackageLimit::insert($userPackageLimitData);
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * Failed Business Logic
-     * @param $paymentTransactionId
+     *
      * @return array
      */
-    private function failedTransaction($paymentTransactionId) {
+    private function failedTransaction($paymentTransactionId)
+    {
         try {
             $paymentTransactionData = PaymentTransaction::find($paymentTransactionId);
-            if (!$paymentTransactionData) {
-                Log::error("Payment Transaction id not found");
-                return ResponseService::errorResponse("Payment Transaction id not found");
+            if (! $paymentTransactionData) {
+                Log::error('Payment Transaction id not found');
+
+                return ResponseService::errorResponse('Payment Transaction id not found');
             }
 
-            if ($paymentTransactionData->payment_status == "failed") {
-                Log::info("Transaction Already Failed");
-                return ResponseService::errorResponse("Transaction Already Failed");
+            if ($paymentTransactionData->payment_status == 'failed') {
+                Log::info('Transaction Already Failed');
+
+                return ResponseService::errorResponse('Transaction Already Failed');
             }
 
             DB::beginTransaction();
-            $paymentTransactionData->update(['payment_status' => "failed"]);
+            $paymentTransactionData->update(['payment_status' => 'failed']);
 
             $userId = $paymentTransactionData->user_id;
 
             $userFcmTokensDB = Usertokens::where('customer_id', $userId)->pluck('fcm_id');
-            if(collect($userFcmTokensDB)->isNotEmpty()){
+            if (collect($userFcmTokensDB)->isNotEmpty()) {
                 $registrationIDs = array_filter($userFcmTokensDB->toArray());
                 $translatedTitle = 'Package Payment Failed';
                 $translatedBody = 'Amount :- :amount';
-                $fcmMsg = array(
+                $fcmMsg = [
                     'title' => $translatedTitle,
                     'message' => $translatedBody,
-                    "image" => null,
+                    'image' => null,
                     'type' => 'default',
                     'body' => $translatedBody,
                     'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
                     'sound' => 'default',
+                    'role_context' => $paymentTransactionData->role_context ?? 'user',
                     'replace' => [
-                        'amount' => $paymentTransactionData->amount
-                    ]
+                        'amount' => $paymentTransactionData->amount,
+                    ],
 
-                );
+                ];
                 send_push_notification($registrationIDs, $fcmMsg);
             }
 
-            $title = "Package Payment Failed";
-            $body = 'Amount :- ' . $paymentTransactionData->amount;
+            $title = 'Package Payment Failed';
+            $body = 'Amount :- '.$paymentTransactionData->amount;
             Notifications::create([
                 'title' => $title,
                 'message' => $body,
@@ -765,13 +943,14 @@ class WebhookController extends Controller
                 'type' => '2',
                 'send_type' => '0',
                 'customers_id' => $userId,
+                'role_context' => $paymentTransactionData->role_context ?? 'user',
             ]);
 
             DB::commit();
-            ResponseService::successResponse("Transaction Failed Successfully");
+            ResponseService::successResponse('Transaction Failed Successfully');
         } catch (Throwable $th) {
             DB::rollBack();
-            Log::error($th->getMessage() . "WebhookController -> failedTransaction");
+            Log::error($th->getMessage().'WebhookController -> failedTransaction');
             ResponseService::errorResponse();
         }
     }

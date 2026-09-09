@@ -2,15 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
 use App\Models\Category;
-use App\Models\Property;
 use App\Models\parameter;
-use Illuminate\Http\Request;
+use App\Models\Property;
 use App\Services\ResponseService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 
 class DemoDataController extends Controller
 {
@@ -19,12 +19,12 @@ class DemoDataController extends Controller
      */
     public function index()
     {
-        if (!has_permissions('read', 'demo_data')) {
+        if (! has_permissions('read', 'demo_data')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $stats = [
-            'parameters' => parameter::where('is_demo',1)->count(),
-            'categories' => Category::where('is_demo',1)->count(),
+            'parameters' => parameter::where('is_demo', 1)->count(),
+            'categories' => Category::where('is_demo', 1)->count(),
             'properties' => Property::where('is_demo', 1)->count(),
         ];
 
@@ -36,20 +36,26 @@ class DemoDataController extends Controller
      */
     public function seedDemoData(Request $request)
     {
-        if (!has_permissions('update', 'demo_data')) {
+        if (! has_permissions('update', 'demo_data')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
             DB::beginTransaction();
             // Run the demo data seeder
             Artisan::call('db:seed', [
-                '--class' => 'DemoDataSeeder'
+                '--class' => 'DemoDataSeeder',
             ]);
             DB::commit();
             ResponseService::successResponse('Demo data seeded successfully');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            ResponseService::errorResponse();
+            Log::error('[DemoData] seedDemoData failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            ResponseService::errorResponse($e->getMessage());
         }
     }
 
@@ -88,9 +94,15 @@ class DemoDataController extends Controller
             DB::commit();
 
             ResponseService::successResponse('Demo data cleared successfully');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            ResponseService::errorResponse();
+            Log::error('[DemoData] clearDemoData failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            ResponseService::errorResponse($e->getMessage());
         }
     }
 
@@ -107,20 +119,27 @@ class DemoDataController extends Controller
 
             // Reseed demo data
             Artisan::call('db:seed', [
-                '--class' => 'DemoDataSeeder'
+                '--class' => 'DemoDataSeeder',
             ]);
 
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Demo data reset successfully! Fresh demo data has been seeded.'
+                'message' => 'Demo data reset successfully! Fresh demo data has been seeded.',
             ]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
+            Log::error('[DemoData] resetDemoData failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error resetting demo data: ' . $e->getMessage()
+                'message' => 'Error resetting demo data: '.$e->getMessage(),
             ], 500);
         }
     }

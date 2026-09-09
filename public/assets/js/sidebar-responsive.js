@@ -43,7 +43,7 @@
             }
 
             // Prevent body scroll on mobile
-            if (window.innerWidth <= 767.98) {
+            if (window.innerWidth <= 1199.98) {
                 document.body.style.overflow = 'hidden';
             }
         }
@@ -89,7 +89,7 @@
         // Close sidebar when clicking on navigation links (mobile only)
         // Only close when navigation actually happens, not on submenu toggles
         document.addEventListener('click', function (e) {
-            if (window.innerWidth <= 767.98) {
+            if (window.innerWidth <= 1199.98) {
                 const link = e.target.closest('#sidebarMenu a');
                 if (link) {
                     const href = link.getAttribute('href');
@@ -138,7 +138,7 @@
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(function () {
                 // On desktop, ensure sidebar is open and remove overlay
-                if (window.innerWidth >= 768) {
+                if (window.innerWidth >= 1200) {
                     sidebar.classList.add('active');
                     if (sidebarOverlay) {
                         sidebarOverlay.classList.remove('active');
@@ -157,7 +157,7 @@
 
         // Initialize sidebar state based on screen size
         function initializeSidebar() {
-            if (window.innerWidth >= 768) {
+            if (window.innerWidth >= 1200) {
                 // Desktop: sidebar should be open by default
                 sidebar.classList.add('active');
             } else {

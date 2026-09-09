@@ -1,13 +1,14 @@
 <?php
 
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Database\Migrations\Migration;
 
 return new class extends Migration
 {
     public $backupProductData;
+
     /**
      * Run the migrations.
      */
@@ -40,7 +41,7 @@ return new class extends Migration
             DB::table('packages')->whereNotNull('ios_product_Id')->update(['ios_product_Id' => null]);
 
             // Make IOS Product ID unique
-            Schema::table('packages', function(Blueprint $table){
+            Schema::table('packages', function (Blueprint $table) {
                 $table->string('ios_product_id')->nullable()->unique()->change();
             });
         }
@@ -52,9 +53,9 @@ return new class extends Migration
         Schema::create('verify_customer_forms', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->enum('field_type',['text','number','radio','checkbox','dropdown','textarea','file']);
+            $table->enum('field_type', ['text', 'number', 'radio', 'checkbox', 'dropdown', 'textarea', 'file']);
             $table->integer('rank')->nullable();
-            $table->enum('status',['active','inactive'])->default('active');
+            $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamps();
             $table->softDeletes();
         });
@@ -72,7 +73,7 @@ return new class extends Migration
         Schema::create('verify_customers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->references('id')->on('customers')->onDelete('cascade');
-            $table->enum('status',['failed','success','pending'])->default('pending');
+            $table->enum('status', ['failed', 'success', 'pending'])->default('pending');
             $table->timestamps();
             $table->softDeletes();
         });
@@ -85,11 +86,11 @@ return new class extends Migration
             $table->text('value');
             $table->timestamps();
             $table->softDeletes();
-            $table->unique(['verify_customer_id','verify_customer_form_id'],'unique_id');
+            $table->unique(['verify_customer_id', 'verify_customer_form_id'], 'unique_id');
         });
         /**************************************************************************/
 
-        Schema::table('notification',function(Blueprint $table){
+        Schema::table('notification', function (Blueprint $table) {
             $table->bigInteger('propertys_id')->nullable(true)->default(null)->change();
         });
     }
@@ -123,7 +124,6 @@ return new class extends Migration
         /**************************************************************************/
 
         /** User Verification Tables */
-
         Schema::dropIfExists('verify_customer_forms');
         Schema::dropIfExists('verify_customer_form_values');
         Schema::dropIfExists('verify_customers');
@@ -131,7 +131,7 @@ return new class extends Migration
 
         /**************************************************************************/
 
-        Schema::table('notification',function(Blueprint $table){
+        Schema::table('notification', function (Blueprint $table) {
             $table->bigInteger('propertys_id')->nullable(false)->default(0)->change();
         });
 

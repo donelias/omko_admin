@@ -1,9 +1,9 @@
 <?php
+
 namespace Grav\Plugin;
 
-use \Grav\Common\Plugin;
-use \Grav\Common\Grav;
-use \Grav\Common\Page\Page;
+use Grav\Common\Page\Page;
+use Grav\Common\Plugin;
 
 class AnchorsPlugin extends Plugin
 {
@@ -13,7 +13,7 @@ class AnchorsPlugin extends Plugin
     public static function getSubscribedEvents()
     {
         return [
-            'onPluginsInitialized' => ['onPluginsInitialized', 0]
+            'onPluginsInitialized' => ['onPluginsInitialized', 0],
         ];
     }
 
@@ -27,7 +27,7 @@ class AnchorsPlugin extends Plugin
         } else {
             $this->enable([
                 'onPageInitialized' => ['onPageInitialized', 0],
-                'onTwigSiteVariables' => ['onTwigSiteVariables', 0]
+                'onTwigSiteVariables' => ['onTwigSiteVariables', 0],
             ]);
         }
     }
@@ -72,7 +72,6 @@ class AnchorsPlugin extends Plugin
                                 };
                                 anchors.add('$selectors');
                              });";
-
 
             $this->grav['assets']->addInlineJs($anchors_init);
         }

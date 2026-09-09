@@ -2,15 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use App\Models\Setting;
-use App\Models\Property;
 use App\Models\CityImage;
-use Illuminate\Http\Request;
+use App\Models\Setting;
+use App\Services\BootstrapTableService;
 use App\Services\FileService;
 use App\Services\ResponseService;
-use Illuminate\Support\Facades\DB;
-use App\Services\BootstrapTableService;
+use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class CityImagesController extends Controller
@@ -20,10 +18,11 @@ class CityImagesController extends Controller
      */
     public function index()
     {
-        if (!has_permissions('read', 'city_images')) {
+        if (! has_permissions('read', 'city_images')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $cityImageStyle = Setting::where('type', 'city_image_style')->first();
+
         return view('property.cities', compact('cityImageStyle'));
     }
 
@@ -32,7 +31,7 @@ class CityImagesController extends Controller
      */
     public function show(string $id)
     {
-        if (!has_permissions('read', 'city_images')) {
+        if (! has_permissions('read', 'city_images')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $offset = request('offset', 0);
@@ -42,34 +41,33 @@ class CityImagesController extends Controller
         $search = request('search');
 
         $sql = CityImage::withCount(['property' => function ($query) {
-                $query->where('status', 1);
-            }])->when($search, function ($query) use ($search) {
+            $query->where('status', 1);
+        }])->when($search, function ($query) use ($search) {
             $query->where(function ($query) use ($search) {
                 $query->where('id', 'LIKE', "%$search%")
                     ->orWhere('city', 'LIKE', "%$search%");
             });
         });
 
-
         $total = $sql->count();
 
         $sql->orderBy($sort, $order)->skip($offset)->take($limit);
         $res = $sql->get();
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
+        $rows = [];
         $no = 1;
         foreach ($res as $row) {
-            if($row->property_count <= 0){
-                CityImage::where('id',$row->id)->update(array('status' =>false));
+            if ($row->property_count <= 0) {
+                CityImage::where('id', $row->id)->update(['status' => false]);
             }
-            $row = (object)$row;
+            $row = (object) $row;
 
             $operate = '';
-            if(has_permissions('update', 'city_images')){
+            if (has_permissions('update', 'city_images')) {
                 $operate = BootstrapTableService::editButton('', true, null, null, $row->id, null);
             }
-            if(has_permissions('delete', 'city_images')){
+            if (has_permissions('delete', 'city_images')) {
                 $operate .= BootstrapTableService::deleteAjaxButton(route('city-images.destroy', $row->id));
             }
 
@@ -77,7 +75,7 @@ class CityImagesController extends Controller
             $tempRow['total_properties'] = $row->property_count;
             $tempRow['edit_status_url'] = route('city-images.status-update');
             $tempRow['exclude_status_toggle'] = 0;
-            if($row->property_count <= 0){
+            if ($row->property_count <= 0) {
                 $tempRow['exclude_status_toggle'] = 1;
             }
             $tempRow['operate'] = $operate;
@@ -85,6 +83,7 @@ class CityImagesController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
@@ -93,7 +92,7 @@ class CityImagesController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        if (!has_permissions('update', 'city_images')) {
+        if (! has_permissions('update', 'city_images')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $validator = Validator::make($request->all(), [
@@ -113,7 +112,7 @@ class CityImagesController extends Controller
             $cityImageData->save();
             ResponseService::successResponse(trans('Data Updated Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,trans('Something Went Wrong'));
+            ResponseService::logErrorResponse($e, trans('Something Went Wrong'));
         }
     }
 
@@ -122,49 +121,51 @@ class CityImagesController extends Controller
      */
     public function destroy(string $id)
     {
-        if (!has_permissions('delete', 'city_images')) {
+        if (! has_permissions('delete', 'city_images')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         try {
             $query = CityImage::where('id', $id);
             $data = $query->clone()->first();
-            if(collect($data)->isNotEmpty()){
-                if (!empty($data->getRawOriginal('image'))) {
+            if (collect($data)->isNotEmpty()) {
+                if (! empty($data->getRawOriginal('image'))) {
                     $url = $data->image;
                     $relativePath = parse_url($url, PHP_URL_PATH);
-                    if (file_exists(public_path()  . $relativePath)) {
-                        unlink(public_path()  . $relativePath);
+                    if (file_exists(public_path().$relativePath)) {
+                        unlink(public_path().$relativePath);
                     }
                 }
             }
             $query->clone()->delete();
             ResponseService::successResponse(trans('Data Deleted Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,trans('Something Went Wrong'));
+            ResponseService::logErrorResponse($e, trans('Something Went Wrong'));
         }
     }
 
-
-    public function statusUpdate(Request $request){
-        if (!has_permissions('update', 'city_images')) {
+    public function statusUpdate(Request $request)
+    {
+        if (! has_permissions('update', 'city_images')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $validator = Validator::make($request->all(), [
-            'id'        => 'required',
-            'status'    => 'required|in:0,1',
+            'id' => 'required',
+            'status' => 'required|in:0,1',
         ]);
         if ($validator->fails()) {
             ResponseService::validationError($validator->errors()->first());
         }
         try {
-            CityImage::where('id', $request->id)->update(array('status' => $request->status));
+            CityImage::where('id', $request->id)->update(['status' => $request->status]);
             ResponseService::successResponse(trans('Data Updated Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,trans('Something Went Wrong'));
+            ResponseService::logErrorResponse($e, trans('Something Went Wrong'));
         }
     }
-    public function cityImageSettings(Request $request){
-        if (!has_permissions('update', 'city_images')) {
+
+    public function cityImageSettings(Request $request)
+    {
+        if (! has_permissions('update', 'city_images')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $validator = Validator::make($request->all(), [
@@ -181,7 +182,7 @@ class CityImagesController extends Controller
             Setting::updateOrCreate(['type' => 'city_image_style'], ['data' => $request->city_image_style]);
             ResponseService::successResponse(trans('Data Updated Successfully'));
         } catch (Exception $e) {
-            ResponseService::logErrorResponse($e,trans('Something Went Wrong'));
+            ResponseService::logErrorResponse($e, trans('Something Went Wrong'));
         }
     }
 }

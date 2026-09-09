@@ -29,7 +29,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-
         $data = [[
             'id' => 1,
             'name' => 'admin',

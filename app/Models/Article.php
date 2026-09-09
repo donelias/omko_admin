@@ -3,15 +3,17 @@
 namespace App\Models;
 
 use App\Services\FileService;
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
+use App\Traits\HasTenantFilter;
 use App\Traits\ManageTranslations;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Article extends Model
 {
-    use HasFactory, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, HasTenantFilter, ManageTranslations;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
     protected $fillable = [
@@ -28,23 +30,29 @@ class Article extends Model
         'updated_at',
         'deleted_at',
     ];
+
     public function getImageAttribute($image)
     {
-        $path = $image ? config('global.ARTICLE_IMG_PATH') . $image : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
+        $path = $image ? config('global.ARTICLE_IMG_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
     }
+
     public function category()
     {
-        return $this->belongsTo(Category::class,'category_id');
+        return $this->belongsTo(Category::class, 'category_id');
     }
+
     public function translations()
     {
         return $this->morphMany(Translation::class, 'translatable');
     }
+
     public function getTranslatedTitleAttribute()
     {
         return HelperService::getTranslatedData($this, $this->title, 'title');
     }
+
     public function getTranslatedDescriptionAttribute()
     {
         return HelperService::getTranslatedData($this, $this->description, 'description');

@@ -21,6 +21,6 @@ class VerifyCsrfToken extends Middleware
         '/webhook/phonepe',
         '/webhook/midtrans',
         '/InApp/Appstore',
-        '/firebase_messaging_settings'
+        '/firebase_messaging_settings',
     ];
 }

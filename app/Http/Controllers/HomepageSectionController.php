@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use Illuminate\Http\Request;
 use App\Models\HomepageSection;
+use App\Services\BootstrapTableService;
 use App\Services\HelperService;
 use App\Services\ResponseService;
+use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Services\BootstrapTableService;
 use Illuminate\Support\Facades\Validator;
 
 class HomepageSectionController extends Controller
@@ -19,12 +19,32 @@ class HomepageSectionController extends Controller
     public function index()
     {
         try {
-            if(!has_permissions('read', 'homepage-sections')) {
+            if (! has_permissions('read', 'homepage-sections')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
             $sectionTypes = HelperService::getHomepageSectionTypes();
             $languages = HelperService::getActiveLanguages();
+
             return view('homepage-sections.index', compact('sectionTypes', 'languages'));
+        } catch (Exception $e) {
+            ResponseService::logErrorRedirectResponse($e);
+        }
+    }
+
+    /**
+     * Display homepage sections order management.
+     */
+    public function changeOrder()
+    {
+        try {
+            if (! has_permissions('update', 'homepage-sections')) {
+                return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
+            }
+
+            $sectionTypes = HelperService::getHomepageSectionTypes();
+            $sections = HomepageSection::orderBy('sort_order', 'ASC')->orderBy('id', 'ASC')->get();
+
+            return view('homepage-sections.change-order', compact('sectionTypes', 'sections'));
         } catch (Exception $e) {
             ResponseService::logErrorRedirectResponse($e);
         }
@@ -36,7 +56,7 @@ class HomepageSectionController extends Controller
     public function store(Request $request)
     {
         try {
-            if(!has_permissions('create', 'homepage-sections')) {
+            if (! has_permissions('create', 'homepage-sections')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
             $validator = Validator::make($request->all(), [
@@ -49,28 +69,40 @@ class HomepageSectionController extends Controller
             DB::beginTransaction();
             // Check if section already exists
             $section = HomepageSection::where('section_type', $request->section_type)->first();
-            if($section){
+            if ($section) {
                 ResponseService::errorResponse(trans('Section already exists'));
             }
             // Create new section
             $data = $validator->validated();
+            $data['app_title'] = $request->app_title;
             $homepageSection = HomepageSection::create($data);
 
-            // Add Translations
-            if(isset($request->translations) && !empty($request->translations)){
-                $translationData = array();
-                foreach($request->translations as $translation){
-                    $translationData[] = array(
-                        'translatable_id'   => $homepageSection->id,
+            // Add Translations (web title + app title)
+            $translationData = [];
+            if (isset($request->translations) && ! empty($request->translations)) {
+                foreach ($request->translations as $translation) {
+                    $translationData[] = [
+                        'translatable_id' => $homepageSection->id,
                         'translatable_type' => 'App\Models\HomepageSection',
-                        'key'               => 'title',
-                        'value'             => $translation['value'],
-                        'language_id'       => $translation['language_id'],
-                    );
+                        'key' => 'title',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
-                if(!empty($translationData)){
-                    HelperService::storeTranslations($translationData);
+            }
+            if (isset($request->app_translations) && ! empty($request->app_translations)) {
+                foreach ($request->app_translations as $translation) {
+                    $translationData[] = [
+                        'translatable_id' => $homepageSection->id,
+                        'translatable_type' => 'App\Models\HomepageSection',
+                        'key' => 'app_title',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
+            }
+            if (! empty($translationData)) {
+                HelperService::storeTranslations($translationData);
             }
             DB::commit();
             ResponseService::successResponse(trans('Data Updated Successfully'));
@@ -86,7 +118,7 @@ class HomepageSectionController extends Controller
     public function show(string $id)
     {
         try {
-            if(!has_permissions('read', 'homepage-sections')) {
+            if (! has_permissions('read', 'homepage-sections')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
             $offset = request('offset', 0);
@@ -96,36 +128,35 @@ class HomepageSectionController extends Controller
             $search = request('search');
 
             $sql = HomepageSection::with('translations')->when($search, function ($query) use ($search) {
-                    $query->where(function ($query) use ($search) {
-                        $query->where('id', 'LIKE', "%$search%")
-                            ->orWhere('title', 'LIKE', "%$search%")
-                            ->orWhere('section_type', 'LIKE', "%$search%");
-                    });
+                $query->where(function ($query) use ($search) {
+                    $query->where('id', 'LIKE', "%$search%")
+                        ->orWhere('title', 'LIKE', "%$search%")
+                        ->orWhere('section_type', 'LIKE', "%$search%");
                 });
-
+            });
 
             $total = $sql->count();
 
             $sql->orderBy($sort, $order)->skip($offset)->take($limit);
             $res = $sql->get();
-            $bulkData = array();
+            $bulkData = [];
             $bulkData['total'] = $total;
-            $rows = array();
+            $rows = [];
             $no = 1;
             foreach ($res as $row) {
-                $row = (object)$row;
+                $row = (object) $row;
                 $operate = '';
-                if(has_permissions('update', 'homepage-sections')){
+                if (has_permissions('update', 'homepage-sections')) {
                     $operate .= BootstrapTableService::editButton('', true, null, null, null, null);
                 }
-                if(has_permissions('delete', 'homepage-sections')){
+                if (has_permissions('delete', 'homepage-sections')) {
                     $operate .= BootstrapTableService::deleteAjaxButton(route('homepage-sections.destroy', $row->id));
                 }
 
                 $tempRow = $row->toArray();
-                if(has_permissions('update', 'homepage-sections')){
+                if (has_permissions('update', 'homepage-sections')) {
                     $tempRow['edit_status_url'] = route('homepage-sections.status-update');
-                }else{
+                } else {
                     $tempRow['edit_status_url'] = null;
                 }
                 $tempRow['operate'] = $operate;
@@ -133,6 +164,7 @@ class HomepageSectionController extends Controller
             }
 
             $bulkData['rows'] = $rows;
+
             return response()->json($bulkData);
         } catch (Exception $e) {
             ResponseService::logErrorResponse($e);
@@ -145,36 +177,56 @@ class HomepageSectionController extends Controller
     public function update(Request $request, string $id)
     {
         try {
-            if(!has_permissions('update', 'homepage-sections')) {
+            if (! has_permissions('update', 'homepage-sections')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
+            }
+
+            $validator = Validator::make($request->all(), [
+                'title' => 'required',
+                'section_type' => 'required',
+            ]);
+            if ($validator->fails()) {
+                ResponseService::validationError($validator->errors()->first());
             }
 
             DB::beginTransaction();
             // Check if section already exists
             $section = HomepageSection::where('section_type', $request->section_type)->where('id', '!=', $id)->first();
-            if($section){
+            if ($section) {
                 ResponseService::errorResponse(trans('Section already exists'));
             }
-            $data = $request->except('_token','_method','edit_id','translations');
+            $data = $request->except('_token', '_method', 'edit_id', 'translations', 'app_translations');
             $section = HomepageSection::find($id);
             $section->update($data);
 
-            // Add Translations
-            if(isset($request->translations) && !empty($request->translations)){
-                $translationData = array();
-                foreach($request->translations as $translation){
-                    $translationData[] = array(
-                        'id'                => $translation['id'] ?? null,
-                        'translatable_id'   => $id,
+            // Add Translations (web title + app title)
+            $translationData = [];
+            if (isset($request->translations) && ! empty($request->translations)) {
+                foreach ($request->translations as $translation) {
+                    $translationData[] = [
+                        'id' => $translation['id'] ?? null,
+                        'translatable_id' => $id,
                         'translatable_type' => 'App\Models\HomepageSection',
-                        'key'               => 'title',
-                        'value'             => $translation['value'],
-                        'language_id'       => $translation['language_id'],
-                    );
+                        'key' => 'title',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
-                if(!empty($translationData)){
-                    HelperService::storeTranslations($translationData);
+            }
+            if (isset($request->app_translations) && ! empty($request->app_translations)) {
+                foreach ($request->app_translations as $translation) {
+                    $translationData[] = [
+                        'id' => $translation['id'] ?? null,
+                        'translatable_id' => $id,
+                        'translatable_type' => 'App\Models\HomepageSection',
+                        'key' => 'app_title',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
+            }
+            if (! empty($translationData)) {
+                HelperService::storeTranslations($translationData);
             }
             DB::commit();
             ResponseService::successResponse(trans('Data Updated Successfully'));
@@ -190,7 +242,7 @@ class HomepageSectionController extends Controller
     public function destroy(string $id)
     {
         try {
-            if(!has_permissions('delete', 'homepage-sections')) {
+            if (! has_permissions('delete', 'homepage-sections')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
             HomepageSection::where('id', $id)->delete();
@@ -206,7 +258,7 @@ class HomepageSectionController extends Controller
     public function statusUpdate(Request $request)
     {
         try {
-            if(!has_permissions('update', 'homepage-sections')) {
+            if (! has_permissions('update', 'homepage-sections')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
             $section = HomepageSection::find($request->id);
@@ -224,7 +276,7 @@ class HomepageSectionController extends Controller
     public function updateOrder(Request $request)
     {
         try {
-            if(!has_permissions('update', 'homepage-sections')) {
+            if (! has_permissions('update', 'homepage-sections')) {
                 ResponseService::errorResponse(PERMISSION_ERROR_MSG);
             }
 
@@ -232,7 +284,7 @@ class HomepageSectionController extends Controller
             $validator = Validator::make($request->all(), [
                 'sections' => 'required|array',
                 'sections.*.id' => 'required|exists:homepage_sections,id',
-                'sections.*.sort_order' => 'required|integer|min:1'
+                'sections.*.sort_order' => 'required|integer|min:1',
             ]);
 
             if ($validator->fails()) {
@@ -255,4 +307,24 @@ class HomepageSectionController extends Controller
             ResponseService::logErrorResponse($e);
         }
     }
+
+    public function updateToggles(Request $request)
+    {
+        try {
+            if (! has_permissions('update', 'homepage-sections')) {
+                return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
+            }
+
+            $settings = ['slider_section', 'search_section', 'all_properties_section'];
+            foreach ($settings as $setting) {
+                $value = $request->input($setting, 0);
+                \App\Models\Setting::updateOrCreate(['type' => $setting], ['data' => $value]);
+            }
+
+            return redirect()->back()->with('success', trans('Data Updated Successfully'));
+        } catch (Exception $e) {
+            return redirect()->back()->with('error', trans('Something Went Wrong'));
+        }
+    }
+
 }

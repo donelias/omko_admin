@@ -3,9 +3,9 @@
 namespace App\Console\Commands\Demo;
 
 use App\Models\Advertisement;
-use Exception;
 use App\Models\Projects;
 use App\Models\Property;
+use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -42,7 +42,7 @@ class RemoveAdvertisements extends Command
             }
             Log::info('All advertisements have been deleted');
         } catch (Exception $e) {
-            Log::error('Issue Removing Advertisements From Demo: ' . $e->getMessage());
+            Log::error('Issue Removing Advertisements From Demo: '.$e->getMessage());
         }
     }
 }

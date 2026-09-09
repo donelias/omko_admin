@@ -8,12 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 class ProjectView extends Model
 {
     use HasFactory;
+
     protected $table = 'project_views';
+
     protected $fillable = [
         'user_id',
         'project_id',
         'date',
-        'views'
+        'views',
     ];
 
     public function project()

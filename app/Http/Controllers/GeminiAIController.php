@@ -2,18 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\GeminiUsage;
 use App\Models\Language;
-use Illuminate\Http\Request;
 use App\Services\GeminiService;
 use App\Services\HelperService;
 use App\Services\ResponseService;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class GeminiAIController extends Controller
@@ -31,6 +30,7 @@ class GeminiAIController extends Controller
     private function isGeminiEnabled(): bool
     {
         $enabled = HelperService::getSettingData('gemini_ai_enabled');
+
         return $enabled == '1';
     }
 
@@ -40,7 +40,9 @@ class GeminiAIController extends Controller
     public function generateDescription(Request $request)
     {
         // Check if Gemini AI is enabled
-        if (!$this->isGeminiEnabled()) {
+        if (! $this->isGeminiEnabled()) {
+            Log::warning('Gemini AI: generateDescription called but gemini_ai_enabled is not set to 1 in settings.');
+
             return ResponseService::validationError('Content Generation currently not available please try again later.');
         }
 
@@ -56,7 +58,7 @@ class GeminiAIController extends Controller
                 'price' => 'nullable|string',
                 'property_type' => 'nullable|string|in:sell,rent',
                 'category_id' => 'nullable|integer|exists:categories,id',
-                'language_id' => 'nullable|integer'
+                'language_id' => 'nullable|integer',
             ]);
 
             if ($validator->fails()) {
@@ -71,30 +73,30 @@ class GeminiAIController extends Controller
             // Prepare data
             $data = $request->only([
                 'title', 'location', 'city', 'state', 'country',
-                'price', 'property_type'
+                'price', 'property_type',
             ]);
-            foreach($data as $key => $value){
-                if(empty($value)){
+            foreach ($data as $key => $value) {
+                if (empty($value)) {
                     unset($data[$key]);
                 }
             }
-            if($request->has('category_id') && $request->category_id != null){
+            if ($request->has('category_id') && $request->category_id != null) {
                 $category = Category::find($request->category_id);
-                if(collect($category)->isNotEmpty()){
+                if (collect($category)->isNotEmpty()) {
                     $data['category_name'] = $category->category;
                 }
             }
 
             // Add language information if provided
             // First check if language is explicitly provided in request
-            if($request->has('language_id') && !empty($request->language_id)){
+            if ($request->has('language_id') && ! empty($request->language_id)) {
                 $data['language_id'] = $request->language_id;
                 // Get language from database - check for exact match first
                 $language = Language::where('id', $request->language_id)->where('status', 1)->first();
-                if($language){
+                if ($language) {
                     $data['language_name'] = $language->name;
                     $data['language_code'] = $language->code;
-                }else{
+                } else {
                     return ResponseService::validationError('Language not found');
                 }
             }
@@ -103,12 +105,12 @@ class GeminiAIController extends Controller
             $isCached = $this->geminiService->hasCachedDescription($data, $request->entity_type);
 
             // Only check limits if data is not cached (new request)
-            if (!$isCached) {
+            if (! $isCached) {
                 // 1) Global limit (all users combined)
                 $globalLimit = $this->getGlobalRateLimit('description');
                 if ($globalLimit > 0 && GeminiUsage::hasExceededGlobalLimit('description', $globalLimit, 24)) {
                     return ResponseService::validationError(
-                        "Daily limit reached."
+                        'Daily limit reached.'
                     );
                 }
 
@@ -117,7 +119,7 @@ class GeminiAIController extends Controller
                     $limit = $this->getRateLimit('description');
                     if ($userId && GeminiUsage::hasExceededLimit($userId, $userType, 'description', $limit, 24)) {
                         return ResponseService::validationError(
-                            "Daily limit reached."
+                            'Daily limit reached.'
                         );
                     }
                 }
@@ -129,12 +131,12 @@ class GeminiAIController extends Controller
                 $request->entity_type
             );
 
-            if (!$result['success']) {
+            if (! $result['success']) {
                 return ResponseService::validationError($result['error'] ?? 'Failed to generate description');
             }
 
             // Track usage only if not cached (new request)
-            if ($userId && !($result['cached'] ?? false)) {
+            if ($userId && ! ($result['cached'] ?? false)) {
                 $promptHash = md5($this->geminiService->buildDescriptionPrompt($data, $request->entity_type));
                 GeminiUsage::create([
                     'user_id' => $userId,
@@ -154,7 +156,8 @@ class GeminiAIController extends Controller
             ]);
 
         } catch (Exception $e) {
-            Log::error('Gemini Description Generation Error: ' . $e->getMessage());
+            Log::error('Gemini Description Generation Error: '.$e->getMessage());
+
             return ResponseService::validationError('Content Generation currently not available please try again later.');
         }
     }
@@ -165,7 +168,9 @@ class GeminiAIController extends Controller
     public function generateMetaDetails(Request $request)
     {
         // Check if Gemini AI is enabled
-        if (!$this->isGeminiEnabled()) {
+        if (! $this->isGeminiEnabled()) {
+            Log::warning('Gemini AI: generateMetaDetails called but gemini_ai_enabled is not set to 1 in settings.');
+
             return ResponseService::validationError('Content Generation currently not available please try again later.');
         }
 
@@ -179,7 +184,7 @@ class GeminiAIController extends Controller
                 'state' => 'nullable|string',
                 'country' => 'nullable|string',
                 'price' => 'nullable|string',
-                'language_id' => 'nullable|integer'
+                'language_id' => 'nullable|integer',
             ]);
 
             if ($validator->fails()) {
@@ -195,14 +200,14 @@ class GeminiAIController extends Controller
             $data = $request->only(['title', 'location', 'city', 'state', 'country', 'price']);
 
             // Add language information if provided
-            if($request->has('language_id') && !empty($request->language_id)){
+            if ($request->has('language_id') && ! empty($request->language_id)) {
                 $data['language_id'] = $request->language_id;
                 // Get language from database - check for exact match first
                 $language = Language::where('id', $request->language_id)->where('status', 1)->first();
-                if($language){
+                if ($language) {
                     $data['language_name'] = $language->name;
                     $data['language_code'] = $language->code;
-                }else{
+                } else {
                     return ResponseService::validationError('Language not found');
                 }
             }
@@ -211,12 +216,12 @@ class GeminiAIController extends Controller
             $isCached = $this->geminiService->hasCachedMetaDetails($data, $request->entity_type);
 
             // Only check limits if data is not cached (new request)
-            if (!$isCached) {
+            if (! $isCached) {
                 // 1) Global limit (all users combined)
                 $globalLimit = $this->getGlobalRateLimit('meta');
                 if ($globalLimit > 0 && GeminiUsage::hasExceededGlobalLimit('meta', $globalLimit, 24)) {
                     return ResponseService::validationError(
-                        "Daily limit reached."
+                        'Daily limit reached.'
                     );
                 }
 
@@ -225,7 +230,7 @@ class GeminiAIController extends Controller
                     $limit = $this->getRateLimit('meta');
                     if ($userId && GeminiUsage::hasExceededLimit($userId, $userType, 'meta', $limit, 24)) {
                         return ResponseService::validationError(
-                            "Daily limit reached."
+                            'Daily limit reached.'
                         );
                     }
                 }
@@ -237,12 +242,12 @@ class GeminiAIController extends Controller
                 $request->entity_type
             );
 
-            if (!$result['success']) {
+            if (! $result['success']) {
                 return ResponseService::validationError($result['error'] ?? 'Failed to generate meta details');
             }
 
             // Track usage only if not cached (new request)
-            if ($userId && !($result['cached'] ?? false)) {
+            if ($userId && ! ($result['cached'] ?? false)) {
                 $promptHash = md5($this->geminiService->buildMetaPrompt($data, $request->entity_type));
                 GeminiUsage::create([
                     'user_id' => $userId,
@@ -264,7 +269,8 @@ class GeminiAIController extends Controller
             ]);
 
         } catch (Exception $e) {
-            Log::error('Gemini Meta Generation Error: ' . $e->getMessage());
+            Log::error('Gemini Meta Generation Error: '.$e->getMessage());
+
             return ResponseService::errorResponse('Content Generation currently not available please try again later.');
         }
     }
@@ -310,4 +316,3 @@ class GeminiAIController extends Controller
         return $this->getRateLimit($type);
     }
 }
-

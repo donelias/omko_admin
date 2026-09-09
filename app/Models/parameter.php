@@ -3,15 +3,16 @@
 namespace App\Models;
 
 use App\Services\FileService;
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
 use App\Traits\ManageTranslations;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class parameter extends Model
 {
-    use HasFactory, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, ManageTranslations;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
     protected $table = 'parameters';
@@ -22,14 +23,16 @@ class parameter extends Model
         'type_values',
         'is_required',
         'image',
-        'is_demo'
+        'is_demo',
     ];
-    protected $hidden = ["created_at", "updated_at"];
-    
-    protected static function boot() {
+
+    protected $hidden = ['created_at', 'updated_at'];
+
+    protected static function boot()
+    {
         parent::boot();
         static::deleting(function ($parameter) {
-            if(collect($parameter)->isNotEmpty()){
+            if (collect($parameter)->isNotEmpty()) {
                 // before delete() method call this
 
                 // Delete Title Image
@@ -59,11 +62,10 @@ class parameter extends Model
                     }
                 }
 
-
                 $assignParameters = AssignParameters::where('parameter_id', $parameter->id)->get();
-                if(collect($assignParameters)->isNotEmpty()){
+                if (collect($assignParameters)->isNotEmpty()) {
                     foreach ($assignParameters as $assignParameter) {
-                        if(collect($assignParameter)->isNotEmpty()){
+                        if (collect($assignParameter)->isNotEmpty()) {
                             $assignParameter->delete(); // This will trigger the deleting and deleted events in modal
                         }
                     }
@@ -72,32 +74,35 @@ class parameter extends Model
         });
     }
 
-
     public function getTypeValuesAttribute($value)
     {
         $a = json_decode($value, true);
-        if ($a == NULL) {
+        if ($a == null) {
             return $value;
         } else {
-            foreach($a as $key => $value){
-                if(is_array($value)){
+            foreach ($a as $key => $value) {
+                if (is_array($value)) {
                     $a[$key]['value'] = htmlspecialchars_decode($value['value'], ENT_QUOTES | ENT_HTML5);
-                    if(isset($value['translations'])){
-                        foreach($value['translations'] as $translationKey => $translation){
+                    if (isset($value['translations'])) {
+                        foreach ($value['translations'] as $translationKey => $translation) {
                             $translation['value'] = htmlspecialchars_decode($translation['value'], ENT_QUOTES | ENT_HTML5);
                             $a[$key]['translations'][$translationKey] = $translation;
                         }
                     }
                 }
             }
+
             return $a;
         }
     }
+
     public function getImageAttribute($image)
     {
-        $path = $image ? config('global.PARAMETER_IMAGE_PATH') . $image : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
+        $path = $image ? config('global.PARAMETER_IMAGE_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
     }
+
     public function assigned_parameter()
     {
         return $this->hasOne(AssignParameters::class, 'parameter_id');
@@ -125,21 +130,22 @@ class parameter extends Model
         if ($optionValues && is_array($optionValues)) {
             $translatedValue = [];
             foreach ($optionValues as $option) {
-                if(is_array($option)){
-                    $translatedValue[] = array(
+                if (is_array($option)) {
+                    $translatedValue[] = [
                         'value' => $option['value'],
-                        'translated' => $option['value']
-                    );
-                }else{
-                    $translatedValue[] = array(
+                        'translated' => $option['value'],
+                    ];
+                } else {
+                    $translatedValue[] = [
                         'value' => $option,
-                        'translated' => $option
-                    );
+                        'translated' => $option,
+                    ];
                 }
             }
-        }else{
+        } else {
             $translatedValue = $optionValues;
         }
+
         return $translatedValue;
     }
 
@@ -155,7 +161,7 @@ class parameter extends Model
         }
 
         // Get language ID for the code
-        $languageId = cache()->remember("language_id_{$languageCode}", 3600, function() use ($languageCode) {
+        $languageId = cache()->remember("language_id_{$languageCode}", 3600, function () use ($languageCode) {
             return Language::where('code', $languageCode)->value('id');
         });
 
@@ -166,7 +172,7 @@ class parameter extends Model
         $optionValues = $this->type_values;
 
         // If type_values is empty or not an array, return simple values
-        if (empty($optionValues) || !is_array($optionValues)) {
+        if (empty($optionValues) || ! is_array($optionValues)) {
             return $this->getSimpleOptionValues();
         }
 
@@ -180,22 +186,22 @@ class parameter extends Model
                 $translatedValue = $value;
                 if (isset($option['translations']) && is_array($option['translations'])) {
                     foreach ($option['translations'] as $translation) {
-                        if (isset($translation['language_id']) && $translation['language_id'] == $languageId && !empty($translation['value'])) {
+                        if (isset($translation['language_id']) && $translation['language_id'] == $languageId && ! empty($translation['value'])) {
                             $translatedValue = $translation['value'];
                             break;
                         }
                     }
                 }
-                $translatedValues[] = array(
+                $translatedValues[] = [
                     'value' => $value,
-                    'translated' => $translatedValue
-                );
+                    'translated' => $translatedValue,
+                ];
             } else {
                 // If option is not an array, use it as is
-                $translatedValues[] = array(
+                $translatedValues[] = [
                     'value' => $option,
-                    'translated' => $option
-                );
+                    'translated' => $option,
+                ];
             }
         }
 

@@ -1,4 +1,4 @@
-// Parsley Localization for ebroker-admin
+// Parsley Localization for omko-admin
 // This file handles dynamic localization of Parsley validation messages
 
 function initParsleyLocalization() {

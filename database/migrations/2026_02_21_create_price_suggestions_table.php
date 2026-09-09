@@ -8,12 +8,14 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * @return void
      */
-    public function up(): void
+    public function up()
     {
         Schema::create('price_suggestions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('property_id')->constrained('propertys')->onDelete('cascade');
+            $table->unsignedBigInteger('property_id')->unique();
             $table->decimal('suggested_price', 15, 2);
             $table->decimal('suggested_price_per_sqm', 10, 2)->nullable();
             $table->decimal('minimum_price', 15, 2);
@@ -28,24 +30,27 @@ return new class extends Migration
             $table->decimal('estimated_sales_probability', 5, 2)->nullable()->comment('Probabilidad de venta en 30 días');
             $table->boolean('is_ai_generated')->default(true);
             $table->string('algorithm_version')->default('1.0');
-            $table->foreignId('generated_by')->nullable()->constrained('users')->onDelete('set null');
+            $table->unsignedBigInteger('generated_by')->nullable();
             $table->dateTime('expires_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
 
-            // Índices
             $table->index('property_id');
             $table->index('recommendation');
             $table->index('confidence_score');
             $table->index('created_at');
-            $table->unique('property_id');
+
+            $table->foreign('property_id')->references('id')->on('propertys')->onDelete('cascade');
+            $table->foreign('generated_by')->references('id')->on('users')->onDelete('set null');
         });
     }
 
     /**
      * Reverse the migrations.
+     *
+     * @return void
      */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('price_suggestions');
     }

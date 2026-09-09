@@ -488,8 +488,9 @@ function confirmationDelete(e) {
     var url = e.currentTarget.getAttribute('href'); //use currentTarget because the click may be on the nested i tag and not a tag causing the href to be empty
     $('#form-del').attr('action', url);
     Swal.fire({
-        title: window.trans['Are You Sure Want to Delete This Record??'],
-        icon: 'error',
+       title: window.trans["Are you sure"],
+        text: window.trans["You want to delete it ?"],
+        icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#198754',
         cancelButtonColor: '#d33',
@@ -960,8 +961,8 @@ var editDefaultValuesRepeater = $('.edit-default-values-section').repeater({
             showCancelButton: true,
             confirmButtonColor: '#198754',
             cancelButtonColor: '#d33',
-            confirmButtonText: window.trans["Yes"],
-            cancelButtonText: window.trans["No"],
+            confirmButtonText: window.trans["Yes Delete"],
+            cancelButtonText: window.trans["cancel"],
         }).then((result) => {
             if (result.isConfirmed) {
                 $this.slideUp(deleteElement, function () {
@@ -989,6 +990,8 @@ $('.verify-customer-status-form').on('submit', function (e) {
     modalElement.find('.close-btn').attr('disabled', true);
     if (!formElement.parsley().isValid()) {
         submitButtonElement.val(submitButtonText).removeAttr('disabled');
+        modalElement.find('.btn-close').removeAttr('disabled');
+        modalElement.find('.close-btn').removeAttr('disabled');
         // If the form is not valid, trigger Parsley's validation messages
         formElement.parsley().validate();
     } else {
@@ -1015,8 +1018,16 @@ $('.verify-customer-status-form').on('submit', function (e) {
                 }
 
             }
+            function errorCallback(response) {
+                modalElement.find('.btn-close').removeAttr('disabled');
+                modalElement.find('.close-btn').removeAttr('disabled');
+
+                if (response && response.code === 403) {
+                    $('#editModal').modal('hide');
+                }
+            }
             submitButtonElement.val(submitButtonText).attr('disabled', false);
-            formAjaxRequest('POST', url, data, formElement, submitButtonElement, successCallback);
+            formAjaxRequest('POST', url, data, formElement, submitButtonElement, successCallback, errorCallback);
 
         }, 300);
     }
@@ -1079,7 +1090,6 @@ var projectFloorPlanRepeater = $('.projects-floor-plans').repeater({
                         $this.remove();
                     });
                 }, errorCallBack: function (response) {
-                    showErrorToast(response.message);
                 }
             })
         } else {

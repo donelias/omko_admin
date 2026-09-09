@@ -20,9 +20,9 @@ return new class extends Migration
             $table->text('meta_keywords');
             $table->string('meta_image')->nullable();
         });
-        $rows = \DB::table('articles')->get();
+        $rows = DB::table('articles')->get();
         foreach ($rows as $row) {
-            \DB::table('articles')
+            DB::table('articles')
                 ->where('id', $row->id)
                 ->update(['meta_title' => $row->title]);
         }

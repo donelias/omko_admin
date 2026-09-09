@@ -2,30 +2,47 @@
 
 namespace App\Models;
 
+use App\Traits\HasAppTimezone;
+use App\Traits\HasRoleContext;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\HasAppTimezone;
+
 class PaymentTransaction extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory, HasRoleContext;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
-    protected $fillable = array(
+
+    protected $fillable = [
         'user_id',
         'package_id',
+        'pay_as_you_go_id',
+        'property_id',
+        'project_id',
         'amount',
         'payment_gateway',
         'payment_type',
         'order_id',
         'payment_status',
         'transaction_id',
-    );
+        'role_context',
+    ];
+
+    protected $casts = [
+        'user_id' => 'integer',
+        'package_id' => 'integer',
+        'pay_as_you_go_id' => 'integer',
+        'property_id' => 'integer',
+        'project_id' => 'integer',
+        'amount' => 'float',
+    ];
 
     public static function boot()
     {
         parent::boot();
         static::deleting(function ($model) {
             $bankReceiptFiles = $model->bank_receipt_files()->get();
-            foreach($bankReceiptFiles as $bankReceiptFile){
+            foreach ($bankReceiptFiles as $bankReceiptFile) {
                 $bankReceiptFile->delete();
             }
         });

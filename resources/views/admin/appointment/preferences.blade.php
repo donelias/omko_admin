@@ -162,8 +162,8 @@
                     <div class="card">
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-12">
-                                    <button type="submit" class="btn btn-primary">{{ __('Save Preferences') }}</button>
+                                <div class="col-12 appointment-preferences-actions">
+                                    <button type="submit" class="btn btn-primary mt-0">{{ __('Save Preferences') }}</button>
                                     <a href="{{ url('admin/appointment/time-schedule') }}" class="btn btn-secondary">{{ __('Next: Time Schedule') }}</a>
                                 </div>
                             </div>

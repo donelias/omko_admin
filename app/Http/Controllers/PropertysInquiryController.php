@@ -2,24 +2,25 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Setting;
-use App\Models\Usertokens;
-use Illuminate\Http\Request;
 use App\Models\Notifications;
 use App\Models\PropertysInquiry;
+use App\Models\Setting;
+use App\Models\Usertokens;
 use App\Services\ResponseService;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class PropertysInquiryController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function index($status = null)
     {
 
-        if (!has_permissions('read', 'property_inquiry')) {
+        if (! has_permissions('read', 'property_inquiry')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         } else {
 
@@ -28,7 +29,7 @@ class PropertysInquiryController extends Controller
             } else {
                 $status = '';
             }
-            $firebase_settings = array();
+            $firebase_settings = [];
             $operate = '';
             $firebase_settings['apiKey'] = system_setting('apiKey');
             $firebase_settings['authDomain'] = system_setting('authDomain');
@@ -37,22 +38,23 @@ class PropertysInquiryController extends Controller
             $firebase_settings['messagingSenderId'] = system_setting('messagingSenderId');
             $firebase_settings['appId'] = system_setting('appId');
             $firebase_settings['measurementId'] = system_setting('measurementId');
+
             return view('property_inquiry.index', compact('status', 'firebase_settings'));
         }
     }
 
     public function show()
     {
-        if (!has_permissions('read', 'property_inquiry')) {
+        if (! has_permissions('read', 'property_inquiry')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
+
         return view('property_inquiry.index');
     }
 
-
     public function getPropertyInquiryList()
     {
-        if (!has_permissions('read', 'property_inquiry')) {
+        if (! has_permissions('read', 'property_inquiry')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -79,10 +81,17 @@ class PropertysInquiryController extends Controller
 
         $sql = PropertysInquiry::with('customer')->with('property.customer')->orderBy($sort, $order);
 
+        // Filter by user/agent role
+        if (isset($_GET['role_filter']) && $_GET['role_filter'] !== '') {
+            $roleFilter = $_GET['role_filter'];
+            $sql->whereHas('customer', function ($q) use ($roleFilter) {
+                $q->where('is_agent', $roleFilter === 'agent' ? 1 : 0);
+            });
+        }
 
-        if (isset($_GET['search']) && !empty($_GET['search'])) {
+        if (isset($_GET['search']) && ! empty($_GET['search'])) {
             $search = $_GET['search'];
-            $sql =  $sql->where('id', 'LIKE', "%$search%")->orWhereHas('property', function ($query) use ($search) {
+            $sql = $sql->where('id', 'LIKE', "%$search%")->orWhereHas('property', function ($query) use ($search) {
                 $query->where('title', 'LIKE', "%$search%");
             })->orWhereHas('customer', function ($query) use ($search) {
                 $query->where('name', 'LIKE', "%$search%")->orWhere('email', 'LIKE', "%$search%")->orWhere('mobile', 'LIKE', "%$search%");
@@ -95,23 +104,24 @@ class PropertysInquiryController extends Controller
         }
 
         $res = $sql->get();
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
-        $tempRow = array();
+        $rows = [];
+        $tempRow = [];
         $count = 1;
         foreach ($res as $row) {
             $operate = '';
             if ($row->property->added_by == 0) {
-                $operate1 = '<a  id="' . $row->id . '"  class="btn icon btn-primary chatdata btn-sm rounded-pill"  data-bs-toggle="modal" data-bs-target="#chat_modal"  onclick="setallMessage(' . $row->propertys_id . ',' . $row->customers_id . ');"" title="Chat"><i class="bi bi-chat"></i></a>';
+                $operate1 = '<a  id="'.$row->id.'"  class="btn icon btn-primary chatdata btn-sm rounded-pill"  data-bs-toggle="modal" data-bs-target="#chat_modal"  onclick="setallMessage('.$row->propertys_id.','.$row->customers_id.');"" title="Chat"><i class="bi bi-chat"></i></a>';
             } else {
                 $operate1 = '';
             }
 
-            $operate .=  '<a class="btn icon btn-info btn-sm rounded-pill view-property"  data-bs-toggle="modal" data-bs-target="#ViewPropertyModal"   title="View Property"><i class="bi bi-building"></i></a>&nbsp;&nbsp;';
+            $operate .= '<a class="btn icon btn-info btn-sm rounded-pill view-property"  data-bs-toggle="modal" data-bs-target="#ViewPropertyModal"   title="View Property"><i class="bi bi-building"></i></a>&nbsp;&nbsp;';
             $tempRow['id'] = $row->id;
             $tempRow['title'] = $row->property->title;
             $tempRow['name'] = $row->customer->name;
+            $tempRow['inquiry_by_role'] = ($row->customer && $row->customer->is_agent) ? 'agent' : 'user';
             $tempRow['inquiry_by'] = $row->customer->id;
             $tempRow['property_id'] = $row->property->id;
             $tempRow['email'] = $row->customer->email;
@@ -120,7 +130,7 @@ class PropertysInquiryController extends Controller
             $tempRow['client_address'] = $row->property->client_address;
             $tempRow['price'] = $row->property->price;
             $tempRow['chat'] = $operate1;
-            $tempRow['property_type'] =  ucfirst($row->propery_type);
+            $tempRow['property_type'] = ucfirst($row->propery_type);
             $tempRow['inquiry_created'] = $row->created_at->diffForHumans();
             if ($row->status == '0') {
                 $tempRow['status'] = '<span class="badge bg-primary">Pending</span>';
@@ -142,7 +152,7 @@ class PropertysInquiryController extends Controller
                 $tempRow['property_owner'] = 'Administrator';
                 $tempRow['property_mobile'] = $mobile->data;
             }
-            $tempRow['location'] = ($row->property->latitude != '' && $row->property->longitude != '') ? '&nbsp;<button class="btn icon btn-secondary btn-sm rounded-pill mt-2 CopyLocation"  data-clipboard-text="https://maps.google.com/?q=' . $row->property->latitude . ',' . $row->property->longitude . '"><i class="bi bi-geo-alt-fill"></i></button>' : '';
+            $tempRow['location'] = ($row->property->latitude != '' && $row->property->longitude != '') ? '&nbsp;<button class="btn icon btn-secondary btn-sm rounded-pill mt-2 CopyLocation"  data-clipboard-text="https://maps.google.com/?q='.$row->property->latitude.','.$row->property->longitude.'"><i class="bi bi-geo-alt-fill"></i></button>' : '';
 
             $tempRow['category'] = $row->property->category->category;
             $tempRow['state'] = $row->property->state;
@@ -159,13 +169,13 @@ class PropertysInquiryController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
-
     public function updateStatus(Request $request)
     {
-        if (!has_permissions('update', 'property_inquiry')) {
+        if (! has_permissions('update', 'property_inquiry')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         } else {
             $id = $request->id;
@@ -179,16 +189,16 @@ class PropertysInquiryController extends Controller
             $PropertysInquiry->update();
 
             if ($status == '0') {
-                $status_text  = 'Pending';
+                $status_text = 'Pending';
                 $translatedMessage = 'Your property inquiry is pending';
-            } else if ($status == '1') {
-                $status_text  = 'Accept';
+            } elseif ($status == '1') {
+                $status_text = 'Accept';
                 $translatedMessage = 'Your property inquiry is accepted';
-            } else if ($status == '2') {
-                $status_text  = 'Complete';
+            } elseif ($status == '2') {
+                $status_text = 'Complete';
                 $translatedMessage = 'Your property inquiry is completed';
-            } else if ($status == '3') {
-                $status_text  = 'Cancel';
+            } elseif ($status == '3') {
+                $status_text = 'Cancel';
                 $translatedMessage = 'Your property inquiry is cancelled';
             }
             $result = '';
@@ -197,41 +207,42 @@ class PropertysInquiryController extends Controller
                 if ($PropertysInquiry->customer->notification == 1) {
                     $user_token = Usertokens::where('customer_id', $PropertysInquiry->customer->id)->pluck('fcm_id')->toArray();
 
-                    //START :: Send Notification To Customer
-                    $fcm_ids = array();
+                    // START :: Send Notification To Customer
+                    $fcm_ids = [];
                     $fcm_ids = $user_token;
 
-                    if (!empty($fcm_ids)) {
+                    if (! empty($fcm_ids)) {
                         $registrationIDs = $fcm_ids[0];
 
                         $title = 'Property Inquiry Updated';
                         $message = $translatedMessage ?? 'Your Property Inquiry Updated';
-                        $fcmMsg = array(
+                        $fcmMsg = [
                             'title' => $title,
                             'message' => $message,
                             'type' => 'property_inquiry',
                             'body' => $message,
                             'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
                             'sound' => 'default',
-                            'id' => (int)$PropertysInquiry->id,
-                        );
+                            'id' => (int) $PropertysInquiry->id,
+                        ];
                         $result = send_push_notification($registrationIDs, $fcmMsg);
                     }
-                    //END ::  Send Notification To Customer
+                    // END ::  Send Notification To Customer
 
                     Notifications::create([
                         'title' => 'Property Inquiry Updated',
-                        'message' => 'Your Property Inquiry Updated To ' . $status_text,
+                        'message' => 'Your Property Inquiry Updated To '.$status_text,
                         'image' => '',
                         'type' => '1',
                         'send_type' => '0',
                         'customers_id' => $PropertysInquiry->customer->id,
-                        'propertys_id' => $PropertysInquiry->id
+                        'propertys_id' => $PropertysInquiry->id,
                     ]);
                 }
             }
             $response['error'] = false;
             $response['data'] = $result;
+
             return response()->json($response);
         }
     }

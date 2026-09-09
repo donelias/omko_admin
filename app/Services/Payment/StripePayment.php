@@ -8,7 +8,9 @@ use Stripe\StripeClient;
 class StripePayment implements PaymentInterface
 {
     private StripeClient $stripe;
+
     private string $currencyCode;
+
     private string $secretKey;
 
     public function __construct($paymentData)
@@ -27,13 +29,12 @@ class StripePayment implements PaymentInterface
             $amount = $this->minimumAmountValidation($this->currencyCode, $amount);
             $zeroDecimalCurrencies = [
                 'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG',
-                'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'
+                'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
             ];
 
-            if (!in_array($this->currencyCode, $zeroDecimalCurrencies)) {
+            if (! in_array($this->currencyCode, $zeroDecimalCurrencies)) {
                 $amount *= 100;
             }
-
             $session = $this->stripe->checkout->sessions->create([
                 'mode' => 'payment',
                 'payment_method_types' => ['card'],
@@ -50,8 +51,12 @@ class StripePayment implements PaymentInterface
                 'payment_intent_data' => [
                     'metadata' => $customMetaData,
                 ],
-                'success_url' => $customMetaData['platform_type'] == 'app' ? route('payment.success') : route('payment.success.web'),
-                'cancel_url' => $customMetaData['platform_type'] == 'app' ? route('payment.cancel', ['payment_transaction_id' => $customMetaData['payment_transaction_id']]) : route('payment.cancel.web', ['payment_transaction_id' => $customMetaData['payment_transaction_id']]),
+                'success_url' => $customMetaData['platform_type'] == 'app'
+                    ? route('payment.success')
+                    : route('payment.success.web', ['gateway' => 'stripe']),
+                'cancel_url' => $customMetaData['platform_type'] == 'app'
+                    ? route('payment.cancel', ['payment_transaction_id' => $customMetaData['payment_transaction_id']])
+                    : route('payment.success.web', ['gateway' => 'stripe']).'?status=failed',
             ]);
 
             return $session;
@@ -59,23 +64,22 @@ class StripePayment implements PaymentInterface
             throw $e;
         }
     }
+
     /**
-     * @param $amount
-     * @param $customMetaData
-     * @return array
      * @throws ApiErrorException
      */
-    public function createAndFormatPaymentIntent($amount, $customMetaData): array {
+    public function createAndFormatPaymentIntent($amount, $customMetaData): array
+    {
         $paymentIntent = $this->createPaymentIntent($amount, $customMetaData);
+
         return $this->format($paymentIntent);
     }
 
     /**
-     * @param $paymentId
-     * @return array
      * @throws ApiErrorException
      */
-    public function retrievePaymentIntent($paymentId): array {
+    public function retrievePaymentIntent($paymentId): array
+    {
         try {
             return $this->format($this->stripe->paymentIntents->retrieve($paymentId));
         } catch (ApiErrorException $e) {
@@ -84,34 +88,26 @@ class StripePayment implements PaymentInterface
     }
 
     /**
-     * @param $paymentIntent
      * @return array
      */
-    public function format($paymentIntent) {
+    public function format($paymentIntent)
+    {
         return $this->formatPaymentIntent($paymentIntent->id, $paymentIntent->amount, $paymentIntent->currency, $paymentIntent->status, $paymentIntent->metadata, $paymentIntent);
     }
 
-    /**
-     * @param $id
-     * @param $amount
-     * @param $currency
-     * @param $status
-     * @param $metadata
-     * @param $paymentIntent
-     * @return array
-     */
-    public function formatPaymentIntent($id, $amount, $currency, $status, $metadata, $paymentIntent): array {
+    public function formatPaymentIntent($id, $amount, $currency, $status, $metadata, $paymentIntent): array
+    {
         return [
-            'id'                       => $paymentIntent->id,
-            'payment_url'              => $paymentIntent->url,
+            'id' => $paymentIntent->id,
+            'payment_url' => $paymentIntent->url,
         ];
     }
+
     /**
-     * @param $currency
-     * @param $amount
      * @return float|int
      */
-    public function minimumAmountValidation($currency, $amount) {
+    public function minimumAmountValidation($currency, $amount)
+    {
         $minimumAmount = match ($currency) {
             'USD', 'EUR', 'INR', 'NZD', 'SGD', 'BRL', 'CAD', 'AUD', 'CHF' => 0.50,
             'AED', 'PLN', 'RON' => 2.00,
@@ -127,7 +123,7 @@ class StripePayment implements PaymentInterface
             'NOK', 'SEK' => 3.00,
             'XAF' => 100
         };
-        if (!empty($minimumAmount)) {
+        if (! empty($minimumAmount)) {
             if ($amount > $minimumAmount) {
                 return $amount;
             }

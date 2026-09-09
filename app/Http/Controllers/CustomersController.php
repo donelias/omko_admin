@@ -2,54 +2,52 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
 use App\Models\Customer;
-use App\Models\Usertokens;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
-use App\Services\FileService;
 use App\Models\InterestedUser;
+use App\Models\Usertokens;
+use App\Services\BootstrapTableService;
+use App\Services\FileService;
 use App\Services\HelperService;
 use App\Services\ResponseService;
-use Illuminate\Support\Facades\Log;
-use libphonenumber\PhoneNumberUtil;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use App\Services\BootstrapTableService;
-use Illuminate\Support\Facades\Session;
-use libphonenumber\NumberParseException;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use libphonenumber\NumberParseException;
+use libphonenumber\PhoneNumberUtil;
 
 class CustomersController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function index()
     {
-        if (!has_permissions('read', 'customer')) {
+        if (! has_permissions('read', 'customer')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
+
         return view('customer.index');
     }
-
-
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function update(Request $request, $id = null)
     {
         // If called from status toggle route (customerstatus), keep old behavior
         if ($request->has('status') && $request->has('id') && is_null($id)) {
-            if (!has_permissions('update', 'customer')) {
+            if (! has_permissions('update', 'customer')) {
                 ResponseService::errorResponse(PERMISSION_ERROR_MSG);
             }
             Customer::where('id', $request->id)->update(['isActive' => $request->status]);
@@ -57,74 +55,74 @@ class CustomersController extends Controller
             $customerName = null;
             // Send mail for user status
             try {
-                $customerData = Customer::where('id',$request->id)->select('id','name','email','isActive')->first();
+                $customerData = Customer::where('id', $request->id)->select('id', 'name', 'email', 'isActive')->first();
                 $customerName = $customerData->name;
-                if($customerData->email){
+                if ($customerData->email) {
                     // Get Data of email type
-                    $emailTypeData = HelperService::getEmailTemplatesTypes("user_status");
+                    $emailTypeData = HelperService::getEmailTemplatesTypes('user_status');
 
                     // Email Template
                     $propertyFeatureStatusTemplateData = system_setting($emailTypeData['type']);
-                    $appName = env("APP_NAME") ?? "eBroker";
-                    $variables = array(
+                    $appName = env('APP_NAME') ?? 'omko';
+                    $variables = [
                         'app_name' => $appName,
                         'user_name' => $customerData->name,
-                        'status' => $customerData->isActive == 1 ? 'Activated' : 'Deactivated' ,
-                        'email' => $customerData->email
-                    );
-                    if(empty($propertyFeatureStatusTemplateData)){
-                        $propertyFeatureStatusTemplateData = "Your Property :- ".$variables['propertyName']."'s feature status ".$variables['status'];
+                        'status' => $customerData->isActive == 1 ? 'Activated' : 'Deactivated',
+                        'email' => $customerData->email,
+                    ];
+                    if (empty($propertyFeatureStatusTemplateData)) {
+                        $propertyFeatureStatusTemplateData = 'Your Property :- '.$variables['propertyName']."'s feature status ".$variables['status'];
                     }
-                    $propertyFeatureStatusTemplate = HelperService::replaceEmailVariables($propertyFeatureStatusTemplateData,$variables);
+                    $propertyFeatureStatusTemplate = HelperService::replaceEmailVariables($propertyFeatureStatusTemplateData, $variables);
 
-                    $data = array(
+                    $data = [
                         'email_template' => $propertyFeatureStatusTemplate,
-                        'email' =>$customerData->email,
+                        'email' => $customerData->email,
                         'title' => $emailTypeData['title'],
-                    );
+                    ];
                     HelperService::sendMail($data);
                 }
             } catch (Exception $e) {
-                Log::error("Something Went Wrong in Customer Status Update Mail Sending");
+                Log::error('Something Went Wrong in Customer Status Update Mail Sending');
             }
 
             /** Notification */
-            $fcm_ids = array();
+            $fcm_ids = [];
 
-            $customer_id = Customer::where(['id' => $request->id,'notification' => 1])->count();
+            $customer_id = Customer::where(['id' => $request->id, 'notification' => 1])->count();
             if ($customer_id) {
                 $user_token = Usertokens::where('customer_id', $request->id)->pluck('fcm_id')->toArray();
                 $fcm_ids[] = $user_token;
             }
 
-
-            $msg = "";
-            if (!empty($fcm_ids)) {
+            $msg = '';
+            if (! empty($fcm_ids)) {
                 $msg = $request->status == 1 ? 'Your account is activated by administrator' : 'Your account is deactivated by administrator';
                 $type = $request->status == 1 ? 'account_activated' : 'account_deactivated';
                 $full_msg = $request->status == 1 ? $msg : 'Please Contact to Administrator';
                 $registrationIDs = $fcm_ids[0];
 
-                $fcmMsg = array(
-                    'title' =>  $msg,
+                $fcmMsg = [
+                    'title' => $msg,
                     'message' => $full_msg,
                     'type' => $type,
                     'body' => $full_msg,
                     'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
                     'sound' => 'default',
 
-                );
+                ];
                 send_push_notification($registrationIDs, $fcmMsg);
             }
 
-            ResponseService::successResponse($request->status ? "Customer Activated Successfully" : "Customer Deactivated Successfully");
+            ResponseService::successResponse($request->status ? 'Customer Activated Successfully' : 'Customer Deactivated Successfully');
+
             return;
         }
 
         try {
 
             // Handle admin detail update via resource PUT/PATCH /customer/{id}
-            if (!has_permissions('update', 'customer')) {
+            if (! has_permissions('update', 'customer')) {
                 ResponseService::errorResponse(PERMISSION_ERROR_MSG);
             }
 
@@ -145,11 +143,11 @@ class CustomersController extends Controller
             $formattedMobile = null;
             if ($request->filled('mobile') && $request->filled('country_code')) {
                 $validationResult = $this->validateAndFormatPhoneNumber($request->mobile, $request->country_code);
-                if (!$validationResult['valid']) {
+                if (! $validationResult['valid']) {
                     ResponseService::validationError($validationResult['message']);
                 }
                 $formattedMobile = $validationResult['formatted_number'];
-            } elseif ($request->filled('mobile') && !$request->filled('country_code')) {
+            } elseif ($request->filled('mobile') && ! $request->filled('country_code')) {
                 ResponseService::validationError('Country code is required when mobile number is provided');
             }
 
@@ -170,7 +168,7 @@ class CustomersController extends Controller
             // Handle mobile number update
             if ($formattedMobile !== null) {
                 $updateData['mobile'] = $formattedMobile;
-            } elseif (!$request->filled('mobile') && !$request->filled('country_code')) {
+            } elseif (! $request->filled('mobile') && ! $request->filled('country_code')) {
                 // If neither mobile nor country_code is provided, keep existing mobile
                 $updateData['mobile'] = $customer->mobile;
             } else {
@@ -188,45 +186,52 @@ class CustomersController extends Controller
 
             ResponseService::successResponse('Customer updated successfully');
         } catch (Exception $e) {
-            Log::error("Something Went Wrong in Customer Update: ".$e->getMessage());
-            ResponseService::errorResponse("Something Went Wrong");
+            Log::error('Something Went Wrong in Customer Update: '.$e->getMessage());
+            ResponseService::errorResponse('Something Went Wrong');
         }
     }
 
-
-
-
     public function customerList(Request $request)
     {
-        if (!has_permissions('read', 'customer')) {
-            ResponseService::errorResponse(PERMISSION_ERROR_MSG);ResponseService::errorResponse(PERMISSION_ERROR_MSG);
+        if (! has_permissions('read', 'customer')) {
+            ResponseService::errorResponse(PERMISSION_ERROR_MSG);
+            ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $offset = $request->input('offset', 0);
         $limit = $request->input('limit', 10);
         $sort = $request->input('sort', 'id');
         $order = $request->input('order', 'DESC');
 
-
         if (isset($_GET['property_id'])) {
-            $interested_users =  InterestedUser::select('customer_id')->where('property_id', $_GET['property_id'])->pluck('customer_id');
+            $interested_users = InterestedUser::select('customer_id')->where('property_id', $_GET['property_id'])->pluck('customer_id');
 
             $sql = Customer::whereIn('id', $interested_users)->orderBy($sort, $order);
-            if (isset($_GET['search']) && !empty($_GET['search'])) {
+            if (isset($_GET['search']) && ! empty($_GET['search'])) {
                 $search = $_GET['search'];
-                $sql->where(function($query) use($search){
+                $sql->where(function ($query) use ($search) {
                     $query->where('id', 'LIKE', "%$search%")->orwhere('email', 'LIKE', "%$search%")->orwhere('name', 'LIKE', "%$search%")->orwhere('mobile', 'LIKE', "%$search%");
                 });
             }
         } else {
 
             $sql = Customer::orderBy($sort, $order);
-            if (isset($_GET['search']) && !empty($_GET['search'])) {
+
+            // Filter by role (user/agent)
+            if (isset($_GET['role_filter']) && $_GET['role_filter'] !== '') {
+                if ($_GET['role_filter'] === 'agent') {
+                    $sql->where('is_agent', 1);
+                } elseif ($_GET['role_filter'] === 'user') {
+                    $sql->where('is_agent', 0);
+                }
+            }
+
+            if (isset($_GET['search']) && ! empty($_GET['search'])) {
                 $search = $_GET['search'];
-                $sql->where('id', 'LIKE', "%$search%")->orwhere('email', 'LIKE', "%$search%")->orwhere('name', 'LIKE', "%$search%")->orwhere('mobile', 'LIKE', "%$search%");
+                $sql->where(function ($query) use ($search) {
+                    $query->where('id', 'LIKE', "%$search%")->orwhere('email', 'LIKE', "%$search%")->orwhere('name', 'LIKE', "%$search%")->orwhere('mobile', 'LIKE', "%$search%");
+                });
             }
         }
-
-
 
         $total = $sql->count();
 
@@ -234,64 +239,74 @@ class CustomersController extends Controller
             $sql->skip($offset)->take($limit);
         }
 
-
         $res = $sql->get();
 
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
-        $tempRow = array();
+        $rows = [];
+        $tempRow = [];
         $count = 1;
-
 
         foreach ($res as $row) {
             $operate = null;
-            if($row->is_admin_added){
+            if ($row->is_admin_added) {
                 $operate = BootstrapTableService::editButton(route('customer.edit', $row->id), false);
                 $operate .= BootstrapTableService::deleteAjaxButton(route('customer.destroy', $row->id), false);
             }
             $tempRow = $row->toArray();
 
+            // -------------------------------------------------------
+            // FIX: Remove 'state' key so Bootstrap Table does not use
+            // it to pre-select checkboxes on load. Bootstrap Table
+            // reserves the 'state' field exclusively for checkbox state.
+            // -------------------------------------------------------
+            unset($tempRow['state']);
+
             // Mask Details in Demo Mode
-            $tempRow['mobile'] = (env('DEMO_MODE') ? ( env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? ( $row->mobile ) : '****************************' ) : ( $row->mobile ));
-            $tempRow['email'] = (env('DEMO_MODE') ? ( env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? ( $row->email ) : '****************************' ) : ( $row->email ));
-            $tempRow['address'] = (env('DEMO_MODE') ? ( env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? ( !empty($row->address) ? $row->address : null ) : '****************************' ) : ( !empty($row->address) ? $row->address : null ));
+            $tempRow['mobile'] = (env('DEMO_MODE') ? (env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? ($row->mobile) : '****************************') : ($row->mobile));
+            $tempRow['email'] = (env('DEMO_MODE') ? (env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? ($row->email) : '****************************') : ($row->email));
+            $tempRow['address'] = (env('DEMO_MODE') ? (env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? (! empty($row->address) ? $row->address : null) : '****************************') : (! empty($row->address) ? $row->address : null));
             $tempRow['logintype'] = $row->logintype;
 
             $tempRow['edit_status_url'] = 'customerstatus';
-            $tempRow['total_properties'] =  $row->total_properties;
-            $tempRow['total_projects'] =  $row->total_projects;
+            $tempRow['is_agent'] = $row->is_agent;
+            $tempRow['is_agent_verified'] = $row->is_agent_verified;
+            $tempRow['total_properties'] = $row->total_properties;
+            $tempRow['total_projects'] = $row->total_projects;
             $tempRow['operate'] = $operate;
             $rows[] = $tempRow;
             $count++;
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
+
     public function create()
     {
-        if (!has_permissions('create', 'customer')) {
+        if (! has_permissions('create', 'customer')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $countryCodes = $this->getCountryCodes();
+
         return view('customer.create', compact('countryCodes'));
     }
 
     public function store(Request $request)
     {
-        if (!has_permissions('create', 'customer')) {
+        if (! has_permissions('create', 'customer')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
         $validator = Validator::make($request->all(), [
-            'name'          => 'required|string|max:255',
-            'email'         => 'required|email',
-            'password'      => 'required|min:6',
-            're_password'   => 'required|same:password',
-            'mobile'        => 'nullable|string|max:20',
-            'country_code'  => 'nullable|string',
-            'profile'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email',
+            'password' => 'required|min:6',
+            're_password' => 'required|same:password',
+            'mobile' => 'nullable|string|max:20',
+            'country_code' => 'nullable|string',
+            'profile' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             [
                 'name.required' => trans('Name is required'),
                 'email.required' => trans('Email is required'),
@@ -304,7 +319,7 @@ class CustomersController extends Controller
                 'mobile.max' => trans('Mobile must be less than 20 characters'),
                 'profile.image' => trans('Profile must be an image'),
                 'profile.mimes' => trans('Profile must be a jpg, jpeg, png, or webp image'),
-                'profile.max' => trans('Profile must be less than 5MB'),
+                'profile.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
             ],
         ]);
 
@@ -316,11 +331,11 @@ class CustomersController extends Controller
         $formattedMobile = null;
         if ($request->filled('mobile') && $request->filled('country_code')) {
             $validationResult = $this->validateAndFormatPhoneNumber($request->mobile, $request->country_code);
-            if (!$validationResult['valid']) {
+            if (! $validationResult['valid']) {
                 ResponseService::validationError($validationResult['message']);
             }
             $formattedMobile = $validationResult['formatted_number'];
-        } elseif ($request->filled('mobile') && !$request->filled('country_code')) {
+        } elseif ($request->filled('mobile') && ! $request->filled('country_code')) {
             ResponseService::validationError('Country code is required when mobile number is provided');
         }
 
@@ -351,57 +366,60 @@ class CustomersController extends Controller
                 'country_code' => $request->filled('country_code') ? $request->country_code : null,
                 'profile' => $profileFilename,
                 'is_admin_added' => true,
-                'is_email_verified' => true
+                'is_email_verified' => true,
             ];
 
             Customer::create($customerData);
 
             // Welcome Mail
-            $emailTypeData = HelperService::getEmailTemplatesTypes("welcome_mail");
+            $emailTypeData = HelperService::getEmailTemplatesTypes('welcome_mail');
             $welcomeEmailTemplateData = system_setting($emailTypeData['type']);
-            $appName = env("APP_NAME") ?? "eBroker";
-            $variables = array(
-                'app_name'  => $appName,
+            $appName = env('APP_NAME') ?? 'omko';
+            $variables = [
+                'app_name' => $appName,
                 'user_name' => $request->name,
-                'email'     => $request->email,
-            );
-            if(empty($welcomeEmailTemplateData)){
+                'email' => $request->email,
+            ];
+            if (empty($welcomeEmailTemplateData)) {
                 $welcomeEmailTemplateData = "Welcome to $appName";
             }
-            $welcomeEmailTemplate = HelperService::replaceEmailVariables($welcomeEmailTemplateData,$variables);
+            $welcomeEmailTemplate = HelperService::replaceEmailVariables($welcomeEmailTemplateData, $variables);
 
-            $data = array(
+            $data = [
                 'email_template' => $welcomeEmailTemplate,
                 'email' => $request->email,
                 'title' => $emailTypeData['title'],
-            );
+            ];
             HelperService::sendMail($data);
             ResponseService::successResponse('Customer created successfully');
         } catch (Exception $e) {
             ResponseService::errorResponse('Something Went Wrong');
         }
     }
-    public function resetPasswordIndex(Request $request){
+
+    public function resetPasswordIndex(Request $request)
+    {
         $validator = Validator::make($request->all(), [
-            'token' => 'required'
+            'token' => 'required',
         ]);
         if ($validator->fails()) {
-            return redirect(route('home'))->with('error',$validator->errors()->first())->send();
+            return redirect(route('home'))->with('error', $validator->errors()->first())->send();
         }
         try {
             $token = $request->token;
             $email = HelperService::verifyToken($token);
-            if($email){
-                return view('customer.reset-password',compact('token'));
-            }else{
-                ResponseService::errorRedirectResponse("",trans('Invalid Token'));
+            if ($email) {
+                return view('customer.reset-password', compact('token'));
+            } else {
+                ResponseService::errorRedirectResponse('', trans('Invalid Token'));
             }
         } catch (Exception $e) {
-            ResponseService::errorRedirectResponse("",trans('Something Went Wrong'));
+            ResponseService::errorRedirectResponse('', trans('Something Went Wrong'));
         }
     }
 
-    public function resetPassword(Request $request){
+    public function resetPassword(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'token' => 'required',
             'password' => 'required|min:6',
@@ -412,44 +430,45 @@ class CustomersController extends Controller
         }
         try {
             $email = HelperService::verifyToken($request->token);
-            if($email){
+            if ($email) {
                 $customerQuery = Customer::where(['email' => $email, 'logintype' => 3]);
                 $customerCheck = $customerQuery->clone()->count();
-                if(!$customerCheck){
-                    ResponseService::errorResponse("No User Found");
+                if (! $customerCheck) {
+                    ResponseService::errorResponse('No User Found');
                 }
                 $password = Hash::make($request->password);
                 $customerQuery->clone()->update(['password' => $password]);
                 HelperService::expireToken($email);
-                ResponseService::successResponse("Password Changed Successfully");
-            }else{
-                ResponseService::errorResponse("Token Expired");
+                ResponseService::successResponse('Password Changed Successfully');
+            } else {
+                ResponseService::errorResponse('Token Expired');
             }
         } catch (Exception $e) {
-            ResponseService::errorRedirectResponse("",'Something Went Wrong');
+            ResponseService::errorRedirectResponse('', 'Something Went Wrong');
         }
     }
 
     public function edit($id)
     {
-        if (!has_permissions('update', 'customer')) {
+        if (! has_permissions('update', 'customer')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $customer = Customer::findOrFail($id);
         $countryCodes = $this->getCountryCodes();
-        return view('customer.edit', compact('customer','countryCodes'));
+
+        return view('customer.edit', compact('customer', 'countryCodes'));
     }
 
     public function changePassword(Request $request)
     {
-        if (!has_permissions('update', 'customer')) {
+        if (! has_permissions('update', 'customer')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $validator = Validator::make($request->all(), [
-            'id'            => 'required',
-            'password'      => 'required|min:6',
-            're_password'   => 'required|same:password',
-        ],[
+            'id' => 'required',
+            'password' => 'required|min:6',
+            're_password' => 'required|same:password',
+        ], [
             'password.required' => trans('Password is required'),
             'password.min' => trans('Password must be at least 6 characters long'),
             're_password.required' => trans('Re-password is required'),
@@ -458,40 +477,39 @@ class CustomersController extends Controller
         if ($validator->fails()) {
             ResponseService::validationError($validator->errors()->first());
         }
-        try{
+        try {
 
             $customer = Customer::findOrFail($request->id);
             $customer->update(['password' => Hash::make($request->password)]);
             ResponseService::successResponse('Password updated successfully');
-        }catch(Exception $e){
+        } catch (Exception $e) {
             ResponseService::errorResponse('Something Went Wrong');
         }
     }
 
     public function destroy($id)
     {
-        if (!has_permissions('delete', 'customer')) {
+        if (! has_permissions('delete', 'customer')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
-        try{
+        try {
             $customer = Customer::findOrFail($id);
             $profile = $customer->getRawOriginal('profile');
-            if(!empty($profile)){
+            if (! empty($profile)) {
                 FileService::delete(config('global.USER_IMG_PATH'), $profile);
             }
             $customer->delete();
             ResponseService::successResponse('Customer deleted successfully');
-        }catch(Exception $e){
+        } catch (Exception $e) {
             ResponseService::errorResponse('Something Went Wrong');
         }
     }
 
-
     /**
      * Validate and format phone number based on country code
      *
-     * @param string $mobile
-     * @param string $countryCode
+     * @param  string  $mobile
+     * @param  string  $countryCode
      * @return array
      */
     private function validateAndFormatPhoneNumber($mobile, $countryCode)
@@ -502,11 +520,11 @@ class CustomersController extends Controller
             // Get region code from country code (e.g., 91 -> IN)
             $regionCode = $this->getRegionCodeFromCountryCode($countryCode);
 
-            if (!$regionCode) {
+            if (! $regionCode) {
                 return [
                     'valid' => false,
                     'message' => 'Invalid country code selected',
-                    'formatted_number' => null
+                    'formatted_number' => null,
                 ];
             }
 
@@ -514,7 +532,7 @@ class CustomersController extends Controller
             $phoneNumber = $phoneUtil->parse($mobile, $regionCode);
 
             // Validate the phone number
-            if (!$phoneUtil->isValidNumber($phoneNumber)) {
+            if (! $phoneUtil->isValidNumber($phoneNumber)) {
                 // Special validation for India (country code 91)
                 if ($countryCode == '91') {
                     // Remove any non-digit characters for validation
@@ -523,14 +541,15 @@ class CustomersController extends Controller
                         return [
                             'valid' => false,
                             'message' => 'Indian mobile number must be exactly 10 digits',
-                            'formatted_number' => null
+                            'formatted_number' => null,
                         ];
                     }
                 }
+
                 return [
                     'valid' => false,
                     'message' => 'Invalid phone number format for the selected country',
-                    'formatted_number' => null
+                    'formatted_number' => null,
                 ];
             }
 
@@ -538,18 +557,18 @@ class CustomersController extends Controller
             $nationalNumber = $phoneNumber->getNationalNumber();
 
             // Additional validation for India: ensure it's exactly 10 digits
-            if ($countryCode == '91' && strlen((string)$nationalNumber) != 10) {
+            if ($countryCode == '91' && strlen((string) $nationalNumber) != 10) {
                 return [
                     'valid' => false,
                     'message' => 'Indian mobile number must be exactly 10 digits',
-                    'formatted_number' => null
+                    'formatted_number' => null,
                 ];
             }
 
             return [
                 'valid' => true,
                 'message' => 'Valid phone number',
-                'formatted_number' => (string)$nationalNumber
+                'formatted_number' => (string) $nationalNumber,
             ];
 
         } catch (NumberParseException $e) {
@@ -560,26 +579,27 @@ class CustomersController extends Controller
                     return [
                         'valid' => true,
                         'message' => 'Valid phone number',
-                        'formatted_number' => $cleanNumber
+                        'formatted_number' => $cleanNumber,
                     ];
                 }
+
                 return [
                     'valid' => false,
                     'message' => 'Indian mobile number must be exactly 10 digits',
-                    'formatted_number' => null
+                    'formatted_number' => null,
                 ];
             }
 
             return [
                 'valid' => false,
-                'message' => 'Invalid phone number format: ' . $e->getMessage(),
-                'formatted_number' => null
+                'message' => 'Invalid phone number format: '.$e->getMessage(),
+                'formatted_number' => null,
             ];
         } catch (Exception $e) {
             return [
                 'valid' => false,
-                'message' => 'Error validating phone number: ' . $e->getMessage(),
-                'formatted_number' => null
+                'message' => 'Error validating phone number: '.$e->getMessage(),
+                'formatted_number' => null,
             ];
         }
     }
@@ -588,7 +608,7 @@ class CustomersController extends Controller
      * Get region code from country code
      * For countries sharing the same code (e.g., US/CA both use +1), returns the first match
      *
-     * @param string $countryCode
+     * @param  string  $countryCode
      * @return string|null
      */
     private function getRegionCodeFromCountryCode($countryCode)
@@ -622,7 +642,8 @@ class CustomersController extends Controller
         }
     }
 
-    private function getCountryCodes(){
+    private function getCountryCodes()
+    {
         try {
             $phoneUtil = PhoneNumberUtil::getInstance();
 
@@ -641,15 +662,16 @@ class CustomersController extends Controller
             // }
 
             // To get a simple, unique list of just the codes:
-            $uniqueCodes = array_unique(array_map(function($region) use ($phoneUtil) {
+            $uniqueCodes = array_unique(array_map(function ($region) use ($phoneUtil) {
                 return $phoneUtil->getCountryCodeForRegion($region);
             }, $allRegions));
 
             sort($uniqueCodes);
+
             return $uniqueCodes;
             // $uniqueCodes will be [1, 7, 20, 27, 30, 31, ...]
-        } catch(Exception $e) {
-            ResponseService::errorRedirectResponse(route('customer.index'), "Something Went Wrong");
+        } catch (Exception $e) {
+            ResponseService::errorRedirectResponse(route('customer.index'), 'Something Went Wrong');
         }
     }
 }

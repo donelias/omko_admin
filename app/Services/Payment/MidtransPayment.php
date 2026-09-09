@@ -4,13 +4,15 @@ namespace App\Services\Payment;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Throwable;
 use RuntimeException;
+use Throwable;
 
 class MidtransPayment implements PaymentInterface
 {
     private string $serverKey;
+
     private string $currencyCode;
+
     private string $baseUrl;
 
     public function __construct($paymentData)
@@ -40,17 +42,17 @@ class MidtransPayment implements PaymentInterface
                 $successUrl = route('payment.success', ['payment_transaction_id' => $orderId]);
                 $cancelUrl = route('payment.cancel', ['payment_transaction_id' => $orderId]);
             } else {
-                $successUrl = route('payment.success.web', ['payment_transaction_id' => $orderId]);
-                $cancelUrl = route('payment.cancel.web', ['payment_transaction_id' => $orderId]);
+                $successUrl = route('payment.success.web', ['gateway' => 'midtrans']);
+                $cancelUrl = route('payment.success.web', ['gateway' => 'midtrans']).'?status=failed';
             }
             $webhookURL = route('webhook.midtrans');
 
             // Build payload per Midtrans docs
             $payload = [
-                'order_id'      => (string) $orderId,
-                'amount'        => (int) $amount,
-                'currency'      => $this->currencyCode,
-                'description'   => $customMetaData['description'] ?? 'Payment for Order #' . $orderId,
+                'order_id' => (string) $orderId,
+                'amount' => (int) $amount,
+                'currency' => $this->currencyCode,
+                'description' => $customMetaData['description'] ?? 'Payment for Order #'.$orderId,
                 'callbacks' => [
                     'finish' => $successUrl,
                     'error' => $cancelUrl,
@@ -58,32 +60,32 @@ class MidtransPayment implements PaymentInterface
                 ],
                 'customer' => [
                     'first_name' => $customMetaData['user_name'] ?? 'User',
-                    'email'      => $customMetaData['email'] ?? null,
-                    'phone'      => $customMetaData['phone'] ?? '',
+                    'email' => $customMetaData['email'] ?? null,
+                    'phone' => $customMetaData['phone'] ?? '',
                 ],
                 'custom_field1' => $orderId,
-                'payment_transaction_id' => $orderId, 
+                'payment_transaction_id' => $orderId,
                 'expiry' => [
                     'unit' => 'minutes',
                     'duration' => 60,
                 ],
                 'transaction_details' => [
                     'order_id' => $orderId,
-                    'gross_amount' => $amount
+                    'gross_amount' => $amount,
                 ],
                 'enabled_payments' => ['gopay', 'credit_card'],
             ];
 
             // Send request to Payment Link API
             $response = Http::withHeaders([
-                'Authorization' => 'Basic ' . base64_encode($this->serverKey . ':'),
+                'Authorization' => 'Basic '.base64_encode($this->serverKey.':'),
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
             ])->post($this->baseUrl, $payload);
 
             if ($response->failed()) {
-                Log::error('Midtrans Payment Link Error: ' . $response->body());
-                throw new RuntimeException('Midtrans payment link creation failed: ' . $response->body());
+                Log::error('Midtrans Payment Link Error: '.$response->body());
+                throw new RuntimeException('Midtrans payment link creation failed: '.$response->body());
             }
 
             $result = $response->json();
@@ -91,7 +93,7 @@ class MidtransPayment implements PaymentInterface
 
             return $result;
         } catch (Throwable $e) {
-            Log::error('Midtrans Payment Link Intent Error: ' . $e->getMessage());
+            Log::error('Midtrans Payment Link Intent Error: '.$e->getMessage());
             throw new RuntimeException($e->getMessage());
         }
     }
@@ -99,22 +101,23 @@ class MidtransPayment implements PaymentInterface
     public function createAndFormatPaymentIntent($amount, $customMetaData): array
     {
         $response = $this->createPaymentIntent($amount, $customMetaData);
+
         return $this->format($response, $amount, $this->currencyCode, $customMetaData);
     }
 
     public function retrievePaymentIntent($paymentId): array
     {
         try {
-            $url = str_replace('/v1/payment-links', '', $this->baseUrl) . '/v2/' . $paymentId . '/status';
+            $url = str_replace('/v1/payment-links', '', $this->baseUrl).'/v2/'.$paymentId.'/status';
 
             $response = Http::withHeaders([
-                'Authorization' => 'Basic ' . base64_encode($this->serverKey . ':'),
+                'Authorization' => 'Basic '.base64_encode($this->serverKey.':'),
                 'Accept' => 'application/json',
             ])->get($url);
 
             return $response->json();
         } catch (Throwable $e) {
-            Log::error('Midtrans Retrieve Error: ' . $e->getMessage());
+            Log::error('Midtrans Retrieve Error: '.$e->getMessage());
             throw new RuntimeException($e->getMessage());
         }
     }

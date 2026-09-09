@@ -2,13 +2,13 @@
 
 namespace App\Services;
 
-use Carbon\Carbon;
-use App\Models\User;
-use App\Models\Customer;
-use App\Models\Property;
-use App\Models\Usertokens;
 use App\Models\Appointment;
+use App\Models\Customer;
 use App\Models\Notifications;
+use App\Models\Property;
+use App\Models\User;
+use App\Models\Usertokens;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -17,7 +17,7 @@ class AppointmentNotificationService
     /**
      * Send notification for appointment status change
      */
-    public static function sendStatusNotification(Appointment $appointment, string $newStatus, string $reason = null, string $changedBy = null)
+    public static function sendStatusNotification(Appointment $appointment, string $newStatus, ?string $reason = null, ?string $changedBy = null)
     {
         try {
             $agent = Customer::select('id', 'name', 'email')
@@ -48,11 +48,12 @@ class AppointmentNotificationService
                 $notifier = $agent;
             }
 
-            if (!$notifyTarget) {
-                Log::warning("No target found for appointment notification", [
+            if (! $notifyTarget) {
+                Log::warning('No target found for appointment notification', [
                     'appointment_id' => $appointment->id,
-                    'status' => $newStatus
+                    'status' => $newStatus,
                 ]);
+
                 return false;
             }
 
@@ -63,16 +64,18 @@ class AppointmentNotificationService
             self::sendPushNotification($appointment, $notifyTarget, $newStatus, $reason);
 
             // Store notification in database
-            self::storeNotification($appointment, $notifyTarget, $newStatus, $reason, $property);
+            $targetRole = ($changedBy === 'user') ? 'agent' : 'user';
+            self::storeNotification($appointment, $notifyTarget, $newStatus, $reason, $property, $targetRole);
 
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send appointment status notification", [
+            Log::error('Failed to send appointment status notification', [
                 'appointment_id' => $appointment->id,
                 'status' => $newStatus,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -80,7 +83,7 @@ class AppointmentNotificationService
     /**
      * Send email notification for appointment status change
      */
-    private static function sendEmailNotification(Appointment $appointment, Customer $notifyTarget, Customer $notifier, Property $property, string $status, string $reason = null)
+    private static function sendEmailNotification(Appointment $appointment, Customer $notifyTarget, Customer $notifier, Property $property, string $status, ?string $reason = null)
     {
         try {
             if (empty($notifyTarget->email)) {
@@ -89,7 +92,7 @@ class AppointmentNotificationService
 
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             // Get timezone for the target user
             $targetTimezone = $notifyTarget->getTimezone();
@@ -123,14 +126,16 @@ class AppointmentNotificationService
             ];
 
             HelperService::sendMail($data);
+
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send appointment email notification", [
+            Log::error('Failed to send appointment email notification', [
                 'appointment_id' => $appointment->id,
                 'target_email' => $notifyTarget->email ?? 'N/A',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -138,7 +143,7 @@ class AppointmentNotificationService
     /**
      * Send push notification for appointment status change
      */
-    private static function sendPushNotification(Appointment $appointment, Customer $notifyTarget, string $status, string $reason = null)
+    private static function sendPushNotification(Appointment $appointment, Customer $notifyTarget, string $status, ?string $reason = null)
     {
         try {
             $fcmTokens = Usertokens::where('customer_id', $notifyTarget->id)
@@ -164,14 +169,16 @@ class AppointmentNotificationService
             ];
 
             send_push_notification($fcmTokens, $fcmMsg);
+
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send appointment push notification", [
+            Log::error('Failed to send appointment push notification', [
                 'appointment_id' => $appointment->id,
                 'target_id' => $notifyTarget->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -179,7 +186,7 @@ class AppointmentNotificationService
     /**
      * Store notification in database
      */
-    private static function storeNotification(Appointment $appointment, Customer $notifyTarget, string $status, string $reason = null, Property $property = null)
+    private static function storeNotification(Appointment $appointment, Customer $notifyTarget, string $status, ?string $reason = null, ?Property $property = null, string $roleContext = 'user')
     {
         try {
             $title = self::getNotificationTitle($status);
@@ -193,6 +200,7 @@ class AppointmentNotificationService
                 'send_type' => '0', // Push notification
                 'customers_id' => $notifyTarget->id,
                 'propertys_id' => $property?->id ?? 0,
+                'role_context' => $roleContext,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -200,11 +208,12 @@ class AppointmentNotificationService
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to store appointment notification", [
+            Log::error('Failed to store appointment notification', [
                 'appointment_id' => $appointment->id,
                 'target_id' => $notifyTarget->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -263,7 +272,7 @@ class AppointmentNotificationService
     /**
      * Get notification body based on status
      */
-    private static function getNotificationBody(string $status, string $reason = null): string
+    private static function getNotificationBody(string $status, ?string $reason = null): string
     {
         $baseMessages = [
             'confirmed' => 'Your appointment has been confirmed',
@@ -277,7 +286,7 @@ class AppointmentNotificationService
         $message = $baseMessages[$status] ?? 'Your appointment status has been updated';
 
         if ($reason && in_array($status, ['cancelled', 'rescheduled'])) {
-            $message .= '. Reason: ' . $reason;
+            $message .= '. Reason: '.$reason;
         }
 
         return $message;
@@ -293,7 +302,7 @@ class AppointmentNotificationService
                 ->where('id', $appointment->user_id)
                 ->first();
 
-            if (!$user) {
+            if (! $user) {
                 return false;
             }
 
@@ -312,8 +321,8 @@ class AppointmentNotificationService
             ];
             send_push_notification($userFcmToken, $fcmMsg);
 
-            $title = "Appointment Cancelled";
-            $body = "Your appointment(s) have been cancelled because you were reported by the agent.";
+            $title = 'Appointment Cancelled';
+            $body = 'Your appointment(s) have been cancelled because you were reported by the agent.';
             // Store notification in DB
             Notifications::insert([
                 [
@@ -325,13 +334,13 @@ class AppointmentNotificationService
                     'customers_id' => $user->id,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]
+                ],
             ]);
 
             // Send email notification
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             $variables = [
                 'app_name' => $appName,
@@ -359,13 +368,15 @@ class AppointmentNotificationService
             ];
 
             HelperService::sendMail($data);
+
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send cancellation by report notification", [
+            Log::error('Failed to send cancellation by report notification', [
                 'appointment_id' => $appointment->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -373,7 +384,7 @@ class AppointmentNotificationService
     /**
      * Send notification for new appointment request
      */
-    public static function sendNewAppointmentRequestNotification(Appointment $appointment, $agent = null, Customer $user, Property $property, bool $autoConfirm = false, $admin = null)
+    public static function sendNewAppointmentRequestNotification(Appointment $appointment, $agent, Customer $user, Property $property, bool $autoConfirm = false, $admin = null)
     {
         try {
             // Send notification to agent
@@ -387,10 +398,11 @@ class AppointmentNotificationService
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send new appointment request notification", [
+            Log::error('Failed to send new appointment request notification', [
                 'appointment_id' => $appointment->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -398,20 +410,19 @@ class AppointmentNotificationService
     /**
      * Send new appointment request notification to agent
      */
-    private static function sendNewAppointmentRequestToAgent(Appointment $appointment, $agent = null, Customer $user, Property $property, User $admin = null)
+    private static function sendNewAppointmentRequestToAgent(Appointment $appointment, $agent, Customer $user, Property $property, ?User $admin = null)
     {
         try {
             // Send email to agent
             $emailTypeData = HelperService::getEmailTemplatesTypes('new_appointment_request');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
-
-            if($admin){
+            if ($admin) {
                 $agentTimezone = $admin->getTimezone();
-                $agentName = trans("Admin");
+                $agentName = trans('Admin');
                 $agentEmail = $admin->email;
-            }else{
+            } else {
                 $agentTimezone = $agent->getTimezone(true);
                 $agentName = $agent->name;
                 $agentEmail = $agent->email;
@@ -447,9 +458,9 @@ class AppointmentNotificationService
             HelperService::sendMail($data);
 
             // Send push notification to agent
-            if($admin){
-                $agentFcmToken = array($admin->fcm_id);
-            }else{
+            if ($admin) {
+                $agentFcmToken = [$admin->fcm_id];
+            } else {
                 $agentFcmToken = Usertokens::where('customer_id', $agent->id)->pluck('fcm_id')->toArray() ?? [];
             }
             $translatedTitle = 'New Appointment Request';
@@ -466,9 +477,9 @@ class AppointmentNotificationService
 
             send_push_notification($agentFcmToken, $fcmMsg);
 
-            if($agent){
-                $title = "New Appointment Request";
-                $body = "You have a new appointment request";
+            if ($agent) {
+                $title = 'New Appointment Request';
+                $body = 'You have a new appointment request';
                 // Store notification in database
                 Notifications::create([
                     'title' => $title,
@@ -477,6 +488,7 @@ class AppointmentNotificationService
                     'type' => '2',
                     'send_type' => '0',
                     'customers_id' => $agent->id,
+                    'role_context' => 'agent',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -485,11 +497,12 @@ class AppointmentNotificationService
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send new appointment request notification to agent", [
+            Log::error('Failed to send new appointment request notification to agent', [
                 'appointment_id' => $appointment->id,
                 'agent_id' => $admin ? $admin->id : $agent->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -497,7 +510,7 @@ class AppointmentNotificationService
     /**
      * Send notification for meeting type change
      */
-    public static function sendMeetingTypeChangeNotification(Appointment $appointment, string $oldMeetingType, string $newMeetingType, string $updatedBy = null)
+    public static function sendMeetingTypeChangeNotification(Appointment $appointment, string $oldMeetingType, string $newMeetingType, ?string $updatedBy = null)
     {
         try {
             $agent = Customer::select('id', 'name', 'email')
@@ -526,15 +539,17 @@ class AppointmentNotificationService
                 // Default: notify both parties
                 self::sendMeetingTypeChangeToUser($appointment, $oldMeetingType, $newMeetingType, $user, $agent, $property);
                 self::sendMeetingTypeChangeToAgent($appointment, $oldMeetingType, $newMeetingType, $agent, $user, $property);
+
                 return true;
             }
 
-            if (!$notifyTarget) {
-                Log::warning("No target found for meeting type change notification", [
+            if (! $notifyTarget) {
+                Log::warning('No target found for meeting type change notification', [
                     'appointment_id' => $appointment->id,
                     'old_meeting_type' => $oldMeetingType,
-                    'new_meeting_type' => $newMeetingType
+                    'new_meeting_type' => $newMeetingType,
                 ]);
+
                 return false;
             }
 
@@ -545,17 +560,19 @@ class AppointmentNotificationService
             self::sendMeetingTypeChangePush($appointment, $notifyTarget, $oldMeetingType, $newMeetingType);
 
             // Store notification in database
-            self::storeMeetingTypeChangeNotification($appointment, $notifyTarget, $oldMeetingType, $newMeetingType, $property);
+            $targetRole = ($updatedBy === 'user') ? 'agent' : 'user';
+            self::storeMeetingTypeChangeNotification($appointment, $notifyTarget, $oldMeetingType, $newMeetingType, $property, $targetRole);
 
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send meeting type change notification", [
+            Log::error('Failed to send meeting type change notification', [
                 'appointment_id' => $appointment->id,
                 'old_meeting_type' => $oldMeetingType,
                 'new_meeting_type' => $newMeetingType,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -573,16 +590,17 @@ class AppointmentNotificationService
             self::sendMeetingTypeChangePush($appointment, $user, $oldMeetingType, $newMeetingType);
 
             // Store notification in database
-            self::storeMeetingTypeChangeNotification($appointment, $user, $oldMeetingType, $newMeetingType, $property);
+            self::storeMeetingTypeChangeNotification($appointment, $user, $oldMeetingType, $newMeetingType, $property, 'user');
 
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send meeting type change notification to user", [
+            Log::error('Failed to send meeting type change notification to user', [
                 'appointment_id' => $appointment->id,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -600,16 +618,17 @@ class AppointmentNotificationService
             self::sendMeetingTypeChangePush($appointment, $agent, $oldMeetingType, $newMeetingType);
 
             // Store notification in database
-            self::storeMeetingTypeChangeNotification($appointment, $agent, $oldMeetingType, $newMeetingType, $property);
+            self::storeMeetingTypeChangeNotification($appointment, $agent, $oldMeetingType, $newMeetingType, $property, 'agent');
 
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send meeting type change notification to agent", [
+            Log::error('Failed to send meeting type change notification to agent', [
                 'appointment_id' => $appointment->id,
                 'agent_id' => $agent->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -626,7 +645,7 @@ class AppointmentNotificationService
 
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_meeting_type_change');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             // Get timezone for the target user
             $targetTimezone = $notifyTarget->getTimezone();
@@ -660,14 +679,16 @@ class AppointmentNotificationService
             ];
 
             HelperService::sendMail($data);
+
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send meeting type change email notification", [
+            Log::error('Failed to send meeting type change email notification', [
                 'appointment_id' => $appointment->id,
                 'target_email' => $notifyTarget->email ?? 'N/A',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -700,19 +721,21 @@ class AppointmentNotificationService
                 ],
                 'replace' => [
                     'old_type' => ucfirst(str_replace('_', ' ', $oldMeetingType)),
-                    'new_type' => ucfirst(str_replace('_', ' ', $newMeetingType))
-                ]
+                    'new_type' => ucfirst(str_replace('_', ' ', $newMeetingType)),
+                ],
             ];
 
             send_push_notification($fcmTokens, $fcmMsg);
+
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send meeting type change push notification", [
+            Log::error('Failed to send meeting type change push notification', [
                 'appointment_id' => $appointment->id,
                 'target_id' => $notifyTarget->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -720,11 +743,11 @@ class AppointmentNotificationService
     /**
      * Store meeting type change notification in database
      */
-    private static function storeMeetingTypeChangeNotification(Appointment $appointment, Customer $notifyTarget, string $oldMeetingType, string $newMeetingType, Property $property = null)
+    private static function storeMeetingTypeChangeNotification(Appointment $appointment, Customer $notifyTarget, string $oldMeetingType, string $newMeetingType, ?Property $property = null, string $roleContext = 'user')
     {
         try {
             $title = 'Meeting Type Updated';
-            $body = 'Meeting type changed from ' . ucfirst(str_replace('_', ' ', $oldMeetingType)) . ' to ' . ucfirst(str_replace('_', ' ', $newMeetingType));
+            $body = 'Meeting type changed from '.ucfirst(str_replace('_', ' ', $oldMeetingType)).' to '.ucfirst(str_replace('_', ' ', $newMeetingType));
 
             Notifications::create([
                 'title' => $title,
@@ -734,6 +757,7 @@ class AppointmentNotificationService
                 'send_type' => '0', // Push notification
                 'customers_id' => $notifyTarget->id,
                 'propertys_id' => $property?->id ?? 0,
+                'role_context' => $roleContext,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -741,11 +765,12 @@ class AppointmentNotificationService
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to store meeting type change notification", [
+            Log::error('Failed to store meeting type change notification', [
                 'appointment_id' => $appointment->id,
                 'target_id' => $notifyTarget->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -761,7 +786,7 @@ class AppointmentNotificationService
     /**
      * Send appointment confirmed notification to user
      */
-    private static function sendAppointmentConfirmedToUser(Appointment $appointment, $agent = null, Customer $user, Property $property, User $admin = null)
+    private static function sendAppointmentConfirmedToUser(Appointment $appointment, $agent, Customer $user, Property $property, ?User $admin = null)
     {
         try {
             // Send push notification to user
@@ -781,8 +806,8 @@ class AppointmentNotificationService
             send_push_notification($userFcmToken, $fcmMsg);
 
             // Store notification in database
-            $title = "Your Appointment is Confirmed";
-            $body = "Your appointment is confirmed";
+            $title = 'Your Appointment is Confirmed';
+            $body = 'Your appointment is confirmed';
             Notifications::create([
                 'title' => $title,
                 'message' => $body,
@@ -790,6 +815,7 @@ class AppointmentNotificationService
                 'type' => '2',
                 'send_type' => '0',
                 'customers_id' => $user->id,
+                'role_context' => 'user',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -797,12 +823,12 @@ class AppointmentNotificationService
             // Send confirmation email to user
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             $timezone = $user->getTimezone();
-            if($admin){
-                $agentName = trans("Admin");
-            }else{
+            if ($admin) {
+                $agentName = trans('Admin');
+            } else {
                 $agentName = $agent->name;
             }
             $userStartAt = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($timezone);
@@ -839,11 +865,12 @@ class AppointmentNotificationService
             return true;
 
         } catch (\Exception $e) {
-            Log::error("Failed to send appointment confirmed notification to user", [
+            Log::error('Failed to send appointment confirmed notification to user', [
                 'appointment_id' => $appointment->id,
                 'user_id' => $user->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }

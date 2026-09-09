@@ -2,81 +2,82 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
+use App\Models\AssignParameters;
 use App\Models\Category;
 use App\Models\parameter;
-use Illuminate\Http\Request;
+use App\Services\BootstrapTableService;
 use App\Services\FileService;
 use App\Services\HelperService;
-use App\Models\AssignParameters;
 use App\Services\ResponseService;
-use Illuminate\Support\Facades\DB;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
-use App\Services\BootstrapTableService;
+use Illuminate\Support\Facades\DB;
 
 class ParameterController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function index()
     {
-        if (!has_permissions('read', 'facility')) {
+        if (! has_permissions('read', 'facility')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $languages = HelperService::getActiveLanguages();
+
         return view('parameter.index', compact('languages'));
     }
 
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function store(Request $request)
     {
         // dd($request->all());
-        if (!has_permissions('create', 'facility')) {
+        if (! has_permissions('create', 'facility')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
         $request->validate([
             'parameter' => 'required|regex:/^[^\'"]*$/',
-            'options'   => 'required',
-            'image'     => 'required|mimes:svg|max:2048',
+            'options' => 'required',
+            'image' => 'required|mimes:svg|max:2048',
         ]);
         try {
             $jsonOptionValue = null;
 
             // Convert The option data to json encode
-            if(isset($request->opt)){
-                $options = array();
-                if($request->options == 'radiobutton'){
-                    if(count($request->opt) < 2){
+            if (isset($request->opt)) {
+                $options = [];
+                if ($request->options == 'radiobutton') {
+                    if (count($request->opt) < 2) {
                         ResponseService::validationError(trans('Radio Button must have at least 2 options'));
                     }
                 }
-                foreach($request->opt as $key => $value){
+                foreach ($request->opt as $key => $value) {
                     // Validate no quotes in option values
-                    if(preg_match('/[\'"]/', $value)){
+                    if (preg_match('/[\'"]/', $value)) {
                         ResponseService::validationError(trans('Option values cannot contain single or double quotes'));
                     }
-                    $options[] = array(
+                    $options[] = [
                         'value' => htmlspecialchars($value),
-                    );
-                    if(isset($request->option_translations[$key])){
-                        foreach($request->option_translations[$key] as $translation){
+                    ];
+                    if (isset($request->option_translations[$key])) {
+                        foreach ($request->option_translations[$key] as $translation) {
                             // Validate no quotes in option translations
-                            if(isset($translation['value']) && preg_match('/[\'"]/', $translation['value'])){
+                            if (isset($translation['value']) && preg_match('/[\'"]/', $translation['value'])) {
                                 ResponseService::validationError(trans('Option translations cannot contain single or double quotes'));
                             }
-                            $options[$key]['translations'][] = array(
+                            $options[$key]['translations'][] = [
                                 'language_id' => $translation['language_id'],
                                 'value' => htmlspecialchars($translation['value']),
-                            );
+                            ];
                         }
                     }
                 }
@@ -84,13 +85,13 @@ class ParameterController extends Controller
             }
 
             // Get and create if not there destination path of images to be stored
-            $destinationPath = public_path('images') . config('global.PARAMETER_IMAGE_PATH');
-            if (!is_dir($destinationPath)) {
+            $destinationPath = public_path('images').config('global.PARAMETER_IMAGE_PATH');
+            if (! is_dir($destinationPath)) {
                 mkdir($destinationPath, 0777, true);
             }
 
             // Add Data to Database
-            $parameter = new parameter();
+            $parameter = new parameter;
             $parameter->name = $request->parameter;
             $parameter->type_of_parameter = $request->options;
             $parameter->is_required = $request->is_required ?? 0;
@@ -107,29 +108,29 @@ class ParameterController extends Controller
             $parameter->save();
 
             // Add Translations
-            if(isset($request->translations) && !empty($request->translations)){
-                $translationData = array();
-                foreach($request->translations as $translation){
+            if (isset($request->translations) && ! empty($request->translations)) {
+                $translationData = [];
+                foreach ($request->translations as $translation) {
                     // Validate no quotes in parameter name translations
-                    if(isset($translation['value']) && preg_match('/[\'"]/', $translation['value'])){
+                    if (isset($translation['value']) && preg_match('/[\'"]/', $translation['value'])) {
                         ResponseService::validationError(trans('Parameter name translations cannot contain single or double quotes'));
                     }
-                    $translationData[] = array(
-                        'translatable_id'   => $parameter->id,
+                    $translationData[] = [
+                        'translatable_id' => $parameter->id,
                         'translatable_type' => 'App\Models\parameter',
-                        'key'               => 'name',
-                        'value'             => $translation['value'],
-                        'language_id'       => $translation['language_id'],
-                    );
+                        'key' => 'name',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
-                if(!empty($translationData)){
+                if (! empty($translationData)) {
                     HelperService::storeTranslations($translationData);
                 }
             }
 
             ResponseService::successResponse('Parameter Successfully Added');
         } catch (Exception $e) {
-            ResponseService::errorResponse("Something Went Wrong");
+            ResponseService::errorResponse('Something Went Wrong');
         }
     }
 
@@ -137,11 +138,11 @@ class ParameterController extends Controller
      * Display the specified resource.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function show(Request $request)
     {
-        if (!has_permissions('read', 'facility')) {
+        if (! has_permissions('read', 'facility')) {
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -162,7 +163,7 @@ class ParameterController extends Controller
 
         $sql = parameter::orderBy($sort, $order)->with('translations');
 
-        if (isset($_GET['search']) && !empty($_GET['search'])) {
+        if (isset($_GET['search']) && ! empty($_GET['search'])) {
             $search = $_GET['search'];
             $sql->where('id', 'LIKE', "%$search%")->orwhere('name', 'LIKE', "%$search%");
         }
@@ -174,36 +175,36 @@ class ParameterController extends Controller
 
         $res = $sql->get();
 
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
-        $tempRow = array();
+        $rows = [];
+        $tempRow = [];
         $count = 1;
 
         foreach ($res as $row) {
 
             $tempRow = $row->toArray();
 
-            $typeValue = array();
-            if(!empty($row->type_values)){
-                foreach($row->type_values as $key => $value){
-                    if(isset($value['translations'])){
+            $typeValue = [];
+            if (! empty($row->type_values)) {
+                foreach ($row->type_values as $key => $value) {
+                    if (isset($value['translations'])) {
                         $typeValue[] = $value['value'];
-                    }else{
-                        if(isset($value['value'])){
+                    } else {
+                        if (isset($value['value'])) {
                             $typeValue[] = $value['value'];
-                        }else{
+                        } else {
                             $typeValue[] = $value;
                         }
                     }
                 }
             }
 
-            $tempRow['value'] = !empty($typeValue) ? implode(',', $typeValue) : null;
+            $tempRow['value'] = ! empty($typeValue) ? implode(',', $typeValue) : null;
 
             // $tempRow['type_values'] = $row->type_values;
             $svgClear = HelperService::getSettingData('svg_clr');
-            $tempRow['svg_clr'] = !empty($svgClear) ? $svgClear : 0;
+            $tempRow['svg_clr'] = ! empty($svgClear) ? $svgClear : 0;
 
             // Build operations buttons
             $operate = '';
@@ -215,7 +216,7 @@ class ParameterController extends Controller
             $isUsed = $this->isParameterUsed($row->id);
             $tempRow['is_used'] = $isUsed;
 
-            if (!$isUsed && has_permissions('delete', 'facility')) {
+            if (! $isUsed && has_permissions('delete', 'facility')) {
                 $operate .= BootstrapTableService::deleteAjaxButton(route('parameters.destroy', $row['id']));
             }
             $tempRow['operate'] = $operate;
@@ -225,15 +226,15 @@ class ParameterController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function update(Request $request)
     {
@@ -242,53 +243,53 @@ class ParameterController extends Controller
 
             $request->validate([
                 'edit_name' => 'required|regex:/^[^\'"]*$/',
-                'image' => 'mimes:svg'
+                'image' => 'mimes:svg',
             ]);
 
-            if (!has_permissions('update', 'facility')) {
+            if (! has_permissions('update', 'facility')) {
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             } else {
                 // $opt_value = isset($request->edit_opt) && !empty($request->edit_opt) ? json_encode($request->edit_opt, JSON_FORCE_OBJECT) : NULL;
 
                 DB::beginTransaction();
-                $id =  $request->edit_id;
+                $id = $request->edit_id;
 
                 $parameter = parameter::find($id);
                 $parameter->name = ($request->edit_name) ? $request->edit_name : '';
-                $parameter->is_required = (isset($request->edit_is_required) && !empty($request->edit_is_required)) ? 1 : 0;
+                $parameter->is_required = (isset($request->edit_is_required) && ! empty($request->edit_is_required)) ? 1 : 0;
 
                 // Handle option translations update
-                if(isset($request->edit_option_values) && !empty($request->edit_option_values) &&
+                if (isset($request->edit_option_values) && ! empty($request->edit_option_values) &&
                    in_array($parameter->type_of_parameter, ['dropdown', 'checkbox', 'radiobutton'])) {
 
-                    $updatedOptions = array();
-                    foreach($request->edit_option_values as $optionIndex => $optionValue) {
+                    $updatedOptions = [];
+                    foreach ($request->edit_option_values as $optionIndex => $optionValue) {
                         // Validate no quotes in option values
-                        if(preg_match('/[\'"]/', $optionValue)){
+                        if (preg_match('/[\'"]/', $optionValue)) {
                             ResponseService::errorRedirectResponse(null, trans('Option values cannot contain single or double quotes'));
                         }
-                        $optionTranslations = array();
+                        $optionTranslations = [];
 
                         // Get translations for this option
-                        if(isset($request->edit_option_translations[$optionIndex])) {
-                            foreach($request->edit_option_translations[$optionIndex] as $translation) {
-                                if(!empty($translation['value'])) {
+                        if (isset($request->edit_option_translations[$optionIndex])) {
+                            foreach ($request->edit_option_translations[$optionIndex] as $translation) {
+                                if (! empty($translation['value'])) {
                                     // Validate no quotes in option translations
-                                    if(preg_match('/[\'"]/', $translation['value'])){
+                                    if (preg_match('/[\'"]/', $translation['value'])) {
                                         ResponseService::errorRedirectResponse(null, trans('Option translations cannot contain single or double quotes'));
                                     }
-                                    $optionTranslations[] = array(
+                                    $optionTranslations[] = [
                                         'language_id' => $translation['language_id'],
-                                        'value' => htmlspecialchars($translation['value'])
-                                    );
+                                        'value' => htmlspecialchars($translation['value']),
+                                    ];
                                 }
                             }
                         }
 
-                        $updatedOptions[] = array(
+                        $updatedOptions[] = [
                             'value' => htmlspecialchars($optionValue),
-                            'translations' => $optionTranslations
-                        );
+                            'translations' => $optionTranslations,
+                        ];
                     }
 
                     $parameter->type_values = json_encode($updatedOptions, JSON_FORCE_OBJECT);
@@ -303,25 +304,24 @@ class ParameterController extends Controller
 
                 $parameter->update();
 
-
                 // Add Translations
-                if(isset($request->translations) && !empty($request->translations)){
-                    $translationData = array();
-                    foreach($request->translations as $translation){
+                if (isset($request->translations) && ! empty($request->translations)) {
+                    $translationData = [];
+                    foreach ($request->translations as $translation) {
                         // Validate no quotes in parameter name translations
-                        if(isset($translation['value']) && preg_match('/[\'"]/', $translation['value'])){
+                        if (isset($translation['value']) && preg_match('/[\'"]/', $translation['value'])) {
                             ResponseService::errorRedirectResponse(null, trans('Parameter name translations cannot contain single or double quotes'));
                         }
-                        $translationData[] = array(
-                            'id'                => $translation['id'] ?? null,
-                            'translatable_id'   => $parameter->id,
+                        $translationData[] = [
+                            'id' => $translation['id'] ?? null,
+                            'translatable_id' => $parameter->id,
                             'translatable_type' => 'App\Models\parameter',
-                            'key'               => 'name',
-                            'value'             => $translation['value'],
-                            'language_id'       => $translation['language_id'],
-                        );
+                            'key' => 'name',
+                            'value' => $translation['value'],
+                            'language_id' => $translation['language_id'],
+                        ];
                     }
-                    if(!empty($translationData)){
+                    if (! empty($translationData)) {
                         HelperService::storeTranslations($translationData);
                     }
                 }
@@ -330,7 +330,7 @@ class ParameterController extends Controller
             }
         } catch (Exception $e) {
             DB::rollBack();
-            ResponseService::logErrorResponse($e, "Something Went Wrong");
+            ResponseService::logErrorResponse($e, 'Something Went Wrong');
         }
     }
 
@@ -338,15 +338,15 @@ class ParameterController extends Controller
      * Remove the specified resource from storage.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public function destroy($id)
     {
-        if (env('DEMO_MODE') && Auth::user()->email != "superadmin@gmail.com") {
-            ResponseService::validationError('This is not allowed in the Demo Version');
+        if (env('DEMO_MODE') && Auth::user()->email != 'superadmin@gmail.com') {
+            ResponseService::validationError(__('This is not allowed in the Demo Version'));
         }
 
-        if (!has_permissions('delete', 'facility')) {
+        if (! has_permissions('delete', 'facility')) {
             ResponseService::validationError(PERMISSION_ERROR_MSG);
         }
 
@@ -354,7 +354,7 @@ class ParameterController extends Controller
             DB::beginTransaction();
 
             $parameter = parameter::find($id);
-            if (!$parameter) {
+            if (! $parameter) {
                 ResponseService::validationError('Parameter not found');
             }
 
@@ -377,7 +377,7 @@ class ParameterController extends Controller
             }
 
             if ($usageCount > 0) {
-                $message = "Cannot delete this parameter. It is being used in: " . implode(', ', $usedIn);
+                $message = 'Cannot delete this parameter. It is being used in: '.implode(', ', $usedIn);
                 ResponseService::validationError($message);
             }
 
@@ -396,14 +396,14 @@ class ParameterController extends Controller
             ResponseService::successResponse('Parameter Deleted Successfully');
         } catch (Exception $e) {
             DB::rollBack();
-            ResponseService::logErrorResponse($e, "Parameter Delete Error", "Something Went Wrong");
+            ResponseService::logErrorResponse($e, 'Parameter Delete Error', 'Something Went Wrong');
         }
     }
 
     /**
      * Check if parameter is being used in any related tables
      *
-     * @param int $parameterId
+     * @param  int  $parameterId
      * @return bool
      */
     private function isParameterUsed($parameterId)

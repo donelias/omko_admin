@@ -1,10 +1,10 @@
 <?php
 
 use App\Models\Setting;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Database\Migrations\Migration;
 
 return new class extends Migration
 {
@@ -15,12 +15,12 @@ return new class extends Migration
     {
         /****************************************************************************** */
         // Update Email & Password Login
-        $settings = array(
+        $settings = [
             'email_password_login' => 1,
             'dark_mode_logo' => 'dark_mode_logo.png',
             'app_login_background' => 'app_login_background.jpg',
-        );
-        foreach($settings as $key => $value){
+        ];
+        foreach ($settings as $key => $value) {
             Setting::updateOrCreate(['type' => $key], ['data' => $value]);
         }
         /****************************************************************************** */
@@ -29,8 +29,8 @@ return new class extends Migration
          */
         Schema::create('ad_banners', function (Blueprint $table) {
             $table->id();
-            $table->enum('page', ['homepage','property_listing','property_detail']);
-            $table->enum('platform', ['app','web']);
+            $table->enum('page', ['homepage', 'property_listing', 'property_detail']);
+            $table->enum('platform', ['app', 'web']);
             $table->enum('placement', [
                 'below_categories',
                 'above_all_properties',
@@ -44,7 +44,7 @@ return new class extends Migration
                 'above_breadcrumb',
             ]);
             $table->string('image');
-            $table->enum('type', ['external_link','property','banner_only']);
+            $table->enum('type', ['external_link', 'property', 'banner_only']);
             $table->string('external_link_url')->nullable();
             $table->foreignId('property_id')->nullable()->references('id')->on('propertys')->onDelete('cascade');
             $table->integer('duration_days')->default(1);
@@ -56,7 +56,7 @@ return new class extends Migration
         });
         /****************************************************************************** */
         // is admin added data in customer
-        if (!Schema::hasColumn('customers', 'is_admin_added')) {
+        if (! Schema::hasColumn('customers', 'is_admin_added')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->boolean('is_admin_added')->default(false)->after('logintype');
             });
@@ -72,34 +72,34 @@ return new class extends Migration
         }
         /****************************************************************************** */
         // edit reason column in property and project table
-        if (!Schema::hasColumn('propertys', 'edit_reason')) {
+        if (! Schema::hasColumn('propertys', 'edit_reason')) {
             Schema::table('propertys', function (Blueprint $table) {
                 $table->text('edit_reason')->nullable()->after('request_status');
             });
         }
-        if (!Schema::hasColumn('projects', 'edit_reason')) {
+        if (! Schema::hasColumn('projects', 'edit_reason')) {
             Schema::table('projects', function (Blueprint $table) {
                 $table->text('edit_reason')->nullable()->after('request_status');
             });
         }
         /****************************************************************************** */
         // Add User id in property and project view count table
-        if (!Schema::hasColumn('property_views', 'user_id')) {
+        if (! Schema::hasColumn('property_views', 'user_id')) {
             Schema::table('property_views', function (Blueprint $table) {
                 // Drop existing unique key
-                if(!Schema::hasIndex('property_views', 'property_id_index')){
-                    $table->index('property_id','property_id_index');
+                if (! Schema::hasIndex('property_views', 'property_id_index')) {
+                    $table->index('property_id', 'property_id_index');
                 }
                 $table->dropUnique('unique_property_date');
                 $table->foreignId('user_id')->after('property_id')->nullable()->references('id')->on('customers')->onDelete('cascade');
                 $table->unique(['user_id', 'property_id', 'date'], 'unique_property_view_user');
             });
         }
-        if (!Schema::hasColumn('project_views', 'user_id')) {
+        if (! Schema::hasColumn('project_views', 'user_id')) {
             Schema::table('project_views', function (Blueprint $table) {
                 // Drop existing unique key
-                if(!Schema::hasIndex('project_views', 'project_id_index')){
-                    $table->index('project_id','project_id_index');
+                if (! Schema::hasIndex('project_views', 'project_id_index')) {
+                    $table->index('project_id', 'project_id_index');
                 }
                 $table->dropUnique('unique_project_date');
                 $table->foreignId('user_id')->after('project_id')->nullable()->references('id')->on('customers')->onDelete('cascade');
@@ -108,7 +108,7 @@ return new class extends Migration
         }
         /****************************************************************************** */
         // Add purchase_type to packages table
-        if (!Schema::hasColumn('packages', 'purchase_type')) {
+        if (! Schema::hasColumn('packages', 'purchase_type')) {
             Schema::table('packages', function (Blueprint $table) {
                 $table->enum('purchase_type', ['unlimited', 'one_time'])->default('unlimited')->after('package_type');
             });

@@ -13,43 +13,42 @@ return new class extends Migration
      */
     public function up()
     {
-        if (!Schema::hasColumn('customers', 'about_me')) {
+        if (! Schema::hasColumn('customers', 'about_me')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->text('about_me')->nullable();
             });
         }
-        if (!Schema::hasColumn('customers', 'facebook_id')) {
+        if (! Schema::hasColumn('customers', 'facebook_id')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->string('facebook_id')->nullable();
             });
         }
-        if (!Schema::hasColumn('customers', 'twiiter_id')) {
+        if (! Schema::hasColumn('customers', 'twiiter_id')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->string('twiiter_id')->nullable();
             });
         }
-        if (!Schema::hasColumn('customers', 'instagram_id')) {
+        if (! Schema::hasColumn('customers', 'instagram_id')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->string('instagram_id')->nullable();
             });
         }
-        if (!Schema::hasColumn('customers', 'pintrest_id')) {
+        if (! Schema::hasColumn('customers', 'pintrest_id')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->string('pintrest_id')->nullable();
             });
         }
-        if (!Schema::hasColumn('customers', 'latitude')) {
+        if (! Schema::hasColumn('customers', 'latitude')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->string('latitude')->nullable();
             });
         }
-        if (!Schema::hasColumn('customers', 'longitude')) {
+        if (! Schema::hasColumn('customers', 'longitude')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->string('longitude')->nullable();
             });
         }
     }
-
 
     /**
      * Reverse the migrations.

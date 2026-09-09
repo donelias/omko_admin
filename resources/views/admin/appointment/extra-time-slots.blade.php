@@ -63,7 +63,7 @@
                 <div class="card">
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-12">
+                            <div class="col-12 extra-time-slots">
                                 <a href="{{ url('admin/appointment/time-schedule') }}" class="btn btn-secondary">{{ __('Previous: Time Schedule') }}</a>
                                 {{-- <a href="{{ url('admin/appointment/unavailability') }}" class="btn btn-info">{{ __('Next: Unavailability') }}</a> --}}
                                 <a href="{{ url('admin/appointment/preferences') }}" class="btn btn-success">{{ __('Back to Preferences') }}</a>

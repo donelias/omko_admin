@@ -7,65 +7,64 @@ return [
 
     'support_url' => 'https://join.skype.com/invite/Wy96gZvdk2oW',
 
-
     'server' => [
         'php' => [
             'name' => 'PHP Version',
             'version' => '>= 8.1.0',
             'check' => [
                 'type' => 'php',
-                'value' => 80100
-            ]
+                'value' => 80100,
+            ],
         ],
         'pdo' => [
             'name' => 'PDO',
             'check' => [
                 'type' => 'extension',
-                'value' => 'pdo_mysql'
-            ]
+                'value' => 'pdo_mysql',
+            ],
         ],
         'mbstring' => [
             'name' => 'Mbstring extension',
             'check' => [
                 'type' => 'extension',
-                'value' => 'mbstring'
-            ]
+                'value' => 'mbstring',
+            ],
         ],
         'fileinfo' => [
             'name' => 'Fileinfo extension',
             'check' => [
                 'type' => 'extension',
-                'value' => 'fileinfo'
-            ]
+                'value' => 'fileinfo',
+            ],
         ],
         'openssl' => [
             'name' => 'OpenSSL extension',
             'check' => [
                 'type' => 'extension',
-                'value' => 'openssl'
-            ]
+                'value' => 'openssl',
+            ],
         ],
         'tokenizer' => [
             'name' => 'Tokenizer extension',
             'check' => [
                 'type' => 'extension',
-                'value' => 'tokenizer'
-            ]
+                'value' => 'tokenizer',
+            ],
         ],
         'json' => [
             'name' => 'Json extension',
             'check' => [
                 'type' => 'extension',
-                'value' => 'json'
-            ]
+                'value' => 'json',
+            ],
         ],
         'curl' => [
             'name' => 'Curl extension',
             'check' => [
                 'type' => 'extension',
-                'value' => 'curl'
-            ]
-        ]
+                'value' => 'curl',
+            ],
+        ],
     ],
 
     'folders' => [
@@ -73,39 +72,39 @@ return [
             'name' => '/storage/framework',
             'check' => [
                 'type' => 'directory',
-                'value' => '../storage/framework'
-            ]
+                'value' => '../storage/framework',
+            ],
         ],
         'storage.logs' => [
             'name' => '/storage/logs',
             'check' => [
                 'type' => 'directory',
-                'value' => '../storage/logs'
+                'value' => '../storage/logs',
             ],
         ],
         'storage.cache' => [
             'name' => '/bootstrap/cache',
             'check' => [
                 'type' => 'directory',
-                'value' => '../bootstrap/cache'
-            ]
+                'value' => '../bootstrap/cache',
+            ],
         ],
     ],
 
     'database' => [
-        'seeders' => false
+        'seeders' => false,
     ],
 
-   'commands' => [
-        'db:seed --class=DatabaseSeeder'
+    'commands' => [
+        'db:seed --class=DatabaseSeeder',
     ],
 
     'admin_area' => [
         'user' => [
             'email' => 'admin@gmail.com',
-            'password' => 'admin123'
-        ]
+            'password' => 'admin123',
+        ],
     ],
 
-    'login' => '/'
+    'login' => '/',
 ];

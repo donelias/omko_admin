@@ -2,55 +2,65 @@
 
 namespace Database\Seeders;
 
-use App\Models\Property;
 use App\Models\PriceHistory;
+use App\Models\Property;
+use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 
 class PriceHistorySeeder extends Seeder
 {
     /**
-     * Run the database seeds.
+     * Genera histórico de precios de prueba para las propiedades activas.
      */
-    public function run(): void
+    public function run()
     {
-        // Obtener propiedades
-        $properties = Property::limit(50)->get();
+        $properties = Property::where('status', 1)
+            ->where('price', '>', 0)
+            ->limit(50)
+            ->get();
 
         if ($properties->isEmpty()) {
-            $this->command->info('No properties found. Please seed properties first.');
+            $this->command->info('No hay propiedades activas para sembrar histórico.');
+
             return;
         }
 
+        $generated = 0;
+
         foreach ($properties as $property) {
-            // Crear histórico de 6-12 meses de precios
-            $monthsBack = rand(6, 12);
+            if (PriceHistory::forProperty($property->id)->exists()) {
+                continue;
+            }
 
-            for ($i = $monthsBack; $i > 0; $i--) {
-                $date = now()->subMonths($i);
+            $price = (float) $property->price;
+            $now = Carbon::now();
 
-                // Generar variación de precio (±15%)
-                $variation = rand(-15, 15);
-                $price = $property->price * (1 + ($variation / 100));
+            // 3 hitos: hace ~8, ~4 y ~1 mes
+            $milestones = [
+                ['months' => 8, 'factor' => 0.90, 'status' => 'listed'],
+                ['months' => 4, 'factor' => 0.95, 'status' => 'price_changed'],
+                ['months' => 1, 'factor' => 1.00, 'status' => 'listed'],
+            ];
+
+            foreach ($milestones as $milestone) {
+                $entryPrice = round($price * $milestone['factor'], 2);
 
                 PriceHistory::create([
                     'property_id' => $property->id,
-                    'price' => round($price, 2),
-                    'price_per_sqm' => $property->area > 0
-                        ? round($price / $property->area, 2)
-                        : null,
-                    'status' => rand(0, 1) ? 'listed' : 'price_changed',
-                    'transaction_type' => rand(0, 1) ? 'sale' : 'rental',
-                    'days_on_market' => rand(5, 120),
-                    'notes' => 'Auto-generated price history',
-                    'recorded_by' => 1,
-                    'created_at' => $date,
-                    'updated_at' => $date,
+                    'price' => $entryPrice,
+                    'price_per_sqm' => null,
+                    'status' => $milestone['status'],
+                    'transaction_type' => in_array((int) $property->getRawOriginal('propery_type'), [1, 3]) ? 'rental' : 'sale',
+                    'days_on_market' => max(0, (int) $milestone['months'] * 30),
+                    'notes' => 'Seed de histórico de prueba (PriceHistorySeeder)',
+                    'recorded_by' => null,
+                    'created_at' => $now->copy()->subMonths($milestone['months']),
+                    'updated_at' => $now->copy()->subMonths($milestone['months']),
                 ]);
+                $generated++;
             }
-
-            $this->command->info("Created price history for property {$property->id}");
         }
 
-        $this->command->info('Price history seeding completed!');
+        $this->command->info("Histórico generado: {$generated} registros.");
     }
 }

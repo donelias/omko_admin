@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 class AgentAvailability extends Model
 {
     use HasFactory;
+
     protected $table = 'agent_availabilities';
+
     protected $fillable = ['id', 'agent_id', 'day_of_week', 'start_time', 'end_time', 'is_active', 'is_admin_data', 'admin_id'];
 
     public function appointments()

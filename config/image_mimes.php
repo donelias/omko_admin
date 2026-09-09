@@ -27,5 +27,5 @@ return [
         'image' => 'image/jpg,image/png,image/jpeg,image/webp',
         'image_with_gif' => 'image/jpg,image/png,image/jpeg,image/gif,image/webp',
     ],
-];
 
+];

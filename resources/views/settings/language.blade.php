@@ -174,7 +174,7 @@
                                         <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
                                         <th scope="col" data-field="name" data-sortable="false">{{ __('Name') }}</th>
                                         <th scope="col" data-field="code" data-sortable="true">{{ __('Code') }}</th>
-                                        <th scope="col" data-field="rtl" data-sortable="true">{{ __('Is RTL') }}</th>
+                                        <th scope="col" data-field="rtl" data-sortable="false">{{ __('Is RTL') }}</th>
                                         @if (has_permissions('update', 'language'))
                                             <th scope="col" data-field="status" data-sortable="true" data-align="center" data-formatter="languageEnableDisableSwitchFormatter">{{ __('Status') }}</th>
                                         @else

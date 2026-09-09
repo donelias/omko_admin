@@ -4,28 +4,32 @@ namespace App\Models;
 
 use App\Services\FileService;
 use App\Traits\HasAppTimezone;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class CityImage extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
-    protected $table ='city_images';
+
+    protected $table = 'city_images';
 
     protected $fillable = [
         'city',
         'image',
-        'status'
+        'status',
     ];
 
     public function getImageAttribute($image)
     {
-        $path = $image ? config('global.CITY_IMAGE_PATH') . $image : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
+        $path = $image ? config('global.CITY_IMAGE_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
     }
 
-    public function property(){
-        return $this->hasMany(Property::class,'city','city');
+    public function property()
+    {
+        return $this->hasMany(Property::class, 'city', 'city');
     }
 }

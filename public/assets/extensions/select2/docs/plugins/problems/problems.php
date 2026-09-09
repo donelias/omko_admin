@@ -1,4 +1,5 @@
 <?php
+
 namespace Grav\Plugin;
 
 use Grav\Common\Cache;
@@ -7,7 +8,7 @@ use Grav\Common\Uri;
 
 class ProblemsPlugin extends Plugin
 {
-    protected $results = array();
+    protected $results = [];
 
     protected $check;
 
@@ -18,7 +19,7 @@ class ProblemsPlugin extends Plugin
     {
         return [
             'onPluginsInitialized' => ['onPluginsInitialized', 100001],
-            'onFatalException' => ['onFatalException', 0]
+            'onFatalException' => ['onFatalException', 0],
         ];
     }
 
@@ -26,6 +27,7 @@ class ProblemsPlugin extends Plugin
     {
         if ($this->isAdmin()) {
             $this->active = false;
+
             return;
         }
 
@@ -39,6 +41,7 @@ class ProblemsPlugin extends Plugin
     {
         if ($this->isAdmin()) {
             $this->active = false;
+
             return;
         }
 
@@ -46,13 +49,13 @@ class ProblemsPlugin extends Plugin
         $cache = $this->grav['cache'];
         $validated_prefix = 'problem-check-';
 
-        $this->check = CACHE_DIR . $validated_prefix . $cache->getKey();
+        $this->check = CACHE_DIR.$validated_prefix.$cache->getKey();
 
-        if (!file_exists($this->check)) {
+        if (! file_exists($this->check)) {
             // If no issues remain, save a state file in the cache
-            if (!$this->problemChecker()) {
+            if (! $this->problemChecker()) {
                 // delete any existing validated files
-                foreach (new \GlobIterator(CACHE_DIR . $validated_prefix . '*') as $fileInfo) {
+                foreach (new \GlobIterator(CACHE_DIR.$validated_prefix.'*') as $fileInfo) {
                     @unlink($fileInfo->getPathname());
                 }
 
@@ -73,16 +76,16 @@ class ProblemsPlugin extends Plugin
         /** @var Uri $uri */
         $uri = $this->grav['uri'];
         $baseUrlRelative = $uri->rootUrl(false);
-        $themeUrl = $baseUrlRelative . '/' . USER_PATH . basename(THEMES_DIR) . '/' . $theme;
-        $problemsUrl = $baseUrlRelative . '/user/plugins/problems';
+        $themeUrl = $baseUrlRelative.'/'.USER_PATH.basename(THEMES_DIR).'/'.$theme;
+        $problemsUrl = $baseUrlRelative.'/user/plugins/problems';
 
-        $html = file_get_contents(__DIR__ . '/html/problems.html');
+        $html = file_get_contents(__DIR__.'/html/problems.html');
 
         /**
          * Process the results, ignore the statuses passed as $ignore_status
          *
-         * @param $results
-         * @param $ignore_status
+         * @param  $results
+         * @param  $ignore_status
          */
         $processResults = function ($results, $ignore_status) {
             $problems = '';
@@ -91,13 +94,17 @@ class ProblemsPlugin extends Plugin
                 if ($key == 'files' || $key == 'apache' || $key == 'execute') {
                     foreach ($result as $key_text => $value_text) {
                         foreach ($value_text as $status => $text) {
-                            if ($status == $ignore_status) continue;
-                            $problems .= $this->getListRow($status, '<b>' . $key_text . '</b> ' . $text);
+                            if ($status == $ignore_status) {
+                                continue;
+                            }
+                            $problems .= $this->getListRow($status, '<b>'.$key_text.'</b> '.$text);
                         }
                     }
                 } else {
                     foreach ($result as $status => $text) {
-                        if ($status == $ignore_status) continue;
+                        if ($status == $ignore_status) {
+                            continue;
+                        }
                         $problems .= $this->getListRow($status, $text);
                     }
                 }
@@ -107,7 +114,7 @@ class ProblemsPlugin extends Plugin
         };
 
         // First render the errors
-        $problems  = $processResults($this->results, 'success');
+        $problems = $processResults($this->results, 'success');
 
         // Then render the successful checks
         $problems .= $processResults($this->results, 'error');
@@ -122,7 +129,6 @@ class ProblemsPlugin extends Plugin
 
         exit();
 
-
     }
 
     protected function getListRow($status, $text)
@@ -135,7 +141,8 @@ class ProblemsPlugin extends Plugin
             $icon = 'fa-check';
         }
         $output = "\n";
-        $output .= '<li class="' . $status . ' clearfix"><i class="fa fa-fw '. $icon . '"></i><p>'. $text . '</p></li>';
+        $output .= '<li class="'.$status.' clearfix"><i class="fa fa-fw '.$icon.'"></i><p>'.$text.'</p></li>';
+
         return $output;
     }
 
@@ -156,23 +163,23 @@ class ProblemsPlugin extends Plugin
             'user/plugins/error' => false,
             'user/plugins' => false,
             'user/themes' => false,
-            'vendor' => false
+            'vendor' => false,
         ];
 
-        if (version_compare(GRAV_VERSION, '0.9.27', ">=")) {
+        if (version_compare(GRAV_VERSION, '0.9.27', '>=')) {
             $essential_files['backup'] = true;
-            $backup_folder = ROOT_DIR . 'backup';
+            $backup_folder = ROOT_DIR.'backup';
             // try to create backup folder if missing
-            if (!file_exists($backup_folder)) {
+            if (! file_exists($backup_folder)) {
                 @mkdir($backup_folder, 0770);
             }
         }
 
-        if (version_compare(GRAV_VERSION, '1.1.4', ">=")) {
+        if (version_compare(GRAV_VERSION, '1.1.4', '>=')) {
             $essential_files['tmp'] = true;
-            $tmp_folder = ROOT_DIR . 'tmp';
+            $tmp_folder = ROOT_DIR.'tmp';
             // try to create tmp folder if missing
-            if (!file_exists($tmp_folder)) {
+            if (! file_exists($tmp_folder)) {
                 @mkdir($tmp_folder, 0770);
             }
         }
@@ -197,7 +204,7 @@ class ProblemsPlugin extends Plugin
                 $apache_status[$module] = [$apache_module_status => $apache_module_adjective];
             }
 
-            if (sizeof($apache_status) > 0) {
+            if (count($apache_status) > 0) {
                 $this->results['apache'] = $apache_status;
             }
         }
@@ -212,7 +219,7 @@ class ProblemsPlugin extends Plugin
             $php_version_adjective = 'greater';
             $php_version_status = 'success';
         }
-        $this->results['php'] = [$php_version_status => 'Your PHP version (' . phpversion() . ') is '. $php_version_adjective . ' than the minimum required: <b>' . $min_php_version . '</b>  - <a href="http://getgrav.org/blog/changing-php-requirements-to-5.5">Additional Information</a>'];
+        $this->results['php'] = [$php_version_status => 'Your PHP version ('.phpversion().') is '.$php_version_adjective.' than the minimum required: <b>'.$min_php_version.'</b>  - <a href="http://getgrav.org/blog/changing-php-requirements-to-5.5">Additional Information</a>'];
 
         // Check for GD library
         if (defined('GD_VERSION') && function_exists('gd_info')) {
@@ -223,7 +230,7 @@ class ProblemsPlugin extends Plugin
             $gd_adjective = 'not ';
             $gd_status = 'error';
         }
-        $this->results['gd'] = [$gd_status => 'PHP GD (Image Manipulation Library) is '. $gd_adjective . 'installed'];
+        $this->results['gd'] = [$gd_status => 'PHP GD (Image Manipulation Library) is '.$gd_adjective.'installed'];
 
         // Check for PHP CURL library
         if (function_exists('curl_version')) {
@@ -234,7 +241,7 @@ class ProblemsPlugin extends Plugin
             $curl_adjective = 'not ';
             $curl_status = 'error';
         }
-        $this->results['curl'] = [$curl_status => 'PHP Curl (Data Transfer Library) is '. $curl_adjective . 'installed'];
+        $this->results['curl'] = [$curl_status => 'PHP Curl (Data Transfer Library) is '.$curl_adjective.'installed'];
 
         // Check for PHP Open SSL library
         if (extension_loaded('openssl') && defined('OPENSSL_VERSION_TEXT')) {
@@ -245,7 +252,7 @@ class ProblemsPlugin extends Plugin
             $ssl_adjective = 'not ';
             $ssl_status = 'error';
         }
-        $this->results['ssl'] = [$ssl_status => 'PHP OpenSSL (Secure Sockets Library) is '. $ssl_adjective . 'installed'];
+        $this->results['ssl'] = [$ssl_status => 'PHP OpenSSL (Secure Sockets Library) is '.$ssl_adjective.'installed'];
 
         // Check for PHP XML library
         if (extension_loaded('xml')) {
@@ -256,7 +263,7 @@ class ProblemsPlugin extends Plugin
             $xml_adjective = 'not ';
             $xml_status = 'error';
         }
-        $this->results['xml'] = [$xml_status => 'PHP XML Library is '. $xml_adjective . 'installed'];
+        $this->results['xml'] = [$xml_status => 'PHP XML Library is '.$xml_adjective.'installed'];
 
         // Check for PHP MbString library
         if (extension_loaded('mbstring')) {
@@ -267,11 +274,11 @@ class ProblemsPlugin extends Plugin
             $mbstring_adjective = 'not ';
             $mbstring_status = 'error';
         }
-        $this->results['mbstring'] = [$mbstring_status => 'PHP Mbstring (Multibyte String Library) is '. $mbstring_adjective . 'installed'];
+        $this->results['mbstring'] = [$mbstring_status => 'PHP Mbstring (Multibyte String Library) is '.$mbstring_adjective.'installed'];
 
         // Check Exif if enabled
         if ($this->grav['config']->get('system.media.auto_metadata_exif')) {
-            if(extension_loaded('exif')) {
+            if (extension_loaded('exif')) {
                 $exif_adjective = '';
                 $exif_status = 'success';
             } else {
@@ -279,7 +286,7 @@ class ProblemsPlugin extends Plugin
                 $exif_adjective = 'not ';
                 $exif_status = 'error';
             }
-            $this->results['exif'] = [$exif_status => 'PHP Exif (Exchangeable Image File Format) is '. $exif_adjective . 'installed'];
+            $this->results['exif'] = [$exif_status => 'PHP Exif (Exchangeable Image File Format) is '.$exif_adjective.'installed'];
         }
 
         // Check for PHP Zip library
@@ -291,14 +298,14 @@ class ProblemsPlugin extends Plugin
             $zip_adjective = 'not ';
             $zip_status = 'error';
         }
-        $this->results['zip'] = [$zip_status => 'PHP Zip extension is '. $zip_adjective . 'installed'];
+        $this->results['zip'] = [$zip_status => 'PHP Zip extension is '.$zip_adjective.'installed'];
 
         // Check for essential files & perms
         $file_problems = [];
         foreach ($essential_files as $file => $check_writable) {
-            $file_path = ROOT_DIR . $file;
+            $file_path = ROOT_DIR.$file;
             $is_dir = false;
-            if (!file_exists($file_path)) {
+            if (! file_exists($file_path)) {
                 $problems_found = true;
                 $file_status = 'error';
                 $file_adjective = 'does not exist';
@@ -310,7 +317,7 @@ class ProblemsPlugin extends Plugin
                 $is_dir = is_dir($file_path);
 
                 if ($check_writable) {
-                    if (!$is_writeable) {
+                    if (! $is_writeable) {
                         $file_status = 'error';
                         $problems_found = true;
                         $file_adjective .= ' but is <b class="underline">not writeable</b>';
@@ -323,7 +330,7 @@ class ProblemsPlugin extends Plugin
             $file_problems[$file_path] = [$file_status => $file_adjective];
 
         }
-        if (sizeof($file_problems) > 0) {
+        if (count($file_problems) > 0) {
             $this->results['files'] = $file_problems;
         }
 

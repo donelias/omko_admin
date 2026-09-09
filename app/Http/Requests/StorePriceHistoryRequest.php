@@ -8,42 +8,29 @@ class StorePriceHistoryRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
+     *
+     * @return bool
      */
-    public function authorize(): bool
+    public function authorize()
     {
-        return $this->user() !== null && has_permissions('create', 'properties');
+        return true;
     }
 
     /**
      * Get the validation rules that apply to the request.
+     *
+     * @return array
      */
-    public function rules(): array
+    public function rules()
     {
         return [
-            'property_id' => 'required|exists:properties,id',
-            'price' => 'required|numeric|min:0|max:999999999.99',
-            'status' => 'required|string|in:listed,sold,rented,price_changed,delisted',
-            'transaction_type' => 'required|string|in:sale,rental',
-            'days_on_market' => 'nullable|integer|min:0|max:10000',
+            'property_id' => 'required|integer|exists:propertys,id',
+            'price' => 'required|numeric|gt:0',
+            'price_per_sqm' => 'nullable|numeric|min:0',
+            'status' => 'sometimes|in:listed,sold,rented,price_changed,delisted',
+            'transaction_type' => 'sometimes|in:sale,rental',
+            'days_on_market' => 'nullable|integer|min:0',
             'notes' => 'nullable|string|max:1000',
-        ];
-    }
-
-    /**
-     * Get custom messages for validation errors.
-     */
-    public function messages(): array
-    {
-        return [
-            'property_id.required' => 'Property ID is required',
-            'property_id.exists' => 'Property not found',
-            'price.required' => 'Price is required',
-            'price.numeric' => 'Price must be a number',
-            'price.min' => 'Price must be greater than 0',
-            'status.required' => 'Status is required',
-            'status.in' => 'Invalid status value',
-            'transaction_type.required' => 'Transaction type is required',
-            'transaction_type.in' => 'Transaction type must be sale or rental',
         ];
     }
 }

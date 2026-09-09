@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasAppTimezone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class PriceAnalytic extends Model
 {
-    use HasFactory;
+    use HasAppTimezone, HasFactory;
 
     protected $table = 'price_analytics';
+
+    protected $dates = ['created_at', 'updated_at'];
 
     protected $fillable = [
         'metric_type',
@@ -35,74 +38,75 @@ class PriceAnalytic extends Model
         'median_price' => 'decimal:2',
         'price_per_sqm' => 'decimal:2',
         'std_deviation' => 'decimal:2',
+        'sample_count' => 'integer',
         'price_trend' => 'decimal:2',
+        'avg_days_on_market' => 'integer',
         'market_demand' => 'decimal:2',
         'price_distribution' => 'array',
         'top_amenities' => 'array',
         'analysis_period_start' => 'datetime',
         'analysis_period_end' => 'datetime',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
     ];
 
     /**
-     * Scope: Get by location and property type
+     * Scopes
      */
-    public function scopeByLocation($query, $location, $propertyType = null, $transactionType = 'sale')
+    public function scopeByLocation($query, $location, $propertyType, $transactionType)
     {
-        $query->where('location', $location)
+        return $query->where('location', $location)
+            ->where('property_type', $propertyType)
             ->where('transaction_type', $transactionType);
-
-        if ($propertyType) {
-            $query->where('property_type', $propertyType);
-        }
-
-        return $query;
     }
 
-    /**
-     * Scope: Get latest analysis
-     */
+    public function scopeMetrik($query, $metricType)
+    {
+        return $query->where('metric_type', $metricType);
+    }
+
     public function scopeLatest($query)
     {
         return $query->orderBy('created_at', 'desc');
     }
 
-    /**
-     * Get latest market analysis for location
-     */
-    public static function getLatestForLocation($location, $propertyType = null)
+    public static function getLatestForLocation($location, $propertyType, $transactionType = 'sale')
     {
-        return self::byLocation($location, $propertyType)
+        return self::metrik('market_avg')
+            ->byLocation($location, $propertyType, $transactionType)
             ->latest()
             ->first();
     }
 
     /**
-     * Calculate price range based on analytics
+     * Rango de precios (promedio ± N desviaciones estándar)
      */
     public function calculatePriceRange($stdDevMultiplier = 1.5)
     {
-        $range = $this->std_deviation * $stdDevMultiplier;
+        $min = $this->average_price - ($this->std_deviation * $stdDevMultiplier);
+        $max = $this->average_price + ($this->std_deviation * $stdDevMultiplier);
 
         return [
-            'minimum' => $this->median_price - $range,
-            'maximum' => $this->median_price + $range,
-            'average' => $this->average_price,
+            'min' => round(max(0, $min), 2),
+            'max' => round($max, 2),
         ];
     }
 
     /**
-     * Get market condition
+     * Condición de mercado basada en demanda.
      */
-    public function getMarketCondition(): string
+    public function getMarketCondition()
     {
-        if ($this->market_demand >= 75) {
-            return 'hot_market';
-        } elseif ($this->market_demand >= 50) {
+        if ($this->market_demand === null) {
             return 'balanced';
-        } else {
+        }
+
+        if ($this->market_demand >= 80) {
+            return 'hot_market';
+        }
+
+        if ($this->market_demand <= 40) {
             return 'slow_market';
         }
+
+        return 'balanced';
     }
 }

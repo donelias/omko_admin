@@ -237,13 +237,13 @@
                                     {{ Form::label('state', __('State'), ['class' => 'form-label col-12 ']) }}
                                     {{ Form::text('state', '', ['class' => 'form-control ', 'placeholder' => __('State'), 'id' => 'state', 'required' => true]) }}
                                 </div>
-                                <div class="col-md-6 form-group mandatory">
+                                <div class="col-md-6 form-group">
                                     {{ Form::label('latitude', __('Latitude'), ['class' => 'form-label col-12 ']) }}
-                                    {!! Form::text('latitude', '', ['class' => 'form-control', 'id' => 'latitude', 'step' => 'any', 'readonly' => true, 'required' => true, 'placeholder' => __('Latitude')]) !!}
+                                    {!! Form::text('latitude', '', ['class' => 'form-control', 'id' => 'latitude', 'step' => 'any', 'readonly' => true, 'placeholder' => __('Latitude')]) !!}
                                 </div>
-                                <div class="col-md-6 form-group mandatory">
+                                <div class="col-md-6 form-group ">
                                     {{ Form::label('longitude', __('Longitude'), ['class' => 'form-label col-12 ']) }}
-                                    {!! Form::text('longitude', '', ['class' => 'form-control', 'id' => 'longitude', 'step' => 'any', 'readonly' => true, 'required' => true, 'placeholder' => __('Longitude')]) !!}
+                                    {!! Form::text('longitude', '', ['class' => 'form-control', 'id' => 'longitude', 'step' => 'any', 'readonly' => true, 'placeholder' => __('Longitude')]) !!}
                                 </div>
                                 <div class="col-md-12 col-12 form-group mandatory">
                                     {{ Form::label('address', __('Client Address'), ['class' => 'form-label col-12 ']) }}
@@ -303,11 +303,6 @@
                             <input type="file" class="filepond" id="documents" name="documents[]" multiple accept="application/pdf,application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document">
                         </div>
 
-                        {{-- Video Link --}}
-                        <div class="col-md-3">
-                            {{ Form::label('video_link', __('Video Link'), ['class' => 'form-label']) }}
-                            {{ Form::text('video_link', isset($list->video_link) ? $list->video_link : '', [ 'class' => 'form-control ', 'placeholder' => trans('Video Link'), 'id' => 'address', 'autocomplete' => 'off', ]) }}
-                        </div>
                     </div>
                 </div>
 
@@ -315,11 +310,44 @@
         </div>
         <div class="col-md-12">
             <div class="card">
+                <h3 class="card-header">{{ __('Video') }}</h3>
+                <hr>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3">
+                            {{ Form::label('video_type', __('Video Type'), ['class' => 'form-label col-12 ']) }}
+                            <select name="video_type" class="form-select" data-parsley-minSelect='1' id="video_type">
+                                <option value="" selected>{{ __('Choose Video Type') }}</option>
+                                @if(system_setting('show_direct_video_upload') == 1)
+                                    <option value="0">{{ __('Custom') }}</option>
+                                @endif
+                                <option value="1">{{ __('Youtube') }}</option>
+                                <option value="2">{{ __('Vimeo') }}</option>
+                            </select>
+                        </div>
+                        {{-- Video Link --}}
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 mt-3 mt-sm-0" id="video_link_div" style="display:none">
+                            {{ Form::label('video_link', __('Video Link'), ['class' => 'form-label']) }}
+                            {{ Form::text('video_link', '', ['class' => 'form-control ', 'placeholder' => trans('Video Link'), 'id' => 'video_link', 'autocomplete' => 'off']) }}
+                        </div>
+
+                        {{-- Custom Video --}}
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 mt-3 mt-sm-0" id="custom_video_div" style="display:none">
+                            {{ Form::label('custom_video', __('Custom Video'), ['class' => 'form-label']) }}
+                            <input type="file" class="filepond" name="custom_video" id="custom_video" accept="video/mp4,video/webm,video/ogg">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-12">
+            <div class="card">
                 <h3 class="card-header">{{ __('accessibility') }}</h3>
                 <hr>
                 <div class="card-body">
                     <div class="col-sm-12 col-md-12  col-xs-12 d-flex">
-                        <label class="col-sm-1 form-check-label mandatory mt-3 ">{{ __('Is Private?') }}</label>
+                        <label class="col-sm-1 form-check-label mandatory mt-3 ">{{ __('Is Premium?') }}</label>
 
                         <div class="form-check form-switch mt-3">
 
@@ -375,15 +403,24 @@
             &nbsp;
             &nbsp;
 
-            <button class="btn btn-secondary" type="button" onclick="myForm.reset();">{{ __('Reset') }}</button>
+            <button class="btn btn-secondary" type="button" onclick="document.getElementById('myForm').reset(); document.getElementById('category').focus();">{{ __('Reset') }}</button>
         </div>
     </div>
 
     {!! Form::close() !!}
 @endsection
 @section('script')
-    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
-    <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @if (system_setting('map_service_provider') === 'open_street_maps')
+        <script>window.MAP_SERVICE_PROVIDER = 'open_street_maps';</script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="{{ asset('assets/js/osm-maps-helper.js') }}"></script>
+        <script>jQuery(document).ready(function () { if (typeof initMap === 'function') initMap(); });</script>
+    @else
+        <script>window.MAP_SERVICE_PROVIDER = 'google_maps';</script>
+        <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
+        <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @endif
     <script type="text/javascript">
         $(document).ready(function() {
             // $("#category").val($("#category option:first").val()).trigger('change');
@@ -430,7 +467,7 @@
 
 
         function initMap() {
-            window.initBackendPlacesMap({
+            var mapOptions = {
                 mapElementId: 'map',
                 inputSelector: '#searchInput',
                 citySelector: '#city',
@@ -441,7 +478,12 @@
                 longitudeSelector: '#longitude',
                 defaultLatitudeSelector: '#default-latitude',
                 defaultLongitudeSelector: '#default-longitude'
-            });
+            };
+            if (window.MAP_SERVICE_PROVIDER === 'open_street_maps') {
+                window.initOsmPlacesMap(mapOptions);
+            } else {
+                window.initBackendPlacesMap(mapOptions);
+            }
         }
         jQuery(document).ready(function() {
             $('.select2').prepend('<option value="" selected></option>');
@@ -529,7 +571,7 @@
                 const category_id = $('#category').val();
 
                 if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
+                    showErrorToast('{{ __("Please enter a title first") }}');
                     return;
                 }
 
@@ -561,12 +603,12 @@
                         if (!response.error && response.data && response.data.description) {
                             descriptionField.val(response.data.description);
                         } else {
-                            alert(response.message || '{{ __("Failed to generate description") }}');
+                            showErrorToast(response.message || '{{ __("Failed to generate description") }}');
                         }
                     },
                     error: function(xhr) {
                         const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
+                        showErrorToast(errorMsg);
                     },
                     complete: function() {
                         btn.prop('disabled', false);
@@ -583,7 +625,7 @@
                 const price = $('#price').val();
 
                 if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
+                    showErrorToast('{{ __("Please enter a title first") }}');
                     return;
                 }
 
@@ -621,12 +663,12 @@
                                 metaKeywordsField.val(response.data.meta_keywords);
                             }
                         } else {
-                            alert(response.message || '{{ __("Failed to generate meta details") }}');
+                            showErrorToast(response.message || '{{ __("Failed to generate meta details") }}');
                         }
                     },
                     error: function(xhr) {
                         const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
+                        showErrorToast(errorMsg);
                     },
                     complete: function() {
                         btn.prop('disabled', false);
@@ -651,7 +693,7 @@
                 const btn = $(this);
 
                 if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
+                    showErrorToast('{{ __("Please enter a title first") }}');
                     return;
                 }
 
@@ -688,18 +730,40 @@
                             // }
                             descriptionField.val(response.data.description);
                         } else {
-                            alert(response.message || '{{ __("Failed to generate description") }}');
+                            showErrorToast(response.message || '{{ __("Failed to generate description") }}');
                         }
                     },
                     error: function(xhr) {
                         const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
+                        showErrorToast(errorMsg);
                     },
                     complete: function() {
                         btn.prop('disabled', false);
                         loadingDiv.addClass('d-none');
                     }
                 });
+            });
+        });
+
+        $(document).ready(function() {
+            // Video Type Change Handler
+            $('select[name="video_type"]').on('change', function() {
+                var videoType = $(this).val();
+
+                // Reset fields
+                $('#video_link_div').hide();
+                $('#custom_video_div').hide();
+                $('#video_link').prop('required', false);
+                // $('#custom_video').prop('required', false); // FilePond handling might be different
+
+                if (videoType == '0') { // Custom
+                    $('#custom_video_div').show();
+                    $('#custom_video').attr('required', true);
+                } else if (videoType == '1' || videoType == '2') { // Youtube or Vimeo
+                    $('#video_link_div').show();
+                    $('#video_link').prop('required', true);
+                    $('#custom_video').removeAttr('required');
+                }
             });
         });
     </script>

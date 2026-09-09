@@ -132,6 +132,9 @@ function formAjaxRequest(type, url, data, formElement, submitButtonElement, succ
         }
 
         ajaxRequest(type, url, data, beforeSendCallback, mainSuccessCallback, mainErrorCallback, finalCallback)
+    } else {
+        let originalText = submitButtonElement.data('original-text') || 'Save';
+        submitButtonElement.val(originalText).attr('disabled', false);
     }
 }
 
@@ -151,16 +154,16 @@ function formAjaxRequest(type, url, data, formElement, submitButtonElement, succ
  * @param {function} [options.errorCallBack] - function()
  */
 function showSweetAlertConfirmPopup(url, method, options = {}, responseFunction = {}) {
-    if(options){
+    if (options) {
         opt = {
-            title: options.title ? options.title :window.trans["Are you sure"],
+            title: options.title ? options.title : window.trans["Are you sure"],
             text: options.text ? options.text : window.trans["You wants to change it ?"],
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#198754',
             cancelButtonColor: '#d33',
-            confirmButtonText: options.confirmText ? options.confirmText : window.trans["Yes"],
-            cancelButtonText: options.cancelText ? options.cancelText : window.trans["No"],
+            confirmButtonText: options.confirmButtonText ? options.confirmButtonText : window.trans["Yes"],
+            cancelButtonText: options.cancelButtonText ? options.cancelButtonText : window.trans["No"],
             reverseButtons: true,
             successCallBack: function () {
             },
@@ -169,7 +172,7 @@ function showSweetAlertConfirmPopup(url, method, options = {}, responseFunction 
 
             ...responseFunction,
         }
-    }else{
+    } else {
         opt = {
             title: window.trans["Are you sure"],
             text: window.trans["You wants to change it ?"],
@@ -237,8 +240,8 @@ function showDeletePopupModal(url, options = {}) {
     // To Preserve OLD
     let opt = {
         title: window.trans["Are you sure"],
-        text: window.trans["You wont be able to revert this"],
-        icon: 'error',
+        text: window.trans["You want to delete it ?"],
+        icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#198754',
         cancelButtonColor: '#d33',
@@ -252,7 +255,7 @@ function showDeletePopupModal(url, options = {}) {
         ...options,
     }
 
-    showSweetAlertConfirmPopup(url, 'DELETE', opt,options);
+    showSweetAlertConfirmPopup(url, 'DELETE', opt, options);
 }
 // Function to make remove button accessible on the basis of Option Section Length
 let toggleAccessOfDeleteButtons = () => {

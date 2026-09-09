@@ -13,7 +13,7 @@
     -webkit-user-select: none; }
     .select2-container .select2-selection--single .select2-selection__rendered {
       display: block;
-      padding-left: 8px;
+      padding-left: 20px;
       padding-right: 20px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -21,7 +21,7 @@
     .select2-container .select2-selection--single .select2-selection__clear {
       position: relative; }
   .select2-container[dir="rtl"] .select2-selection--single .select2-selection__rendered {
-    padding-right: 8px;
+    padding-right: 20px !important;
     padding-left: 20px; }
   .select2-container .select2-selection--multiple {
     box-sizing: border-box;
@@ -33,7 +33,7 @@
     .select2-container .select2-selection--multiple .select2-selection__rendered {
       display: inline-block;
       overflow: hidden;
-      padding-left: 8px;
+      padding-left: 20px;
       text-overflow: ellipsis;
       white-space: nowrap; }
   .select2-container .select2-search--inline {

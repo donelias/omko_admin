@@ -32,7 +32,14 @@
                     <div class="row">
                         {!! Form::open(['url' => route('faqs.store'), 'data-parsley-validate', 'class' => 'create-form']) !!}
                         <div class=" row">
-
+                            <div class="col-lg-12 form-group mandatory">
+                                {{ Form::label('user_type', __('Target Audience'), ['class' => 'form-label text-center']) }}
+                                <select name="user_type" class="form-select form-control-sm" data-parsley-required="true">
+                                    <option value="">{{ __('Select Target Audience') }}</option>
+                                    <option value="user">{{ __('User') }}</option>
+                                    <option value="agent">{{ __('Agent') }}</option>
+                                </select>
+                            </div>
                             {{-- Question --}}
                             <div class="col-lg-12 col-xl-6 form-group mandatory">
                                 {{ Form::label('question', __('Question'), ['class' => 'form-label text-center']) }}
@@ -44,6 +51,9 @@
                                 {{ Form::label('answer', __('Answer'), ['class' => 'form-label text-center']) }}
                                 {{ Form::textarea('answer', '', [ 'class' => 'form-control', 'placeholder' => trans('Answer'), 'data-parsley-required' => 'true', 'id' => 'answer', 'rows' => 2]) }}
                             </div>
+
+                            {{-- User Type --}}
+                          
 
                             @if(isset($languages) && $languages->count() > 0)
                                 {{-- Translations Div --}}
@@ -94,6 +104,14 @@
     <section class="section">
         <div class="card">
             <div class="card-body">
+                {{-- User/Agent Filter Tabs --}}
+                <div class="mb-3">
+                    <div class="btn-group" role="group" id="user-type-filter">
+                        <button type="button" class="btn btn-outline-primary active" data-value="">{{ __('All') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="user">{{ __('User') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="agent">{{ __('Agent') }}</button>
+                    </div>
+                </div>
                 <div class="row">
                     <div class="col-12">
                         <table class="table table-striped"
@@ -107,6 +125,7 @@
                             <thead class="thead-dark">
                                 <tr>
                                     <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
+                                    <th scope="col" data-field="user_type" data-sortable="true" data-align="center" data-formatter="addedAsTagFormatter">{{ __('Target Audience') }}</th>
                                     <th scope="col" data-field="question" data-formatter="questionFormatter" data-sortable="true" style="max-width: 300px;">{{ __('Question') }}</th>
                                     <th scope="col" data-field="answer" data-formatter="answerFormatter" data-sortable="true" style="max-width: 300px;">{{ __('Answer') }}</th>
                                     @if (has_permissions('update', 'faqs'))
@@ -140,6 +159,14 @@
                     <form class="form-horizontal edit-form" action="{{ url('faqs') }}" enctype="multipart/form-data">
                         {{ csrf_field() }}
                         <input type="hidden" id="edit-id" name="edit_id">
+                        {{-- User Type --}}
+                        <div class="col-lg-12 form-group mandatory">
+                            {{ Form::label('edit_user_type', __('User Type'), ['class' => 'form-label text-center']) }}
+                            <select name="edit_user_type" id="edit-user-type" class="form-select form-control-sm" required>
+                                <option value="user">{{ __('User') }}</option>
+                                <option value="agent">{{ __('Agent') }}</option>
+                            </select>
+                        </div>
                         {{-- Question --}}
                         <div class="col-lg-12 form-group">
                             {{ Form::label('edit-question', __('Question'), ['class' => 'form-label text-center']) }}
@@ -241,19 +268,27 @@
         crossorigin="anonymous" referrerpolicy="no-referrer"></script> --}}
     <script src=https://bevacqua.github.io/dragula/dist/dragula.js></script>
     <script>
+        $('#user-type-filter button').on('click', function() {
+            $('#user-type-filter button').removeClass('active');
+            $(this).addClass('active');
+            $('#table_list').bootstrapTable('refresh');
+        });
+
         function queryParams(p) {
             return {
                 sort: p.sort,
                 order: p.order,
                 offset: p.offset,
                 limit: p.limit,
-                search: p.search
+                search: p.search,
+                user_type: $('#user-type-filter button.active').data('value')
             };
         }
 
         window.actionEvents = {
             'click .edit_btn': function(e, value, row, index) {
                 $("#edit-id").val(row.id);
+                $("#edit-user-type").val(row.user_type || 'user');
                 $("#edit-question").val(row.question);
                 $("#edit-answer").val(row.answer);
                 $(".edit-question-translations").val("");

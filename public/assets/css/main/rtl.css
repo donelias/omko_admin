@@ -3687,7 +3687,7 @@ textarea.form-control.is-invalid {
 
 .btn:hover {
     background-color: var(--bs-primary);
-    color:white !important;
+    color: white !important;
 }
 
 .btn-check:focus-visible+.btn,
@@ -21565,6 +21565,8 @@ body .bi:before {
 
 .sidebar-wrapper .menu .sidebar-link span {
     margin-right: 1rem;
+    flex: 1;
+    white-space: normal;
 }
 
 .sidebar-wrapper .menu .sidebar-link:hover {
@@ -21631,7 +21633,9 @@ body .bi:before {
 
 .sidebar-wrapper .menu .submenu .submenu-item a {
     color: #4D5454;
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     font-size: 0.85rem;
     font-weight: 600;
     letter-spacing: 0.5px;
@@ -22474,7 +22478,7 @@ a {
     }
 
     .menu-item {
-        margin-left: 0;
+        margin-left: 20px;
     }
 }
 
@@ -22590,15 +22594,15 @@ a {
 
 
 .jvectormap-container .jvectormap-marker.jvectormap-element {
-  animation: animate-pulse 3s linear infinite;
-  /* cursor: pointer */
+    animation: animate-pulse 3s linear infinite;
+    /* cursor: pointer */
 }
 
-.icon_text{
+.icon_text {
     margin-right: 5px;
 }
 
-.documents-div{
+.documents-div {
     display: flex;
     justify-content: space-evenly;
 }
@@ -22608,18 +22612,72 @@ a {
     opacity: 0.6;
 }
 
-.mfp-bg{
-    z-index:9999;
+.mfp-bg {
+    z-index: 9999;
 }
+
 .mfp-wrap {
-    z-index:9999;
+    z-index: 9999;
 }
-.eye-icon{
+
+.eye-icon {
     position: absolute;
     left: 1.5rem;
     top: 1.8rem !important;
 }
-.login-card{
+
+.login-card {
     height: 100vh;
     overflow: auto;
+}
+
+.submenu {
+    position: relative;
+    /* margin-right: 1rem; */
+}
+
+.submenu .submenu-item.active:first-child {
+    margin-top: 0.5rem;
+}
+
+/* Right border using pseudo-element to avoid gap from margin-top */
+.submenu::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    margin-right: 1rem;
+    background-color: #E7E7E7;
+    z-index: 1;
+}
+
+.submenu-item.active {
+    background-color: color-mix(in srgb, var(--primary-color) 8%, #FFFFFF);
+    border-radius: 0.5rem;
+}
+
+/* Active state border color */
+.submenu-item.active::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    margin-right: 1rem;
+    z-index: 1;
+    background-color: var(--primary-color);
+}
+
+.submenu-item a {
+    margin-right: 1rem;
+}
+
+.property-label-card {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    flex-direction: row;
 }

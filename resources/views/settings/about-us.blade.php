@@ -39,7 +39,7 @@
                     {{-- Translations Div --}}
                     <div class="translation-div">
                         <div class="card">
-                            <h3 class="card-header">{{ __('Translations for About Us') }}</h3>
+                            <h5 class="card-header">{{ __('Translations for About Us') }}</h3>
                             <hr>
                             <div class="card-body">
                                 {{-- Fields for Translations --}}
@@ -61,8 +61,12 @@
                     </div>
                 @endif
             </div>
-            <div class="col-12 mt-2 d-flex justify-content-end">
+
+            <div class="card">
+                {{-- About us --}}
+                <div class="card-body text-end">
                 <button class="btn btn-primary me-1 mb-1" type="submit" name="submit">{{ __('Save') }}</button>
+            </div>
             </div>
         </form>
     </section>

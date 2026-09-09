@@ -220,22 +220,39 @@
             @endif
         </div>
 
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>{{ __('Package') }}</th>
-                    <th>{{ __('Duration') }}</th>
-                    <th>{{ __('Amount') }}</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>{{ $payment->package->name }}</td>
-                    <td>{{ $payment->package->duration / 24 }} {{ $payment->package->package_type == 'unlimited' ? __('Unlimited') : __('Days') }}</td>
-                    <td>{{ $settings['currency_symbol'] ?? '$' }} {{ number_format($payment->amount, 2) }}</td>
-                </tr>
-            </tbody>
-        </table>
+        @if($payment->package_id)
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>{{ __('Package') }}</th>
+                        <th>{{ __('Duration') }}</th>
+                        <th>{{ __('Amount') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ $payment->package->name }}</td>
+                        <td>{{ $payment->package->duration / 24 }} {{ $payment->package->package_type == 'unlimited' ? __('Unlimited') : __('Days') }}</td>
+                        <td>{{ $settings['currency_symbol'] ?? '$' }} {{ number_format($payment->amount, 2) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        @else
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>{{ __('Description') }}</th>
+                        <th>{{ __('Amount') }}</th>
+                    </tr>
+                </thead>
+                <tbody> 
+                    <tr>
+                        <td>{{ __('Paid via pay as go') }}</td> 
+                        <td>{{ $settings['currency_symbol'] ?? '$' }} {{ number_format($payment->amount, 2) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        @endif
 
         <div class="total-section">
             <div class="total-row">

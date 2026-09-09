@@ -21,8 +21,11 @@
             @if (has_permissions('create', 'property'))
                 <div class="card-header">
                     <div class="row ">
-                        {{-- Add Property Button --}}
-                        <div class="col-12 col-xs-12 d-flex justify-content-end">
+                        {{-- Add Property & Bulk Import Buttons --}}
+                        <div class="col-12 col-xs-12 d-flex justify-content-end gap-2">
+                            <a href="{{ route('bulk-import.property') }}" class="btn btn-success">
+                                <i class="bi bi-file-earmark-arrow-up me-1"></i>{{ __('Bulk Upload') }}
+                            </a>
                             {!! Form::open(['route' => 'property.create']) !!}
                             {{ method_field('get') }}
                             {{ Form::submit(__('Add Property'), ['class' => 'btn btn-primary']) }}
@@ -35,6 +38,16 @@
 
             <hr>
             <div class="card-body">
+                {{-- Added As Filter Tabs --}}
+                <div class="mb-3">
+                    <div class="btn-group" role="group" id="added-as-filter">
+                        <button type="button" class="btn btn-outline-primary active" data-value="">{{ __('All') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="admin">{{ __('Admin') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="user">{{ __('User') }}</button>
+                        <button type="button" class="btn btn-outline-primary" data-value="agent">{{ __('Agent') }}</button>
+                    </div>
+                </div>
+
                 <div class="row" id="toolbar">
                     {{-- Filter Category --}}
                     <div class="col-xl-3 mt-2">
@@ -63,14 +76,6 @@
                             <option value="1">{{ __('Rent') }}</option>
                             <option value="2">{{ __('Sold') }}</option>
                             <option value="3">{{ __('Rented') }}</option>
-                        </select>
-                    </div>
-                    {{-- Filter Owner --}}
-                    <div class="col-xl-3 mt-2">
-                        <select id="property-owner-filter" class="form-select form-control-sm">
-                            <option value="">{{ __('Select Property Owner') }} </option>
-                            <option value="0">{{ __('By Admin') }}</option>
-                            <option value="1">{{ __('By Users') }}</option>
                         </select>
                     </div>
                     {{-- Filter Private/General --}}
@@ -110,11 +115,13 @@
                                     <th scope="col" data-field="customer_name" data-align="center" data-sortable="false"> {{ __('Client Name') }}</th>
                                     <th scope="col" data-field="mobile" data-align="center" data-sortable="false"> {{ __('Mobile') }} </th>
                                     <th scope="col" data-field="client_address" data-align="center" data-sortable="false">{{ __('Client Address') }}</th>
-                                    <th scope="col" data-field="title" data-sortable="false" class="max-width-row">{{ __('Title') }}</th>
+                                    <th scope="col" data-field="title" data-sortable="false" data-align="center" data-width="220" data-formatter="titleFormatter">{{ __('Title') }}</th>
                                     <th scope="col" data-field="slug_id" data-visible="false" data-sortable="true" data-align="center">{{ __('Slug') }}</th>
                                     <th scope="col" data-field="address" data-align="center" data-sortable="false"> {{ __('Address') }}</th>
                                     <th scope="col" data-field="category.category" data-align="center" data-sortable="false"> {{ __('Category') }}</th>
                                     <th scope="col" data-field="propery_type" data-formatter="propertyTypeFormatter" data-align="center" data-sortable="true"> {{ __('Type') }}</th>
+                                    <th scope="col" data-field="added_as_tag" data-align="center" data-sortable="false" data-formatter="addedAsTagFormatter"> {{ __('Posted By') }}</th>
+                                    <!-- <th scope="col" data-field="total_click" data-align="center" data-sortable="false" data-formatter="totalClickFormatter"> {{ __('Total View') }}</th> -->
                                     @if (has_permissions('update', 'property'))
                                         <th scope="col" data-field="edit_status" data-sortable="false" data-align="center" data-width="5%" data-formatter="enableDisableSwitchFormatter"> {{ __('Enable/Disable') }}</th>
                                     @endif
@@ -125,11 +132,12 @@
                                     <th scope="col" data-field="status" data-sortable="false" data-align="center" data-width="5%" data-formatter="yesNoStatusFormatter"> {{ __('Is Property Active ?') }}</th>
                                     <th scope="col" data-field="request_status" data-sortable="false" data-align="center" data-width="5%" data-formatter="requestStatusFormatter"> {{ __('Verification Status') }}</th>
                                     @if (has_permissions('update', 'property'))
-                                        <th scope="col" data-field="is_premium" data-formatter="premium_status_switch" data-align="center" data-sortable="false"> {{ __('Private/Public') }}</th>
+                                        <th scope="col" data-field="is_premium" data-formatter="premium_status_switch" data-align="center" data-sortable="false"> {{ __('Premium') }}</th>
                                     @endif
                                     <th scope="col" data-field="raw_gallery_images_btn" data-align="center" data-sortable="false" data-events="actionEvents"> {{ __('Gallery Images') }}</th>
                                     <th scope="col" data-field="raw_documents_btn" data-align="center" data-sortable="false" data-events="actionEvents"> {{ __('Documents') }}</th>
                                     <th scope="col" data-field="video_link" data-sortable="false" data-align="center" data-formatter="videoLinkFormatter"> {{ __('Video Link') }}</th>
+                                    <th scope="col" data-field="expiry_date" data-align="center" data-sortable="true" data-formatter="expiryDateFormatter"> {{ __('Expiry Date') }}</th>
                                     @if (has_permissions('update', 'property'))
                                         <th scope="col" data-field="operate" data-align="center" data-sortable="false" data-events="actionEvents"> {{ __('Action') }}</th>
                                     @endif
@@ -276,10 +284,10 @@
             $('#table_list').bootstrapTable('refresh');
 
         });
-        $('#property-owner-filter').on('change', function() {
-            $('#table_list').bootstrapTable('refresh');
+        // $('#property-owner-filter').on('change', function() {
+        //     $('#table_list').bootstrapTable('refresh');
 
-        });
+        // });
         $('#property-accessibility-filter').on('change', function() {
             $('#table_list').bootstrapTable('refresh');
         });
@@ -288,6 +296,11 @@
             $('#table_list').bootstrapTable('refresh');
         });
 
+        $('#added-as-filter button').on('click', function() {
+            $('#added-as-filter button').removeClass('active');
+            $(this).addClass('active');
+            $('#table_list').bootstrapTable('refresh');
+        });
 
         $(document).ready(function() {
             var params = new window.URLSearchParams(window.location.search);
@@ -311,26 +324,29 @@
                 status: $('#status').val(),
                 category: $('#filter_category').val(),
                 property_type: $('#property-type-filter').val(),
-                property_added_by: $('#property-owner-filter').val(),
+                // property_added_by: $('#property-owner-filter').val(),
                 property_accessibility: $('#property-accessibility-filter').val(),
                 verification_status: $('#verification-status-filter').val(),
+                role_context_filter: $('#added-as-filter button.active').data('value'),
                 customerID: "{{ $customerID }}"
             };
         }
 
         window.actionEvents = {
-            'click .edit_btn': function(e, value, row, index) {
+            'click .interested_users_btn': function(e, value, row, index) {
                 $('#property_id').val(row.id);
                 $('#table_list1').bootstrapTable('refresh');
+                $('#editModal').modal('show');
             },
             'click .gallery-image-btn': function(e, value, row, index) {
                 $('.gallary-images-div').empty();
                 if(row.gallery.length){
                     $.each(row.gallery, function(key, value) {
+                        var imageUrl = value.image_url || '/assets/images/logo/logo.png';
                         $('.gallary-images-div').append(
                             `<div class="col-sm-12 col-md-3 col-lg-2 mt-1 ml-1">
-                                <a href="${value.image_url}" target="_blank">
-                                    <img src="${value.image_url}"height="100" width="100" class="rounded"/>
+                                <a href="${imageUrl}" target="_blank">
+                                    <img src="${imageUrl}" height="100" width="100" class="rounded"/>
                                 </a>
                             </div>`
                         );
@@ -342,13 +358,14 @@
                         </span>`
                     );
                 }
+                $('#galleryImagesModal').modal('show');
             },
             'click .documents-btn': function(e, value, row, index) {
                 $('.documents-div').empty();
                 if(row.documents.length){
                     $.each(row.documents, function(key, value) {
-                        var url = value.file; // Your URL
-                        var filename = value.file_name;
+                        var url = value.file || '#'; // Your URL
+                        var filename = value.file_name || window.trans["File Missing"] || 'File Missing';
                         var documentSvgImage = `<svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="30" width="30" xmlns="http://www.w3.org/2000/svg"><path fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M208 64h66.75a32 32 0 0122.62 9.37l141.26 141.26a32 32 0 019.37 22.62V432a48 48 0 01-48 48H192a48 48 0 01-48-48V304"></path><path fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M288 72v120a32 32 0 0032 32h120"></path><path fill="none" stroke-linecap="round" stroke-miterlimit="10" stroke-width="32" d="M160 80v152a23.69 23.69 0 01-24 24c-12 0-24-9.1-24-24V88c0-30.59 16.57-56 48-56s48 24.8 48 55.38v138.75c0 43-27.82 77.87-72 77.87s-72-34.86-72-77.87V144"></path></svg>`;
                         var downloadImg = `<svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 24 24" height="20" width="20" xmlns="http://www.w3.org/2000/svg"><path d="m12 16 4-5h-3V4h-2v7H8z"></path><path d="M20 18H4v-7H2v7c0 1.103.897 2 2 2h16c1.103 0 2-.897 2-2v-7h-2v7z"></path></svg>`;
                         var downloadText = "{{ __('Download') }}";
@@ -381,12 +398,14 @@
                         </span>`
                     );
                 }
+                $('#documentsModal').modal('show');
             },
             'click .request-status-btn': function(e, value, row, index) {
                 $("#edit-request-status-id").val(row.id);
                 $('input[name=request_status]').prop('checked', false);
                 $("#reject-reason-text").text("").removeAttr("required");
                 $(".reject-reason-text-div").hide();
+                $('#changeRequestStatusModal').modal('show');
             }
         }
 
@@ -413,6 +432,10 @@
         const beforeSubmitFunction = (formElement) => {
             $('#changeRequestStatusModal').find('.btn-close').removeAttr('disabled');
             $('#changeRequestStatusModal').find('.close-btn').removeAttr('disabled');
+        }
+
+        function totalClickFormatter(value, row, index) {
+            return `<span class="badge badge-info font-weight-bold text-black">${value}</span>`;
         }
     </script>
 @endsection

@@ -1,5 +1,36 @@
+<style>
+    .sidebar-item .sidebar-link .menu-item {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: inline-block;
+        vertical-align: bottom;
+        max-width: 170px; /* Adjust based on sidebar width */
+    }
+
+    .sidebar-item.has-sub .sidebar-link::after {
+        flex-shrink: 0;
+    }
+
+    .submenu-item a {
+        white-space: normal;
+        overflow: hidden;
+        word-break: break-word;
+    }
+
+    html[dir="rtl"] .sidebar-item.has-sub .sidebar-link {
+        padding-left: 2.5rem;
+    }
+</style>
 <div id="sidebar" class="active">
     <div class="sidebar-wrapper active">
+        <script>
+            // Prevent sidebar flash on medium/small screens
+            if (window.innerWidth < 1200) {
+                document.getElementById('sidebar').classList.remove('active');
+                document.querySelector('.sidebar-wrapper').classList.remove('active');
+            }
+        </script>
         <div class="sidebar-header position-relative">
             <div class="d-flex justify-content-center">
                 <div class="logo">
@@ -40,7 +71,7 @@
                             <i class="bi bi-building"></i>
                             <span class="menu-item">{{ __('Properties & Locations') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- Properties --}}
                             @if (has_permissions('read', 'property'))
                                 <li class="submenu-item">
@@ -96,14 +127,22 @@
                         has_permissions('read', 'slider') ||
                         has_permissions('read', 'article') ||
                         has_permissions('read', 'homepage-sections') ||
-                        has_permissions('read', 'faqs')
+                        has_permissions('read', 'faqs') ||
+                        has_permissions('read', 'story')
                     )
                     <li class="sidebar-item has-sub">
                         <a href="#" class='sidebar-link'>
                             <i class="bi bi-badge-ad"></i>
                             <span class="menu-item">{{ __('Marketing & content') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
+                            {{-- Stories --}}
+                            @if (has_permissions('read', 'story'))
+                                <li class="submenu-item">
+                                    <a href="{{ url('story') }}">{{ __('Stories') }}</a>
+                                </li>
+                            @endif
+
                             {{-- Advertisement banners --}}
                             @if (has_permissions('read', 'advertisement'))
                                 <li class="submenu-item">
@@ -152,6 +191,40 @@
                     </li>
                 @endif
 
+                {{-- Users --}}
+                @if (
+                        has_permissions('read', 'customer') ||
+                        has_permissions('read', 'approve_agent_verification') ||
+                        has_permissions('read', 'verify_customer_form')
+                    )
+                    <li class="sidebar-item has-sub">
+                        <a href="#" class='sidebar-link'>
+                            <i class="bi bi-shield-check"></i>
+                            <span class="menu-item">{{ __('Users') }}</span>
+                        </a>
+                        <ul class="submenu" style="padding: 0rem">
+                            {{-- User Verification --}}
+                            @if (has_permissions('read', 'approve_agent_verification'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('user-verification.index') }}">
+                                        {{ __('User Verification') }}
+                                    </a>
+                                </li>
+                            @endif
+
+                             {{-- Custom fields --}}
+                             @if (has_permissions('read', 'verify_customer_form'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('verify-customer.form') }}">
+                                        {{ __('Custom fields') }}
+                                    </a>
+                                </li>
+                            @endif
+                        </ul>
+                    </li>
+                @endif
+
+
                 {{-- Agents --}}
                 @if (
                         has_permissions('read', 'verify_customer_form') ||
@@ -159,12 +232,12 @@
                     )
                     <li class="sidebar-item has-sub">
                         <a href="#" class='sidebar-link'>
-                            <i class="bi bi-shield-check"></i>
+                            <i class="bi bi-person-badge"></i>
                             <span class="menu-item">{{ __('Agents') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
-                            {{-- Agent Verification --}}
-                            @if (has_permissions('read', 'approve_agent_verification'))
+                        <ul class="submenu" style="padding: 0rem">
+                             {{-- Agent Verification --}}
+                             @if (has_permissions('read', 'approve_agent_verification'))
                                 <li class="submenu-item">
                                     <a href="{{ route('agent-verification.index') }}">
                                         {{ __('Agent Verification') }}
@@ -172,10 +245,17 @@
                                 </li>
                             @endif
 
-                            {{-- Custom fields --}}
+                             {{-- Agent Form Sections --}}
+                             @if (has_permissions('read', 'verify_customer_form'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('agent-verification-form-sections.index') }}">{{ __('Agent Form Section') }}</a>
+                                </li>
+                            @endif
+
+                            {{-- Agent Form Fields --}}
                             @if (has_permissions('read', 'verify_customer_form'))
                                 <li class="submenu-item">
-                                    <a href="{{ route('verify-customer.form') }}">{{ __('Custom fields') }}</a>
+                                    <a href="{{ route('agent-verification-form-fields.index') }}">{{ __('Agent Form Fields') }}</a>
                                 </li>
                             @endif
                         </ul>
@@ -193,7 +273,7 @@
                             <i class="bi bi-calendar"></i>
                             <span class="menu-item">{{ __('Appointments') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- Appointments List --}}
                             @if (has_permissions('read', 'appointment_management'))
                                 <li class="submenu-item">
@@ -220,6 +300,57 @@
                     </li>
                 @endif
 
+                {{-- Vacations & On-Plan (FASE 8) --}}
+                @if (
+                        has_permissions('read', 'short_term_reservations') ||
+                        has_permissions('read', 'short_term_availability') ||
+                        has_permissions('read', 'project_inventory')
+                    )
+                    <li class="sidebar-item has-sub">
+                        <a href="#" class='sidebar-link'>
+                            <i class="bi bi-calendar2-week"></i>
+                            <span class="menu-item">{{ __('Vacations & On-Plan') }}</span>
+                        </a>
+                        <ul class="submenu" style="padding: 0rem">
+                            @if (has_permissions('read', 'short_term_reservations'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('admin.short-term.reservations.index') }}">{{ __('Vacation Reservations') }}</a>
+                                </li>
+                            @endif
+                            @if (has_permissions('read', 'short_term_availability'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('admin.short-term.availability.index') }}">{{ __('Vacation Availability') }}</a>
+                                </li>
+                            @endif
+                            @if (has_permissions('read', 'project_inventory'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('admin.project-inventory.index') }}">{{ __('On-Plan Inventory') }}</a>
+                                </li>
+                            @endif
+                        </ul>
+                    </li>
+                @endif
+
+                {{-- Leads / CRM --}}
+                @if (
+                        has_permissions('read', 'crm_leads') ||
+                        has_permissions('read', 'crm_leads_reports')
+                    )
+                    <li class="sidebar-item has-sub">
+                        <a href="#" class='sidebar-link'>
+                            <i class="bi bi-funnel"></i>
+                            <span class="menu-item">{{ __('Leads / CRM') }}</span>
+                        </a>
+                        <ul class="submenu" style="padding: 0rem">
+                            @if (has_permissions('read', 'crm_leads'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('admin.crm.leads.index') }}">{{ __('Leads') }}</a>
+                                </li>
+                            @endif
+                        </ul>
+                    </li>
+                @endif
+
                 {{-- Plans & billing --}}
                 @if (
                         has_permissions('read', 'package') ||
@@ -236,7 +367,7 @@
                             <i class="bi bi-file-earmark-text"></i>
                             <span class="menu-item">{{ __('Plans & billing') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- Features --}}
                             @if (has_permissions('read', 'package-feature') || has_permissions('create', 'package-feature'))
                                 <li class="submenu-item">
@@ -251,10 +382,19 @@
                                 </li>
                             @endif
 
+
+
+                            {{-- Pay As You Go --}}
+                            @if (has_permissions('read', 'package') || has_permissions('create', 'package'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('pay-as-you-go.index') }}">{{ __('Pay As You Go') }}</a>
+                                </li>
+                            @endif
+
                             {{-- Users packages --}}
                             @if (has_permissions('read', 'user_package'))
                                 <li class="submenu-item">
-                                    <a href="{{ route('user-packages.index') }}">{{ __('Users packages') }}</a>
+                                    <a href="{{ route('user-packages.index') }}">{{ __('Subscriptions') }}</a>
                                 </li>
                             @endif
 
@@ -289,7 +429,7 @@
                             <i class="bi bi-chat-dots"></i>
                             <span class="menu-item">{{ __('Communication') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- Chat --}}
                             @if (has_permissions('read', 'chat'))
                                 <li class="submenu-item">
@@ -321,7 +461,7 @@
                             <i class="bi bi-person"></i>
                             <span class="menu-item">{{ __('User Management') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- Customers --}}
                             @if (has_permissions('read', 'customer'))
                                 <li class="submenu-item">
@@ -357,14 +497,15 @@
                 @if (
                         has_permissions('read', 'about_us') ||
                         has_permissions('read', 'privacy_policy') ||
-                        has_permissions('read', 'terms_conditions')
+                        has_permissions('read', 'terms_conditions') ||
+                        has_permissions('read', 'custom_page')
                     )
                     <li class="sidebar-item has-sub">
                         <a href="#" class='sidebar-link'>
                             <i class="bi bi-file-earmark"></i>
                             <span class="menu-item">{{ __('Pages') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- About us --}}
                             @if (has_permissions('read', 'about_us'))
                                 <li class="submenu-item">
@@ -383,6 +524,13 @@
                             @if (has_permissions('read', 'terms_conditions'))
                                 <li class="submenu-item">
                                     <a href="{{ url('terms-conditions') }}">{{ __('Terms & conditions') }}</a>
+                                </li>
+                            @endif
+
+                            {{-- Custom Pages --}}
+                            @if (has_permissions('read', 'custom_page'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('custom-page.index') }}">{{ __('Custom Pages') }}</a>
                                 </li>
                             @endif
                         </ul>
@@ -409,7 +557,7 @@
                             <i class="bi bi-gear"></i>
                             <span class="menu-item">{{ __('Settings') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- User accounts --}}
                             @if (has_permissions('read', 'users_accounts'))
                                 <li class="submenu-item">
@@ -513,6 +661,20 @@
                                     <a href="{{ url('log-viewer') }}">{{ __('Log Viewer') }}</a>
                                 </li>
                             @endif
+
+                            {{-- Audit Logs --}}
+                            @if (has_permissions('read', 'system_settings'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('audit-logs.index') }}">{{ __('Audit Logs') }}</a>
+                                </li>
+                            @endif
+
+                            <!-- {{-- API Documentation --}}
+                            @if (has_permissions('read', 'system_settings'))
+                                <li class="submenu-item">
+                                    <a href="{{ url('docs/api') }}" target="_blank">{{ __('API Documentation') }}</a>
+                                </li>
+                            @endif -->
                         </ul>
                     </li>
                 @endif
@@ -524,7 +686,7 @@
                             <i class="bi bi-tools"></i>
                             <span class="menu-item">{{ __('System') }}</span>
                         </a>
-                        <ul class="submenu" style="padding-left: 0rem">
+                        <ul class="submenu" style="padding: 0rem">
                             {{-- System update --}}
                             <li class="submenu-item">
                                 <a href="{{ url('system-version') }}">{{ __('System Update') }}</a>

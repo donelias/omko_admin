@@ -2,23 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use App\Models\User;
-use App\Models\Customer;
-use App\Models\Usertokens;
 use App\Models\Appointment;
-use Illuminate\Http\Request;
+use App\Models\BlockedUserForAppointment;
+use App\Models\Customer;
 use App\Models\Notifications;
-use App\Services\HelperService;
 use App\Models\ReportUserByAgent;
+use App\Models\User;
+use App\Models\Usertokens;
 use App\Services\ResponseService;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use App\Services\BootstrapTableService;
-use App\Models\BlockedUserForAppointment;
 use Illuminate\Support\Facades\Validator;
-use App\Services\AppointmentNotificationService;
 
 class AdminAppointmentReportController extends Controller
 {
@@ -27,7 +24,7 @@ class AdminAppointmentReportController extends Controller
      */
     public function index()
     {
-        if (!has_permissions('read', 'appointment_reports')) {
+        if (! has_permissions('read', 'appointment_reports')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -39,7 +36,7 @@ class AdminAppointmentReportController extends Controller
      */
     public function getReportsList(Request $request)
     {
-        if (!has_permissions('read', 'appointment_reports')) {
+        if (! has_permissions('read', 'appointment_reports')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -49,33 +46,48 @@ class AdminAppointmentReportController extends Controller
         $order = $request->input('order', 'DESC');
         $search = $request->input('search');
 
-        $query = ReportUserByAgent::with([
+        $query = ReportUserByAgent::select('report_user_by_agents.*')->with([
             'agent:id,name,email,mobile',
             'user:id,name,email,mobile',
-            'admin:id,name'
+            'admin:id,name',
         ]);
 
         // Apply search filter
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->where('id', 'LIKE', "%$search%")
-                  ->orWhere('reason', 'LIKE', "%$search%")
-                  ->orWhereHas('agent', function ($agentQuery) use ($search) {
-                      $agentQuery->where('name', 'LIKE', "%$search%")
-                                ->orWhere('email', 'LIKE', "%$search%");
-                  })
-                  ->orWhereHas('user', function ($userQuery) use ($search) {
-                      $userQuery->where('name', 'LIKE', "%$search%")
-                               ->orWhere('email', 'LIKE', "%$search%");
-                  });
+                $q->where('report_user_by_agents.id', 'LIKE', "%$search%")
+                    ->orWhere('report_user_by_agents.reason', 'LIKE', "%$search%")
+                    ->orWhereHas('agent', function ($agentQuery) use ($search) {
+                        $agentQuery->where('name', 'LIKE', "%$search%")
+                            ->orWhere('email', 'LIKE', "%$search%");
+                    })
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('name', 'LIKE', "%$search%")
+                            ->orWhere('email', 'LIKE', "%$search%");
+                    });
             });
         }
 
         $total = $query->count();
-        $reports = $query->orderBy($sort, $order)
-                        ->skip($offset)
-                        ->take($limit)
-                        ->get();
+
+        // Handle sorting
+        if ($sort == 'agent_name') {
+            $query->leftJoin('customers as agents', 'report_user_by_agents.agent_id', '=', 'agents.id')
+                ->orderBy('agents.name', $order);
+        } elseif ($sort == 'user_name') {
+            $query->leftJoin('customers as users', 'report_user_by_agents.user_id', '=', 'users.id')
+                ->orderBy('users.name', $order);
+        } elseif ($sort == 'raw_status_badge') {
+            $query->orderBy('report_user_by_agents.status', $order);
+        } elseif ($sort == 'reported_at_formatted') {
+            $query->orderBy('report_user_by_agents.created_at', $order);
+        } else {
+            $query->orderBy('report_user_by_agents.'.$sort, $order);
+        }
+
+        $reports = $query->skip($offset)
+            ->take($limit)
+            ->get();
 
         $bulkData = [];
         $bulkData['total'] = $total;
@@ -88,10 +100,10 @@ class AdminAppointmentReportController extends Controller
             $operate = '';
             if (has_permissions('update', 'appointment_reports')) {
                 if ($report->status === 'pending') {
-                    $operate .= '<button type="button" class="btn btn-success btn-sm approve-report" data-id="' . $report->id . '" title="'.__('Approve').'"><i class="bi bi-check-circle"></i></button> ';
-                    $operate .= '<button type="button" class="btn btn-danger btn-sm reject-report" data-id="' . $report->id . '" title="'.__('Reject').'"><i class="bi bi-x-circle"></i></button> ';
+                    $operate .= '<button type="button" class="btn btn-success btn-sm approve-report" data-id="'.$report->id.'" title="'.__('Approve').'"><i class="bi bi-check-circle"></i></button> ';
+                    $operate .= '<button type="button" class="btn btn-danger btn-sm reject-report" data-id="'.$report->id.'" title="'.__('Reject').'"><i class="bi bi-x-circle"></i></button> ';
                 }
-                $operate .= '<button type="button" class="btn btn-warning btn-sm block-appointment-user" data-id="' . $report->id . '" title="'.__('Block User').'"><i class="bi bi-person-x"></i></button>';
+                $operate .= '<button type="button" class="btn btn-warning btn-sm block-appointment-user" data-id="'.$report->id.'" title="'.__('Block User').'"><i class="bi bi-person-x"></i></button>';
             }
 
             $tempRow['operate'] = $operate;
@@ -105,6 +117,7 @@ class AdminAppointmentReportController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
@@ -113,7 +126,7 @@ class AdminAppointmentReportController extends Controller
      */
     public function updateReportStatus(Request $request)
     {
-        if (!has_permissions('update', 'appointment_reports')) {
+        if (! has_permissions('update', 'appointment_reports')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -134,10 +147,12 @@ class AdminAppointmentReportController extends Controller
             $report->save();
 
             DB::commit();
+
             return ResponseService::successResponse('Report status updated successfully');
 
         } catch (Exception $e) {
             DB::rollBack();
+
             return ResponseService::errorResponse();
         }
     }
@@ -147,7 +162,7 @@ class AdminAppointmentReportController extends Controller
      */
     public function blockUser(Request $request)
     {
-        if (!has_permissions('update', 'appointment_reports')) {
+        if (! has_permissions('update', 'appointment_reports')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -200,10 +215,12 @@ class AdminAppointmentReportController extends Controller
             Appointment::where('user_id', $report->user_id)->update(['status' => 'cancelled']);
 
             DB::commit();
+
             return ResponseService::successResponse('User blocked successfully');
 
         } catch (Exception $e) {
             DB::rollBack();
+
             return ResponseService::errorResponse();
         }
     }
@@ -213,7 +230,7 @@ class AdminAppointmentReportController extends Controller
      */
     public function blockedUsersIndex()
     {
-        if (!has_permissions('read', 'appointment_reports')) {
+        if (! has_permissions('read', 'appointment_reports')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -225,7 +242,7 @@ class AdminAppointmentReportController extends Controller
      */
     public function getBlockedUsersList(Request $request)
     {
-        if (!has_permissions('read', 'appointment_reports')) {
+        if (! has_permissions('read', 'appointment_reports')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -235,33 +252,51 @@ class AdminAppointmentReportController extends Controller
         $order = $request->input('order', 'DESC');
         $search = $request->input('search');
 
-        $query = BlockedUserForAppointment::with([
+        $query = BlockedUserForAppointment::select('blocked_users_for_appointments.*')->with([
             'user:id,name,email,mobile',
             'agent:id,name,email,mobile',
             'blockedByAdmin:id,name',
-            'report'
+            'report',
         ])->active();
 
         // Apply search filter
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->where('id', 'LIKE', "%$search%")
-                  ->orWhere('reason', 'LIKE', "%$search%")
-                  ->orWhereHas('user', function ($userQuery) use ($search) {
-                      $userQuery->where('name', 'LIKE', "%$search%")
-                               ->orWhere('email', 'LIKE', "%$search%");
-                  })
-                  ->orWhereHas('agent', function ($agentQuery) use ($search) {
-                      $agentQuery->where('name', 'LIKE', "%$search%");
-                  });
+                $q->where('blocked_users_for_appointments.id', 'LIKE', "%$search%")
+                    ->orWhere('blocked_users_for_appointments.reason', 'LIKE', "%$search%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('name', 'LIKE', "%$search%")
+                            ->orWhere('email', 'LIKE', "%$search%");
+                    })
+                    ->orWhereHas('agent', function ($agentQuery) use ($search) {
+                        $agentQuery->where('name', 'LIKE', "%$search%");
+                    });
             });
         }
 
         $total = $query->count();
-        $blockedUsers = $query->orderBy($sort, $order)
-                             ->skip($offset)
-                             ->take($limit)
-                             ->get();
+
+        // Handle sorting
+        if ($sort == 'user_name') {
+            $query->leftJoin('customers as users', 'blocked_users_for_appointments.user_id', '=', 'users.id')
+                ->orderBy('users.name', $order);
+        } elseif ($sort == 'agent_name') {
+            $query->leftJoin('customers as agents', 'blocked_users_for_appointments.agent_id', '=', 'agents.id')
+                ->orderBy('agents.name', $order);
+        } elseif ($sort == 'raw_block_type_badge') {
+            $query->orderBy('blocked_users_for_appointments.block_type', $order);
+        } elseif ($sort == 'blocked_by_admin') {
+            $query->leftJoin('users as admins', 'blocked_users_for_appointments.blocked_by_admin_id', '=', 'admins.id')
+                ->orderBy('admins.name', $order);
+        } elseif ($sort == 'blocked_at_formatted') {
+            $query->orderBy('blocked_users_for_appointments.blocked_at', $order);
+        } else {
+            $query->orderBy('blocked_users_for_appointments.'.$sort, $order);
+        }
+
+        $blockedUsers = $query->skip($offset)
+            ->take($limit)
+            ->get();
 
         $bulkData = [];
         $bulkData['total'] = $total;
@@ -273,7 +308,7 @@ class AdminAppointmentReportController extends Controller
             // Add action buttons
             $operate = '';
             if (has_permissions('update', 'appointment_reports')) {
-                $operate .= '<button type="button" class="btn btn-success btn-sm unblock-appointment-user" data-id="' . $block->id . '"><i class="bi bi-unlock"></i> '.__('Unblock').'</button>';
+                $operate .= '<button type="button" class="btn btn-success btn-sm unblock-appointment-user" data-id="'.$block->id.'"><i class="bi bi-unlock"></i> '.__('Unblock').'</button>';
             }
 
             $tempRow['operate'] = $operate;
@@ -287,6 +322,7 @@ class AdminAppointmentReportController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
@@ -295,7 +331,7 @@ class AdminAppointmentReportController extends Controller
      */
     public function unblockUser(Request $request)
     {
-        if (!has_permissions('update', 'appointment_reports')) {
+        if (! has_permissions('update', 'appointment_reports')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
 
@@ -319,10 +355,12 @@ class AdminAppointmentReportController extends Controller
             $this->sendUnblockingNotification($block);
 
             DB::commit();
+
             return ResponseService::successResponse('User unblocked successfully');
 
         } catch (Exception $e) {
             DB::rollBack();
+
             return ResponseService::errorResponse();
         }
     }
@@ -360,7 +398,7 @@ class AdminAppointmentReportController extends Controller
 
                 // Send push notification if FCM token exists
                 $fcmTokens = Usertokens::where('customer_id', $agent->id)->pluck('fcm_id')->toArray();
-                if (!empty($fcmTokens)) {
+                if (! empty($fcmTokens)) {
                     $fcmMsg = [
                         'title' => 'User Blocked for Appointments',
                         'body' => 'User :name has been blocked from making appointments',
@@ -377,7 +415,7 @@ class AdminAppointmentReportController extends Controller
                 }
             }
         } catch (Exception $e) {
-            Log::error('Failed to send blocking notification: ' . $e->getMessage());
+            Log::error('Failed to send blocking notification: '.$e->getMessage());
         }
     }
 
@@ -414,7 +452,7 @@ class AdminAppointmentReportController extends Controller
 
                 // Send push notification if FCM token exists
                 $fcmTokens = Usertokens::where('customer_id', $agent->id)->pluck('fcm_id')->toArray();
-                if (!empty($fcmTokens)) {
+                if (! empty($fcmTokens)) {
                     $fcmMsg = [
                         'title' => 'User Unblocked for Appointments',
                         'body' => 'User :name has been unblocked and can now make appointments again',
@@ -431,7 +469,7 @@ class AdminAppointmentReportController extends Controller
                 }
             }
         } catch (Exception $e) {
-            Log::error('Failed to send unblocking notification: ' . $e->getMessage());
+            Log::error('Failed to send unblocking notification: '.$e->getMessage());
         }
     }
 

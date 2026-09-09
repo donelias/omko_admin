@@ -78,6 +78,10 @@ return [
                 'log',
             ],
         ],
+
+        'godaddy' => [
+            'transport' => 'godaddy',
+        ],
     ],
 
     /*

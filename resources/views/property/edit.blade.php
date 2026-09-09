@@ -466,22 +466,65 @@
                             </div>
                         </div>
 
-                        <div class="col-md-3">
-                            {{ Form::label('video_link', __('Video Link'), ['class' => 'form-label col-12 ']) }}
-                            {{ Form::text('video_link', isset($list->video_link) ? $list->video_link : '', ['class' => 'form-control ', 'placeholder' => trans('Video Link'), 'id' => 'address', 'autocomplete' => 'off']) }}
-
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-12">
             <div class="card">
+                <h3 class="card-header">{{ __('Video') }}</h3>
+                <hr>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3">
+                            {{ Form::label('video_type', __('Video Type'), ['class' => 'form-label col-12 ']) }}
+                            <select name="video_type" class="form-select" data-parsley-minSelect='1' id="video_type">
+                                <option value="" {{ $list->video_type === null ? 'selected' : '' }}>{{ __('Choose Video Type') }}</option>
+                                @if(system_setting('show_direct_video_upload') == 1)
+                                    <option value="0" {{ $list->video_type == 0 && $list->video_type !== null ? 'selected' : '' }}>{{ __('Custom') }}</option>
+                                @endif
+                                <option value="1" {{ $list->video_type == 1 ? 'selected' : '' }}>{{ __('Youtube') }}</option>
+                                <option value="2" {{ $list->video_type == 2 ? 'selected' : '' }}>{{ __('Vimeo') }}</option>
+                            </select>
+                        </div>
+                        {{-- Video Link --}}
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 mt-3 mt-sm-0" id="video_link_div" style="display:{{ ($list->video_type == 1 || $list->video_type == 2) ? 'block' : 'none' }}">
+                            {{ Form::label('video_link', __('Video Link'), ['class' => 'form-label']) }}
+                            {{ Form::text('video_link', isset($list->video_link) ? $list->video_link : '', ['class' => 'form-control ', 'placeholder' => trans('Video Link'), 'id' => 'video_link', 'autocomplete' => 'off']) }}
+                        </div>
+
+                        {{-- Custom Video --}}
+                        <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 mt-3 mt-sm-0" id="custom_video_div" style="display:{{ $list->video_type == 0 && $list->video_type !== null ? 'block' : 'none' }}">
+                            {{ Form::label('custom_video', __('Custom Video'), ['class' => 'form-label']) }}
+                            <input type="file" class="filepond" name="custom_video" id="custom_video" accept="video/mp4,video/webm,video/ogg">
+                            @if ($list->video_type == 0 && $list->video_link)
+                                <div class="mt-2">
+                                    <a href="{{ $list->video_link }}" target="_blank" class="btn btn-sm btn-primary">{{ __('View Video') }}</a>
+                                </div>
+                            @endif
+                        </div>
+
+                        {{-- Remove Video --}}
+                        <input type="hidden" name="remove_video" id="remove_video" value="0">
+                        @if ($list->video_type !== null && $list->getRawOriginal('video_link'))
+                            <div class="col-sm-12 col-md-6 col-lg-4 col-xl-3 mt-3 d-flex align-items-end" id="video-remove-container">
+                                <button type="button" class="btn btn-sm btn-danger removeVideoBtn">
+                                    <i class="fa fa-trash"></i> {{ __('Remove Video') }}
+                                </button>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-12">
+            <div class="card">
                 <h3 class="card-header">{{ __('Accesibility') }}</h3>
                 <hr>
                 <div class="card-body">
                     <div class="col-sm-12 col-md-12  col-xs-12 d-flex">
-                        <label class="col-sm-1 form-check-label mandatory mt-3 ">{{ __('Is Private?') }}</label>
+                        <label class="col-sm-1 form-check-label mandatory mt-3 ">{{ __('Is Premium?') }}</label>
                         <div class="form-check form-switch mt-3">
                             <input type="hidden" name="is_premium" id="is_premium" value=" {{ $list->is_premium ? 1 : 0 }}">
                             <input class="form-check-input" type="checkbox" role="switch" {{ $list->is_premium ? 'checked' : '' }} id="is_premium_switch">
@@ -559,11 +602,20 @@
     </div>
 @endsection
 @section('script')
-    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
-    <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @if (system_setting('map_service_provider') === 'open_street_maps')
+        <script>window.MAP_SERVICE_PROVIDER = 'open_street_maps';</script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="{{ asset('assets/js/osm-maps-helper.js') }}"></script>
+        <script>jQuery(document).ready(function () { if (typeof initMap === 'function') initMap(); });</script>
+    @else
+        <script>window.MAP_SERVICE_PROVIDER = 'google_maps';</script>
+        <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
+        <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @endif
     <script>
         function initMap() {
-            window.initBackendPlacesMap({
+            var mapOptions = {
                 defaultLatitudeSelector: '#latitude',
                 defaultLongitudeSelector: '#longitude',
                 mapElementId: 'map',
@@ -574,7 +626,12 @@
                 addressSelector: '#address',
                 latitudeSelector: '#latitude',
                 longitudeSelector: '#longitude'
-            });
+            };
+            if (window.MAP_SERVICE_PROVIDER === 'open_street_maps') {
+                window.initOsmPlacesMap(mapOptions);
+            } else {
+                window.initBackendPlacesMap(mapOptions);
+            }
         }
 
         $(document).ready(function() {
@@ -608,15 +665,46 @@
                 $('#price_duration').removeAttr('required');
             }
         });
+        
+        // Trigger change on load to set initial state for property type
+        $('input[name="property_type"]').trigger('change');
+
+        // Video Type Change Handler
+        $('select[name="video_type"]').on('change', function() {
+            var videoType = $(this).val();
+
+            // Reset fields
+            $('#video_link_div').hide();
+            $('#custom_video_div').hide();
+            $('#video_link').prop('required', false);
+            // $('#custom_video').prop('required', false); // FilePond
+
+            if (videoType == '0') { // Custom
+                $('#custom_video_div').show();
+                // Avoid requiring if already has video? Maybe handled by backend or just don't require on edit if not changed
+                // $('#custom_video').attr('required', true); 
+            } else if (videoType == '1' || videoType == '2') { // Youtube or Vimeo
+                $('#video_link_div').show();
+                $('#video_link').prop('required', true);
+                $('#custom_video').removeAttr('required');
+            }
+        });
+
+        // Trigger change on load to set initial state for video type
+        $('select[name="video_type"]').trigger('change');
         $(".RemoveBtngallary").click(function(e) {
             e.preventDefault();
             var id = $(this).data('id');
             Swal.fire({
-                title: window.trans['Are you sure you wants to remove this document ?'],
-                icon: 'error',
-                showDenyButton: true,
-                confirmButtonText: window.trans['Yes'],
-                denyCanceButtonText: window.trans['No'],
+                title: window.trans["Are you sure"],
+                text: window.trans["You want to delete it ?"],
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#d33',
+                confirmButtonText: window.trans["Yes Delete"],
+                cancelButtonText: window.trans["Cancel"],
+                reverseButtons: true,
             }).then((result) => {
                 /* Read more about isConfirmed, isDenied below */
                 if (result.isConfirmed) {
@@ -734,11 +822,15 @@
             e.preventDefault();
             var id = $(this).data('id');
             Swal.fire({
-                title: window.trans['Are you sure you wants to remove this document ?'],
-                icon: 'error',
-                showDenyButton: true,
-                confirmButtonText: window.trans['Yes'],
-                denyCanceButtonText: window.trans['No'],
+                title: window.trans["Are you sure"],
+                text: window.trans["You want to delete it ?"],
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#d33',
+                confirmButtonText: window.trans["Yes Delete"],
+                cancelButtonText: window.trans["Cancel"],
+                reverseButtons: true,
             }).then((result) => {
                 /* Read more about isConfirmed, isDenied below */
                 if (result.isConfirmed) {
@@ -789,10 +881,37 @@
                         window.location.reload();
                     }, 1000);
                 }, errorCallBack: function (response) {
-                    showErrorToast(response.message);
                 }
             })
         })
+
+        $(".removeVideoBtn").on('click', function(e) {
+            e.preventDefault();
+            Swal.fire({
+                title: window.trans["Are you sure"],
+                text: window.trans["You want to delete it ?"],
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#198754',
+                cancelButtonColor: '#d33',
+                confirmButtonText: window.trans["Yes Delete"],
+                cancelButtonText: window.trans["Cancel"],
+                reverseButtons: true,
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $('#remove_video').val(1);
+                    $('#video-remove-container').remove();
+                    $('select[name="video_type"]').val('').trigger('change');
+                    Toastify({
+                        text: '{{ trans("Video will be removed on save") }}',
+                        duration: 3000,
+                        close: true,
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)"
+                    }).showToast();
+                }
+            });
+        });
+
         function successFunction(){
             window.location.reload();
         }
@@ -812,7 +931,7 @@
                 const category_id = $('#category').val();
 
                 if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
+                    showErrorToast('{{ __("Please enter a title first") }}');
                     return;
                 }
 
@@ -848,12 +967,12 @@
                                 console.log('{{ __("Used cached result") }}');
                             }
                         } else {
-                            alert(response.message || '{{ __("Failed to generate description") }}');
+                            showErrorToast(response.message || '{{ __("Failed to generate description") }}');
                         }
                     },
                     error: function(xhr) {
                         const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
+                        showErrorToast(errorMsg);
                     },
                     complete: function() {
                         btn.prop('disabled', false);
@@ -870,7 +989,7 @@
                 const price = $('#price').val();
 
                 if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
+                    showErrorToast('{{ __("Please enter a title first") }}');
                     return;
                 }
 
@@ -912,12 +1031,12 @@
                                 console.log('{{ __("Used cached result") }}');
                             }
                         } else {
-                            alert(response.message || '{{ __("Failed to generate meta details") }}');
+                            showErrorToast(response.message || '{{ __("Failed to generate meta details") }}');
                         }
                     },
                     error: function(xhr) {
                         const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
+                        showErrorToast(errorMsg);
                     },
                     complete: function() {
                         btn.prop('disabled', false);
@@ -944,7 +1063,7 @@
                 const btn = $(this);
 
                 if (!title) {
-                    alert('{{ __("Please enter a title first") }}');
+                    showErrorToast('{{ __("Please enter a title first") }}');
                     return;
                 }
 
@@ -983,12 +1102,12 @@
                                 descriptionField.val(response.data.description);
                             // }
                         } else {
-                            alert(response.message || '{{ __("Failed to generate description") }}');
+                            showErrorToast(response.message || '{{ __("Failed to generate description") }}');
                         }
                     },
                     error: function(xhr) {
                         const errorMsg = xhr.responseJSON?.message || '{{ __("An error occurred") }}';
-                        alert(errorMsg);
+                        showErrorToast(errorMsg);
                     },
                     complete: function() {
                         btn.prop('disabled', false);

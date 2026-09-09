@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands\Demo;
 
-use Exception;
 use App\Models\Customer;
 use App\Models\Property;
+use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -36,10 +36,10 @@ class RemoveCustomers extends Command
             $getCustomerId = Property::where('request_status', 'approved')->pluck('added_by');
 
             $customerData = Customer::whereNotIn('id', $getCustomerId)
-                ->whereNot(function($query) use ($excludeCustomerNumber, $excludeEmail) {
+                ->whereNot(function ($query) use ($excludeCustomerNumber, $excludeEmail) {
                     $query->where(['mobile' => $excludeCustomerNumber, 'email' => $excludeEmail, 'logintype' => 1]);
                 })->where('created_at', '<', now()->subDays(15))->get();
-            
+
             if ($customerData->count() > 0) {
                 foreach ($customerData as $customer) {
                     $customer->delete();
@@ -47,7 +47,7 @@ class RemoveCustomers extends Command
             }
             Log::info('All customers have been deleted');
         } catch (Exception $e) {
-            Log::error('Issue Removing Customers From Demo: ' . $e->getMessage());
+            Log::error('Issue Removing Customers From Demo: '.$e->getMessage());
         }
     }
 }

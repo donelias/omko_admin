@@ -5,10 +5,10 @@ use App\Models\HomepageSection;
 use App\Models\PaymentTransaction;
 use App\Models\Property;
 use App\Models\Setting;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Database\Migrations\Migration;
 
 return new class extends Migration
 {
@@ -19,7 +19,7 @@ return new class extends Migration
     {
         /********************************************************************* */
         // add is_read column to chats table
-        if (!Schema::hasColumn('chats', 'is_read')) {
+        if (! Schema::hasColumn('chats', 'is_read')) {
             Schema::table('chats', function (Blueprint $table) {
                 $table->boolean('is_read')->default(false)->after('message')->comment('by receiver');
             });
@@ -31,14 +31,14 @@ return new class extends Migration
         /********************************************************************* */
 
         // add payment_type column to payment_transactions table
-        if (!Schema::hasColumn('payment_transactions', 'payment_type')) {
+        if (! Schema::hasColumn('payment_transactions', 'payment_type')) {
             Schema::table('payment_transactions', function (Blueprint $table) {
                 // Make Payment gateway true
-                $table->string('payment_gateway',191)->nullable(true)->change();
+                $table->string('payment_gateway', 191)->nullable(true)->change();
                 // Add Payment type
                 $table->enum('payment_type', ['online payment', 'bank transfer', 'free'])
-                      ->after('payment_gateway')
-                      ->comment('Type of payment transaction');
+                    ->after('payment_gateway')
+                    ->comment('Type of payment transaction');
                 // Add Reject reason
                 $table->text('reject_reason')->nullable()->after('payment_type');
             });
@@ -53,8 +53,8 @@ return new class extends Migration
         /********************************************************************* */
 
         // Bank Receipt Files
-        if(!Schema::hasTable('bank_receipt_files')){
-            Schema::create('bank_receipt_files',function(Blueprint $table){
+        if (! Schema::hasTable('bank_receipt_files')) {
+            Schema::create('bank_receipt_files', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('payment_transaction_id')->constrained('payment_transactions');
                 $table->string('file');
@@ -65,8 +65,8 @@ return new class extends Migration
         /********************************************************************* */
 
         // Table for Homepage Section
-        if(!Schema::hasTable('homepage_sections')){
-            Schema::create('homepage_sections',function(Blueprint $table){
+        if (! Schema::hasTable('homepage_sections')) {
+            Schema::create('homepage_sections', function (Blueprint $table) {
                 $table->id();
                 $table->string('title');
                 $table->enum('section_type',
@@ -93,19 +93,19 @@ return new class extends Migration
 
             // Insert default homepage sections
             $homepageSections = [
-                ['id' => 1,     'title' => "Meet Our Top Real Estate Agents Ready to Help You Find Your Dream Property",                'section_type' => 'agents_list_section',            'is_active' => true, 'sort_order' => 1,     'created_at' => now(), 'updated_at' => now()],
-                ['id' => 2,     'title' => "Explore Our Blog: Everything You Need to Know About Real Estate",                           'section_type' => 'articles_section',               'is_active' => true, 'sort_order' => 2,     'created_at' => now(), 'updated_at' => now()],
-                ['id' => 3,     'title' => "Unlock the Best Real Estate Opportunities with Category-Wise Listings",                     'section_type' => 'categories_section',             'is_active' => true, 'sort_order' => 3,     'created_at' => now(), 'updated_at' => now()],
+                ['id' => 1,     'title' => 'Meet Our Top Real Estate Agents Ready to Help You Find Your Dream Property',                'section_type' => 'agents_list_section',            'is_active' => true, 'sort_order' => 1,     'created_at' => now(), 'updated_at' => now()],
+                ['id' => 2,     'title' => 'Explore Our Blog: Everything You Need to Know About Real Estate',                           'section_type' => 'articles_section',               'is_active' => true, 'sort_order' => 2,     'created_at' => now(), 'updated_at' => now()],
+                ['id' => 3,     'title' => 'Unlock the Best Real Estate Opportunities with Category-Wise Listings',                     'section_type' => 'categories_section',             'is_active' => true, 'sort_order' => 3,     'created_at' => now(), 'updated_at' => now()],
                 ['id' => 4,     'title' => "Got Questions About Your Next Real Estate Move? We've Got Answers!",                        'section_type' => 'faqs_section',                   'is_active' => true, 'sort_order' => 4,     'created_at' => now(), 'updated_at' => now()],
-                ['id' => 5,     'title' => "Experience Luxury Living with Our Featured Properties",                                     'section_type' => 'featured_properties_section',    'is_active' => true, 'sort_order' => 5,     'created_at' => now(), 'updated_at' => now()],
-                ['id' => 6,     'title' => "Featured Projects That Define Modern Living and Exceptional Design",                        'section_type' => 'featured_projects_section',      'is_active' => true, 'sort_order' => 6,     'created_at' => now(), 'updated_at' => now()],
+                ['id' => 5,     'title' => 'Experience Luxury Living with Our Featured Properties',                                     'section_type' => 'featured_properties_section',    'is_active' => true, 'sort_order' => 5,     'created_at' => now(), 'updated_at' => now()],
+                ['id' => 6,     'title' => 'Featured Projects That Define Modern Living and Exceptional Design',                        'section_type' => 'featured_projects_section',      'is_active' => true, 'sort_order' => 6,     'created_at' => now(), 'updated_at' => now()],
                 ['id' => 7,     'title' => "Trending Properties Loved by Many: See What's Capturing Attention in Real Estate",          'section_type' => 'most_liked_properties_section',  'is_active' => true, 'sort_order' => 7,     'created_at' => now(), 'updated_at' => now()],
                 ['id' => 8,     'title' => "The Most Viewed Properties That Homebuyers Can't Stop Looking At!",                         'section_type' => 'most_viewed_properties_section', 'is_active' => true, 'sort_order' => 8,     'created_at' => now(), 'updated_at' => now()],
-                ['id' => 9,     'title' => "Experience Comfortable Living with Top Properties in",                                      'section_type' => 'nearby_properties_section',      'is_active' => true, 'sort_order' => 9,     'created_at' => now(), 'updated_at' => now()],
-                ['id' => 10,    'title' => "The Next Era of Living: Explore Upcoming & Under-Construction Projects",                    'section_type' => 'projects_section',               'is_active' => true, 'sort_order' => 10,    'created_at' => now(), 'updated_at' => now()],
-                ['id' => 11,    'title' => "Discover Handpicked Premium Properties for Discerning Buyers",                              'section_type' => 'premium_properties_section',     'is_active' => true, 'sort_order' => 11,    'created_at' => now(), 'updated_at' => now()],
-                ['id' => 12,    'title' => "Discover Handpicked Properties Perfectly Tailored to Your Unique Interests",                'section_type' => 'user_recommendations_section',   'is_active' => true, 'sort_order' => 12,    'created_at' => now(), 'updated_at' => now()],
-                ['id' => 13,    'title' => "Your Dream Property Might Be Closer Than You Think: Check Nearby Cities",                   'section_type' => 'properties_by_cities_section',   'is_active' => true, 'sort_order' => 13,    'created_at' => now(), 'updated_at' => now()],
+                ['id' => 9,     'title' => 'Experience Comfortable Living with Top Properties in',                                      'section_type' => 'nearby_properties_section',      'is_active' => true, 'sort_order' => 9,     'created_at' => now(), 'updated_at' => now()],
+                ['id' => 10,    'title' => 'The Next Era of Living: Explore Upcoming & Under-Construction Projects',                    'section_type' => 'projects_section',               'is_active' => true, 'sort_order' => 10,    'created_at' => now(), 'updated_at' => now()],
+                ['id' => 11,    'title' => 'Discover Handpicked Premium Properties for Discerning Buyers',                              'section_type' => 'premium_properties_section',     'is_active' => true, 'sort_order' => 11,    'created_at' => now(), 'updated_at' => now()],
+                ['id' => 12,    'title' => 'Discover Handpicked Properties Perfectly Tailored to Your Unique Interests',                'section_type' => 'user_recommendations_section',   'is_active' => true, 'sort_order' => 12,    'created_at' => now(), 'updated_at' => now()],
+                ['id' => 13,    'title' => 'Your Dream Property Might Be Closer Than You Think: Check Nearby Cities',                   'section_type' => 'properties_by_cities_section',   'is_active' => true, 'sort_order' => 13,    'created_at' => now(), 'updated_at' => now()],
             ];
             HomepageSection::upsert($homepageSections, ['id']);
 
@@ -122,12 +122,12 @@ return new class extends Migration
             });
         }
 
-        $settingsData = array(
+        $settingsData = [
             'min_radius_range' => 0,
             'max_radius_range' => 100,
             'timezone' => 'UTC',
             'auto_approve_edited_listings' => 0,
-        );
+        ];
 
         foreach ($settingsData as $key => $value) {
             Setting::updateOrCreate(['type' => $key], ['data' => $value]);
@@ -179,7 +179,7 @@ return new class extends Migration
 
         if (Schema::hasColumn('propertys', 'price')) {
             Schema::table('propertys', function (Blueprint $table) {
-                $table->decimal('price',10,0)->change();
+                $table->decimal('price', 10, 0)->change();
             });
         }
 

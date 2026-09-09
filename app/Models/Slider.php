@@ -4,14 +4,16 @@ namespace App\Models;
 
 use App\Services\FileService;
 use App\Traits\HasAppTimezone;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Database\Eloquent\Model;
+use App\Traits\HasTenantFilter;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Slider extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory, HasTenantFilter;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
+
     protected $fillable = [
         'type',
         'image',
@@ -21,13 +23,15 @@ class Slider extends Model
         'propertys_id',
         'show_property_details',
         'link',
-        'default_data'
+        'default_data',
+        'agency_id',
     ];
 
-    protected static function boot() {
+    protected static function boot()
+    {
         parent::boot();
         static::deleting(static function ($slider) {
-            if(collect($slider)->isNotEmpty()){
+            if (collect($slider)->isNotEmpty()) {
                 // before delete() method call this
 
                 // Delete Image
@@ -47,17 +51,15 @@ class Slider extends Model
         });
     }
 
-
     protected $hidden = [
         'created_at',
-        'updated_at'
+        'updated_at',
     ];
+
     protected $casts = [
         'type' => 'string',
         'sequence' => 'integer',
     ];
-
-
 
     public function category()
     {
@@ -71,16 +73,17 @@ class Slider extends Model
 
     public function getImageAttribute($image)
     {
-        return !empty($image) ? FileService::getFileUrl(config('global.SLIDER_IMG_PATH') . $image) : url('assets/images/logo/slider-default.png');
+        return ! empty($image) ? FileService::getFileUrl(config('global.SLIDER_IMG_PATH').$image) : url('assets/images/logo/slider-default.png');
     }
+
     public function getWebImageAttribute($webImage)
     {
-        return !empty($webImage) ? FileService::getFileUrl(config('global.SLIDER_IMG_PATH') . $webImage) : url('assets/images/logo/slider-default.png');
+        return ! empty($webImage) ? FileService::getFileUrl(config('global.SLIDER_IMG_PATH').$webImage) : url('assets/images/logo/slider-default.png');
     }
 
     public function getTypeAttribute($value)
     {
-        switch($value) {
+        switch ($value) {
             case '1':
                 return trans('Only Image');
                 break;
@@ -99,4 +102,3 @@ class Slider extends Model
         }
     }
 }
-

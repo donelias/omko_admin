@@ -50,7 +50,7 @@
                                         <th scope="col" data-field="id" data-sortable="true"> {{ __('ID') }}</th>
                                         <th scope="col" data-field="name" data-align="center" data-sortable="false"> {{ __('Package Name') }} </th>
                                         <th scope="col" data-field="start_date" data-align="center" data-sortable="true"> {{ __('Start Date') }} </th>
-                                        <th scope="col" data-field="end_date" data-align="center" data-sortable="true"> {{ __('End Date') }} </th>
+                                        <th scope="col" data-field="end_date" data-align="center" data-sortable="true" data-formatter="expiryDateFormatter"> {{ __('End Date') }} </th>
                                         <th scope="col" data-field="customer_name" data-align="false" data-sortable="false"> {{ __('Customer Name') }} </th>
                                         <th scope="col" data-field="subscription" data-align="center" data-sortable="false"> {{ __('Subscription') }} </th>
                                     </tr>

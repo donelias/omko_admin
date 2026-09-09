@@ -134,6 +134,12 @@
                                             <div class="col-sm-12">
                                                 <input name="youtube_id" type="text" class="form-control" placeholder="{{ __('Youtube Id') }}" value="{{ isset($getWebSettings['youtube_id']) && $getWebSettings['youtube_id'] != '' ? $getWebSettings['youtube_id'] : '' }}">
                                             </div>
+
+                                            {{-- LinkedIn ID --}}
+                                            <label class="form-label mt-2">{{ __('LinkedIn Id') }}</label>
+                                            <div class="col-sm-12">
+                                                <input name="linkedin_id" type="text" class="form-control" placeholder="{{ __('LinkedIn Id') }}" value="{{ isset($getWebSettings['linkedin_id']) && $getWebSettings['linkedin_id'] != '' ? $getWebSettings['linkedin_id'] : '' }}">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

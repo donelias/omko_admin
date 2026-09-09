@@ -51,7 +51,7 @@
                                         <tr>
                                             <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
                                             <th scope="col" data-field="user_name" data-sortable="true">{{ __('User') }}</th>
-                                            <th scope="col" data-field="agent_name" data-sortable="true">{{ __('Agent') }}</th>
+                                            <th scope="col" data-field="agent_name" data-sortable="true">{{ __('Verified User') }}</th>
                                             <th scope="col" data-field="raw_block_type_badge" data-sortable="true">{{ __('Block Type') }}</th>
                                             <th scope="col" data-field="reason" data-sortable="false">{{ __('Reason') }}</th>
                                             <th scope="col" data-field="blocked_by_admin" data-sortable="true">{{ __('Blocked By') }}</th>
@@ -80,7 +80,7 @@
                         <p>{{ __('Are you sure you want to unblock this user? They will be able to make appointments again.') }}</p>
                         <div class="alert alert-warning">
                             <i class="bi bi-exclamation-triangle me-2"></i>
-                            <strong>{{ __('Warning:') }}</strong> {{ __('This action will allow the user to make appointments with agents again.') }}
+                            <strong>{{ __('Warning:') }}</strong> {{ __('This action will allow the user to make appointments with verified users again.') }}
                         </div>
                     </div>
                     <div class="modal-footer">

@@ -24,7 +24,7 @@ class AppointmentNotificationExampleController extends Controller
         }
 
         $appointment = Appointment::findOrFail($request->appointment_id);
-        
+
         // Update appointment status
         $appointment->status = 'completed';
         $appointment->save();
@@ -55,7 +55,7 @@ class AppointmentNotificationExampleController extends Controller
         }
 
         $appointment = Appointment::findOrFail($request->appointment_id);
-        
+
         // Update appointment status
         $appointment->status = 'no_show';
         $appointment->save();
@@ -89,10 +89,10 @@ class AppointmentNotificationExampleController extends Controller
         }
 
         $appointment = Appointment::findOrFail($request->appointment_id);
-        
+
         // Update appointment times and status
-        $appointment->start_at = $request->new_date . ' ' . $request->new_start_time;
-        $appointment->end_at = $request->new_date . ' ' . $request->new_end_time;
+        $appointment->start_at = $request->new_date.' '.$request->new_start_time;
+        $appointment->end_at = $request->new_date.' '.$request->new_end_time;
         $appointment->status = 'rescheduled';
         $appointment->save();
 
@@ -121,7 +121,7 @@ class AppointmentNotificationExampleController extends Controller
         }
 
         $appointment = Appointment::findOrFail($request->appointment_id);
-        
+
         // You could extend the service to handle reminders
         // For now, we'll use the status notification with a custom message
         AppointmentNotificationService::sendStatusNotification(
@@ -177,15 +177,15 @@ class AppointmentNotificationExampleController extends Controller
             } catch (\Exception $e) {
                 $errorCount++;
                 // Log error for debugging
-                Log::error("Failed to update appointment {$appointment->id}: " . $e->getMessage());
+                Log::error("Failed to update appointment {$appointment->id}: ".$e->getMessage());
             }
         }
 
         return response()->json([
-            'message' => "Bulk update completed",
+            'message' => 'Bulk update completed',
             'success_count' => $successCount,
             'error_count' => $errorCount,
-            'total' => count($appointments)
+            'total' => count($appointments),
         ]);
     }
 }

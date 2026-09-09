@@ -2,18 +2,21 @@
 
 namespace App\Services\Payment;
 
-use Throwable;
-use RuntimeException;
-use App\Services\HelperService;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
+use Throwable;
 
 class PayPalPayment implements PaymentInterface
 {
     private string $clientId;
+
     private string $clientSecret;
+
     private string $currencyCode;
+
     private bool $isSandbox;
+
     private string $baseUrl;
 
     public function __construct($paymentData)
@@ -35,24 +38,24 @@ class PayPalPayment implements PaymentInterface
     {
         try {
             $response = Http::asForm()->withBasicAuth($this->clientId, $this->clientSecret)
-                ->post($this->baseUrl . '/v1/oauth2/token', [
-                    'grant_type' => 'client_credentials'
+                ->post($this->baseUrl.'/v1/oauth2/token', [
+                    'grant_type' => 'client_credentials',
                 ]);
 
-            if (!$response->successful()) {
-                Log::error('PayPal getAccessToken failed: ' . $response->body());
-                throw new RuntimeException('Failed to get PayPal access token: ' . $response->body());
+            if (! $response->successful()) {
+                Log::error('PayPal getAccessToken failed: '.$response->body());
+                throw new RuntimeException('Failed to get PayPal access token: '.$response->body());
             }
 
             $data = $response->json();
-            if (!isset($data['access_token'])) {
+            if (! isset($data['access_token'])) {
                 throw new RuntimeException('Invalid PayPal access token response');
             }
 
             return $data['access_token'];
         } catch (Throwable $e) {
-            Log::error('PayPal getAccessToken failed: ' . $e->getMessage());
-            throw new RuntimeException('PayPal authentication failed: ' . $e->getMessage());
+            Log::error('PayPal getAccessToken failed: '.$e->getMessage());
+            throw new RuntimeException('PayPal authentication failed: '.$e->getMessage());
         }
     }
 
@@ -67,44 +70,44 @@ class PayPalPayment implements PaymentInterface
 
             $successUrl = $customMetaData['platform_type'] == 'app'
                 ? route('payment.success')
-                : route('payment.success.web');
+                : route('payment.success.web', ['gateway' => 'paypal']);
 
             $cancelUrl = $customMetaData['platform_type'] == 'app'
                 ? route('payment.cancel', ['payment_transaction_id' => $customMetaData['payment_transaction_id']])
-                : route('payment.cancel.web', ['payment_transaction_id' => $customMetaData['payment_transaction_id']]);
+                : route('payment.success.web', ['gateway' => 'paypal']).'?status=failed';
 
             $orderData = [
                 'intent' => 'CAPTURE',
                 'purchase_units' => [[
-                    'reference_id' => (string)($customMetaData['payment_transaction_id'] ?? ''),
+                    'reference_id' => (string) ($customMetaData['payment_transaction_id'] ?? ''),
                     'description' => $customMetaData['description'] ?? 'Payment',
-                    'custom_id' => (string)($customMetaData['payment_transaction_id'] ?? ''),
+                    'custom_id' => (string) ($customMetaData['payment_transaction_id'] ?? ''),
                     'amount' => [
                         'currency_code' => $this->currencyCode,
-                        'value' => number_format($amount, 2, '.', '')
-                    ]
+                        'value' => number_format($amount, 2, '.', ''),
+                    ],
                 ]],
                 'application_context' => [
                     'brand_name' => config('app.name'),
                     'landing_page' => 'BILLING',
                     'user_action' => 'PAY_NOW',
                     'return_url' => $successUrl,
-                    'cancel_url' => $cancelUrl
-                ]
+                    'cancel_url' => $cancelUrl,
+                ],
             ];
 
             $response = Http::withToken($accessToken)
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post($this->baseUrl . '/v2/checkout/orders', $orderData);
+                ->post($this->baseUrl.'/v2/checkout/orders', $orderData);
 
-            if (!$response->successful()) {
-                Log::error('PayPal createOrder failed: ' . $response->body());
-                throw new RuntimeException('Failed to create PayPal order: ' . $response->body());
+            if (! $response->successful()) {
+                Log::error('PayPal createOrder failed: '.$response->body());
+                throw new RuntimeException('Failed to create PayPal order: '.$response->body());
             }
 
             return $response->json();
         } catch (Throwable $e) {
-            Log::error('PayPal createPaymentIntent failed: ' . $e->getMessage());
+            Log::error('PayPal createPaymentIntent failed: '.$e->getMessage());
             throw new RuntimeException($e->getMessage());
         }
     }
@@ -115,6 +118,7 @@ class PayPalPayment implements PaymentInterface
     public function createAndFormatPaymentIntent($amount, $customMetaData): array
     {
         $paymentIntent = $this->createPaymentIntent($amount, $customMetaData);
+
         return $this->format($paymentIntent);
     }
 
@@ -126,16 +130,16 @@ class PayPalPayment implements PaymentInterface
         try {
             $accessToken = $this->getAccessToken();
             $response = Http::withToken($accessToken)
-                ->get($this->baseUrl . '/v2/checkout/orders/' . $paymentId);
+                ->get($this->baseUrl.'/v2/checkout/orders/'.$paymentId);
 
-            if (!$response->successful()) {
-                Log::error('PayPal retrieveOrder failed: ' . $response->body());
-                throw new RuntimeException('Failed to retrieve PayPal order: ' . $response->body());
+            if (! $response->successful()) {
+                Log::error('PayPal retrieveOrder failed: '.$response->body());
+                throw new RuntimeException('Failed to retrieve PayPal order: '.$response->body());
             }
 
             return $this->format($response->json());
         } catch (Throwable $e) {
-            Log::error('PayPal retrievePaymentIntent failed: ' . $e->getMessage());
+            Log::error('PayPal retrievePaymentIntent failed: '.$e->getMessage());
             throw $e;
         }
     }
@@ -208,11 +212,11 @@ class PayPalPayment implements PaymentInterface
     {
         try {
             $accessToken = $this->getAccessToken();
-            if($this->baseUrl == 'https://api.sandbox.paypal.com'){
+            if ($this->baseUrl == 'https://api.sandbox.paypal.com') {
                 return true;
             }
             $verification = Http::withToken($accessToken)
-                ->post($this->baseUrl . '/v1/notifications/verify-webhook-signature', [
+                ->post($this->baseUrl.'/v1/notifications/verify-webhook-signature', [
                     'auth_algo' => $headers['paypal-auth-algo'][0] ?? '',
                     'cert_url' => $headers['paypal-cert-url'][0] ?? '',
                     'transmission_id' => $headers['paypal-transmission-id'][0] ?? '',
@@ -222,17 +226,17 @@ class PayPalPayment implements PaymentInterface
                     'webhook_event' => json_decode($payload, true),
                 ]);
 
-            if (!$verification->successful()) {
-                Log::error('PayPal verifyWebhookSignature failed: ' . $verification->body());
+            if (! $verification->successful()) {
+                Log::error('PayPal verifyWebhookSignature failed: '.$verification->body());
+
                 return false;
             }
 
             return ($verification->json()['verification_status'] ?? '') === 'SUCCESS';
         } catch (Throwable $e) {
-            Log::error('PayPal verifyWebhookSignature exception: ' . $e->getMessage());
+            Log::error('PayPal verifyWebhookSignature exception: '.$e->getMessage());
+
             return false;
         }
     }
-
 }
-

@@ -4,16 +4,17 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Services\FileService;
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
-use Laravel\Sanctum\HasApiTokens;
-use Illuminate\Notifications\Notifiable;
+use App\Traits\HasAppTimezone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, HasAppTimezone;
+    use HasApiTokens, HasAppTimezone, HasFactory, Notifiable;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
     /**
@@ -30,7 +31,7 @@ class User extends Authenticatable
         'status',
         'permissions',
         'slug_id',
-        'type'
+        'type',
     ];
 
     /**
@@ -52,47 +53,61 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
     ];
 
-
     public function isActive()
     {
         if ($this->status == 1) {
             return true;
         }
+
         return false;
     }
-    public function getProfileAttribute($image)
+
+    public function getIsActiveAttribute()
     {
-        $path = $image ? config('global.ADMIN_PROFILE_IMG_PATH') . $image : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
+        return $this->status == 1;
     }
 
-    public function agent_availabilities(){
-        return $this->hasMany(AgentAvailability::class, 'admin_id')->where('is_admin_data',1);
+    public function getProfileAttribute($image)
+    {
+        $path = $image ? config('global.ADMIN_PROFILE_IMG_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
+    }
+
+    public function agent_availabilities()
+    {
+        return $this->hasMany(AgentAvailability::class, 'admin_id')->where('is_admin_data', 1);
     }
 
     public function agent_booking_preferences()
     {
-        return $this->hasOne(AgentBookingPreference::class, 'admin_id')->where('is_admin_data',1);
+        return $this->hasOne(AgentBookingPreference::class, 'admin_id')->where('is_admin_data', 1);
     }
 
-    public function getIsAgentAttribute(){
-        $propertyExists = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->whereIn('propery_type',[0,1])->exists();
+    public function getIsAgentAttribute()
+    {
+        $propertyExists = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->whereIn('propery_type', [0, 1])->exists();
         $projectExists = Projects::where(['is_admin_listing' => 1, 'status' => 1, 'request_status' => 'approved'])->exists();
+
         return $propertyExists || $projectExists ? true : false;
     }
 
-    public function getIsAppointmentAvailableAttribute(){
+    public function getIsAppointmentAvailableAttribute()
+    {
         $status = false;
-        if($this->type == 0){
-            $propertyExists = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->whereIn('propery_type',[0,1])->exists();
-            $appointmentScheduleExists = $this->agent_availabilities()->where('is_active',1)->exists();
+        if ($this->type == 0) {
+            $propertyExists = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->whereIn('propery_type', [0, 1])->exists();
+            $appointmentScheduleExists = $this->agent_availabilities()->where('is_active', 1)->exists();
             $status = $propertyExists && $appointmentScheduleExists ? true : false;
         }
+
         return $status;
     }
 
-    public function getTimezone(){
+    public function getTimezone()
+    {
         $adminTimezone = HelperService::getSettingData('timezone') ?? config('app.timezone');
+
         return $adminTimezone;
     }
 }

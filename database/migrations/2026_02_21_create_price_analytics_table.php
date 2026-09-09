@@ -8,14 +8,16 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * @return void
      */
-    public function up(): void
+    public function up()
     {
         Schema::create('price_analytics', function (Blueprint $table) {
             $table->id();
-            $table->string('metric_type'); // 'market_avg', 'area_trend', 'seasonal', etc
-            $table->string('location')->nullable(); // provincia o área específica
-            $table->string('property_type')->nullable(); // casa, apartamento, etc
+            $table->string('metric_type');
+            $table->string('location')->nullable();
+            $table->string('property_type')->nullable();
             $table->enum('transaction_type', ['sale', 'rental'])->default('sale');
             $table->decimal('average_price', 15, 2);
             $table->decimal('median_price', 15, 2);
@@ -31,7 +33,6 @@ return new class extends Migration
             $table->dateTime('analysis_period_end');
             $table->timestamps();
 
-            // Índices
             $table->index('metric_type');
             $table->index('location');
             $table->index('property_type');
@@ -43,8 +44,10 @@ return new class extends Migration
 
     /**
      * Reverse the migrations.
+     *
+     * @return void
      */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('price_analytics');
     }

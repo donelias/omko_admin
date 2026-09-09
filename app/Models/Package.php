@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
 use App\Traits\ManageTranslations;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Auth;
 
 class Package extends Model
 {
-    use HasFactory, SoftDeletes, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, ManageTranslations, SoftDeletes;
 
-    protected $fillable = array(
+    protected $fillable = [
         'id',
         'name',
         'ios_product_id',
@@ -22,22 +22,31 @@ class Package extends Model
         'purchase_type',
         'price',
         'duration',
-        'status'
-    );
+        'status',
+        'list_duration_type',
+        'custom_duration',
+        'user_type',
+    ];
 
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
+
+    protected $casts = [
+        'status' => 'boolean',
+        'duration' => 'integer',
+        'price' => 'float',
+    ];
 
     /** Relations */
     /**
      * Get all of the features for the Package
-     *
      */
     public function package_features()
     {
         return $this->hasMany(PackageFeature::class, 'package_id', 'id')->with('feature');
     }
 
-    public function user_packages(){
+    public function user_packages()
+    {
         return $this->hasMany(UserPackage::class, 'package_id', 'id');
     }
 
@@ -49,33 +58,35 @@ class Package extends Model
         return $this->morphMany(Translation::class, 'translatable');
     }
 
-
-    public function getIsActiveAttribute(){
-        if(Auth::guard('sanctum')->user()){
+    public function getIsActiveAttribute()
+    {
+        if (Auth::guard('sanctum')->user()) {
             $userId = Auth::guard('sanctum')->user()->id;
             $packageId = $this->id;
 
-            $getActivePackages = HelperService::getActivePackage($userId,$packageId);
-            if(collect($getActivePackages)->isNotEmpty()){
+            $getActivePackages = HelperService::getActivePackage($userId, $packageId, $this->user_type);
+            if (collect($getActivePackages)->isNotEmpty()) {
                 return true;
             }
         }
+
         return false;
     }
 
-    public function getPackagePaymentStatusAttribute(){
-        if(Auth::guard('sanctum')->user()){
+    public function getPackagePaymentStatusAttribute()
+    {
+        if (Auth::guard('sanctum')->user()) {
             $userId = Auth::guard('sanctum')->user()->id;
             $packageId = $this->id;
 
             // Check if package is active
-            $getActivePackages = HelperService::getActivePackage($userId, $packageId);
-            if(collect($getActivePackages)->isNotEmpty()){
+            $getActivePackages = HelperService::getActivePackage($userId, $packageId, $this->user_type);
+            if (collect($getActivePackages)->isNotEmpty()) {
                 return 'active';
             }
 
             // Check payment transaction status
-            $paymentTransaction = PaymentTransaction::where('user_id', $userId)
+            $paymentTransaction = PaymentTransaction::where(['user_id' => $userId, 'role_context' => $this->user_type])
                 ->where('package_id', $packageId)
                 ->latest()
                 ->first();
@@ -102,18 +113,18 @@ class Package extends Model
         return 'inactive';
     }
 
-    public function getPaymentTransactionIdAttribute(){
-        if(Auth::guard('sanctum')->user()){
+    public function getPaymentTransactionIdAttribute()
+    {
+        if (Auth::guard('sanctum')->user()) {
             $userId = Auth::guard('sanctum')->user()->id;
             $packageId = $this->id;
 
             // Check payment transaction status
-            $paymentTransaction = PaymentTransaction::where('user_id', $userId)
-                ->where('package_id', $packageId)
+            $paymentTransaction = PaymentTransaction::where(['user_id' => $userId, 'package_id' => $packageId, 'role_context' => $this->user_type])
                 ->latest()
                 ->first();
 
-            if (!empty($paymentTransaction)) {
+            if (! empty($paymentTransaction)) {
                 return $paymentTransaction->id;
             }
         }
@@ -121,7 +132,8 @@ class Package extends Model
         return null;
     }
 
-    public function getTranslatedNameAttribute(){
+    public function getTranslatedNameAttribute()
+    {
         return HelperService::getTranslatedData($this, $this->name, 'name');
     }
 }

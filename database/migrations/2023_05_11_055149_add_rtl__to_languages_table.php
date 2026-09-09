@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::table('languages', function (Blueprint $table) {
             //
-            $table->boolean('rtl')->comment("0=false,1=true");
+            $table->boolean('rtl')->comment('0=false,1=true');
         });
     }
 

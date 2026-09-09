@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
+use App\Traits\HasAppTimezone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\HasAppTimezone;
 
 class BlockedUserForAppointment extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
 
     protected $table = 'blocked_users_for_appointments';
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at', 'blocked_at', 'unblocked_at'];
+
     protected $fillable = [
         'user_id',
         'blocked_by_admin_id',

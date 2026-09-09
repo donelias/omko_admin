@@ -1,11 +1,11 @@
 <?php
+
 namespace Grav\Plugin;
 
-use Grav\Common\Plugin;
-use Grav\Common\Grav;
 use Grav\Common\Page\Page;
 use Grav\Common\Page\Pages;
 use Grav\Common\Page\Types;
+use Grav\Common\Plugin;
 use RocketTheme\Toolbox\Event\Event;
 
 class ErrorPlugin extends Plugin
@@ -18,14 +18,12 @@ class ErrorPlugin extends Plugin
         return [
             'onPageNotFound' => ['onPageNotFound', 0],
             'onGetPageTemplates' => ['onGetPageTemplates', 0],
-            'onTwigTemplatePaths' => ['onTwigTemplatePaths', -10]
+            'onTwigTemplatePaths' => ['onTwigTemplatePaths', -10],
         ];
     }
 
     /**
      * Display error page if no page was found for the current route.
-     *
-     * @param Event $event
      */
     public function onPageNotFound(Event $event)
     {
@@ -35,10 +33,10 @@ class ErrorPlugin extends Plugin
         // Try to load user error page.
         $page = $pages->dispatch($this->config->get('plugins.error.routes.404', '/error'), true);
 
-        if (!$page) {
+        if (! $page) {
             // If none provided use built in error page.
             $page = new Page;
-            $page->init(new \SplFileInfo(__DIR__ . '/pages/error.md'));
+            $page->init(new \SplFileInfo(__DIR__.'/pages/error.md'));
         }
 
         $event->page = $page;
@@ -60,6 +58,6 @@ class ErrorPlugin extends Plugin
      */
     public function onTwigTemplatePaths()
     {
-        $this->grav['twig']->twig_paths[] = __DIR__ . '/templates';
+        $this->grav['twig']->twig_paths[] = __DIR__.'/templates';
     }
 }

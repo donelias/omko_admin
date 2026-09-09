@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
-use Illuminate\Http\Request;
 use App\Services\HelperService;
 use App\Services\ResponseService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 
 class GeminiSettingsController extends Controller
 {
@@ -17,7 +17,7 @@ class GeminiSettingsController extends Controller
      */
     public function index()
     {
-        if (!has_permissions('read', 'gemini_settings')) {
+        if (! has_permissions('read', 'gemini_settings')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -42,7 +42,7 @@ class GeminiSettingsController extends Controller
      */
     public function update(Request $request)
     {
-        if (!has_permissions('update', 'gemini_settings')) {
+        if (! has_permissions('update', 'gemini_settings')) {
             ResponseService::errorResponse(trans(PERMISSION_ERROR_MSG));
         }
 
@@ -51,12 +51,12 @@ class GeminiSettingsController extends Controller
             // allow 0 = unlimited
 
             $validated = $request->validate([
-                'gemini_ai_enabled'                 => 'nullable|in:0,1',
-                'gemini_api_key'                    => 'nullable|string',
-                'gemini_description_limit'          => 'required|integer|min:0|max:1000',
-                'gemini_meta_limit'                 => 'required|integer|min:0|max:1000',
-                'gemini_description_limit_global'   => 'required|integer|min:0|max:1000',
-                'gemini_meta_limit_global'          => 'required|integer|min:0|max:1000',
+                'gemini_ai_enabled' => 'nullable|in:0,1',
+                'gemini_api_key' => 'nullable|string',
+                'gemini_description_limit' => 'required|integer|min:0|max:1000',
+                'gemini_meta_limit' => 'required|integer|min:0|max:1000',
+                'gemini_description_limit_global' => 'required|integer|min:0|max:1000',
+                'gemini_meta_limit_global' => 'required|integer|min:0|max:1000',
                 // 'gemini_search_limit_user'          => 'required|integer|min:0|max:1000',
                 // 'gemini_search_limit_global'        => 'required|integer|min:0|max:1000',
             ]);
@@ -72,7 +72,7 @@ class GeminiSettingsController extends Controller
             }
 
             // Update .env if API key changed
-            if ($request->has('gemini_api_key') && !empty($request->gemini_api_key)) {
+            if ($request->has('gemini_api_key') && ! empty($request->gemini_api_key)) {
                 $this->updateEnvFile('GEMINI_API_KEY', $request->gemini_api_key);
             }
 
@@ -81,7 +81,7 @@ class GeminiSettingsController extends Controller
             ResponseService::successResponse(trans('Settings updated successfully'));
         } catch (\Exception $e) {
             DB::rollBack();
-            ResponseService::errorResponse('Failed to update settings: ' . $e->getMessage());
+            ResponseService::errorResponse('Failed to update settings: '.$e->getMessage());
         }
     }
 
@@ -91,7 +91,7 @@ class GeminiSettingsController extends Controller
     private function updateEnvFile(string $key, string $value)
     {
         $envFile = base_path('.env');
-        if (!file_exists($envFile)) {
+        if (! file_exists($envFile)) {
             return;
         }
 
@@ -112,18 +112,19 @@ class GeminiSettingsController extends Controller
      */
     public function clearCache()
     {
-        if (!has_permissions('update', 'gemini_settings')) {
+        if (! has_permissions('update', 'gemini_settings')) {
             return ResponseService::errorResponse(trans(PERMISSION_ERROR_MSG));
         }
 
         try {
             Log::info('Gemini AI cache cleared');
             Cache::store('gemini')->clear();
+
             return ResponseService::successResponse(trans('Gemini AI cache cleared successfully'));
         } catch (\Exception $e) {
-            Log::error('Failed to clear Gemini AI cache: ' . $e->getMessage());
-            return ResponseService::errorResponse('Failed to clear cache: ' . $e->getMessage());
+            Log::error('Failed to clear Gemini AI cache: '.$e->getMessage());
+
+            return ResponseService::errorResponse('Failed to clear cache: '.$e->getMessage());
         }
     }
 }
-

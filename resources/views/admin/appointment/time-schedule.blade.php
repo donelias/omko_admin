@@ -121,9 +121,9 @@
                     <div class="card">
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-12">
+                                <div class="col-12 time-schedule-actions">
                                     <a href="{{ url('admin/appointment/preferences') }}" class="btn btn-secondary">{{ __('Previous: Preferences') }}</a>
-                                    <button type="submit" class="btn btn-primary">{{ __('Save Schedule') }}</button>
+                                    <button type="submit" class="btn btn-primary mt-0">{{ __('Save Schedule') }}</button>
                                     <a href="{{ url('admin/appointment/extra-time-slots') }}" class="btn btn-info">{{ __('Next: Extra Time Slots') }}</a>
                                 </div>
                             </div>
@@ -186,7 +186,6 @@
                                     window.location.reload();
                                 }, 500);
                             }, errorCallBack: function (response) {
-                                showErrorToast(response.message);
                             }
                         });
                     }

@@ -1,17 +1,16 @@
 <?php
 
-use App\Models\Feature;
-use App\Models\Setting;
 use App\Models\Customer;
+use App\Models\Feature;
 use App\Models\HomepageSection;
+use App\Models\Setting;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use libphonenumber\PhoneNumberUtil;
-use libphonenumber\PhoneNumberFormat;
 use Illuminate\Support\Facades\Schema;
 use libphonenumber\NumberParseException;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Database\Migrations\Migration;
+use libphonenumber\PhoneNumberUtil;
 
 return new class extends Migration
 {
@@ -43,11 +42,11 @@ return new class extends Migration
 
             // Add New Properties on Map Section
             $homepageSections = [
-                ['id' => 14, 'title' => "Find Homes, Apartments & More with Real-Time Listings on the Map", 'section_type' => 'properties_on_map_section', 'is_active' => true, 'sort_order' => 14],
+                ['id' => 14, 'title' => 'Find Homes, Apartments & More with Real-Time Listings on the Map', 'section_type' => 'properties_on_map_section', 'is_active' => true, 'sort_order' => 14],
             ];
             HomepageSection::upsert($homepageSections, ['id']);
             // Update Sort Order of All Sections
-            $homepageData = array(
+            $homepageData = [
                 [
                     'id' => 1,
                     'sort_order' => 5,
@@ -104,16 +103,16 @@ return new class extends Migration
                     'id' => 14,
                     'sort_order' => 7,
                 ],
-            );
+            ];
 
-            HomepageSection::upsert($homepageData, ['id'],['sort_order']);
+            HomepageSection::upsert($homepageData, ['id'], ['sort_order']);
         }
         /********************************************************************************* */
 
         /**
          * Article View Count
          */
-        if (Schema::hasTable('articles') && !Schema::hasColumn('articles', 'view_count')) {
+        if (Schema::hasTable('articles') && ! Schema::hasColumn('articles', 'view_count')) {
             Schema::table('articles', function (Blueprint $table) {
                 $table->integer('view_count')->default(0);
             });
@@ -124,31 +123,31 @@ return new class extends Migration
         /**
          * Features
          */
-        if(Schema::hasTable('features') && !Schema::hasColumn('features','type')){
+        if (Schema::hasTable('features') && ! Schema::hasColumn('features', 'type')) {
             Schema::table('features', function (Blueprint $table) {
-                $table->enum('type',['property_list','project_list','property_feature','project_feature','mortgage_calculator_detail','premium_properties','project_access'])->nullable()->after('name');
+                $table->enum('type', ['property_list', 'project_list', 'property_feature', 'project_feature', 'mortgage_calculator_detail', 'premium_properties', 'project_access'])->nullable()->after('name');
             });
-            Feature::get()->each(function($feature){
-                switch($feature->name){
-                    case !empty(config('constants.FEATURES.PROPERTY_LIST.NAME')) ? config('constants.FEATURES.PROPERTY_LIST.NAME') : config('constants.FEATURES.PROPERTY_LIST'):
+            Feature::get()->each(function ($feature) {
+                switch ($feature->name) {
+                    case ! empty(config('constants.FEATURES.PROPERTY_LIST.NAME')) ? config('constants.FEATURES.PROPERTY_LIST.NAME') : config('constants.FEATURES.PROPERTY_LIST'):
                         $feature->type = 'property_list';
                         break;
-                    case !empty(config('constants.FEATURES.PROJECT_LIST.NAME')) ? config('constants.FEATURES.PROJECT_LIST.NAME') : config('constants.FEATURES.PROJECT_LIST'):
+                    case ! empty(config('constants.FEATURES.PROJECT_LIST.NAME')) ? config('constants.FEATURES.PROJECT_LIST.NAME') : config('constants.FEATURES.PROJECT_LIST'):
                         $feature->type = 'project_list';
                         break;
-                    case !empty(config('constants.FEATURES.PROPERTY_FEATURE.NAME')) ? config('constants.FEATURES.PROPERTY_FEATURE.NAME') : config('constants.FEATURES.PROPERTY_FEATURE'):
+                    case ! empty(config('constants.FEATURES.PROPERTY_FEATURE.NAME')) ? config('constants.FEATURES.PROPERTY_FEATURE.NAME') : config('constants.FEATURES.PROPERTY_FEATURE'):
                         $feature->type = 'property_feature';
                         break;
-                    case !empty(config('constants.FEATURES.PROJECT_FEATURE.NAME')) ? config('constants.FEATURES.PROJECT_FEATURE.NAME') : config('constants.FEATURES.PROJECT_FEATURE'):
+                    case ! empty(config('constants.FEATURES.PROJECT_FEATURE.NAME')) ? config('constants.FEATURES.PROJECT_FEATURE.NAME') : config('constants.FEATURES.PROJECT_FEATURE'):
                         $feature->type = 'project_feature';
                         break;
-                    case !empty(config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.NAME')) ? config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.NAME') : config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL'):
+                    case ! empty(config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.NAME')) ? config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.NAME') : config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL'):
                         $feature->type = 'mortgage_calculator_detail';
                         break;
-                    case !empty(config('constants.FEATURES.PREMIUM_PROPERTIES.NAME')) ? config('constants.FEATURES.PREMIUM_PROPERTIES.NAME') : config('constants.FEATURES.PREMIUM_PROPERTIES'):
+                    case ! empty(config('constants.FEATURES.PREMIUM_PROPERTIES.NAME')) ? config('constants.FEATURES.PREMIUM_PROPERTIES.NAME') : config('constants.FEATURES.PREMIUM_PROPERTIES'):
                         $feature->type = 'premium_properties';
                         break;
-                    case !empty(config('constants.FEATURES.PROJECT_ACCESS.NAME')) ? config('constants.FEATURES.PROJECT_ACCESS.NAME') : config('constants.FEATURES.PROJECT_ACCESS'):
+                    case ! empty(config('constants.FEATURES.PROJECT_ACCESS.NAME')) ? config('constants.FEATURES.PROJECT_ACCESS.NAME') : config('constants.FEATURES.PROJECT_ACCESS'):
                         $feature->type = 'project_access';
                         break;
                     default:
@@ -161,14 +160,14 @@ return new class extends Migration
         }
 
         /********************************************************************************* */
-        if(!Schema::hasTable('translations')){
+        if (! Schema::hasTable('translations')) {
             /**
              * Translations
              */
             Schema::create('translations', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('language_id')->constrained('languages')->onDelete('cascade'); // foreign key to languages table
-                $table->string('key',100); // e.g. 'name', 'title', 'description'
+                $table->string('key', 100); // e.g. 'name', 'title', 'description'
                 $table->text('value'); // actual translated text
                 $table->morphs('translatable'); // translatable_id and translatable_type
                 $table->timestamps();
@@ -181,13 +180,12 @@ return new class extends Migration
         /**
          * Seo Settings
          */
-        if(Schema::hasTable('seo_settings') && !Schema::hasColumn('seo_settings','schema_markup')){
+        if (Schema::hasTable('seo_settings') && ! Schema::hasColumn('seo_settings', 'schema_markup')) {
             Schema::table('seo_settings', function (Blueprint $table) {
                 $table->text('schema_markup')->nullable()->after('description');
             });
         }
         /********************************************************************************* */
-
 
         /**
          * Update .env file
@@ -198,19 +196,19 @@ return new class extends Migration
         updateEnv($envData);
 
         /********************************************************************************* */
-        $settingsData = array(
+        $settingsData = [
             'homepage_location_alert_status' => 1,
-        );
+        ];
         foreach ($settingsData as $key => $settingData) {
             // Adding default data for verification required for user settings
-            Setting::updateOrCreate(['type' => $key],['data' => $settingData]);
+            Setting::updateOrCreate(['type' => $key], ['data' => $settingData]);
         }
         /********************************************************************************* */
 
         /**
          * Parameter
          */
-        if(Schema::hasTable('parameters') && Schema::hasColumn('parameters','type_values')){
+        if (Schema::hasTable('parameters') && Schema::hasColumn('parameters', 'type_values')) {
             Schema::table('parameters', function (Blueprint $table) {
                 $table->longText('type_values')->nullable()->change();
             });
@@ -221,20 +219,19 @@ return new class extends Migration
         /**
          * Country Code in Customers
          */
-        if(Schema::hasTable('customers') && !Schema::hasColumn('customers','full_mobile')){
+        if (Schema::hasTable('customers') && ! Schema::hasColumn('customers', 'full_mobile')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->renameColumn('mobile', 'full_mobile');
             });
         }
-        if(Schema::hasTable('customers') && !Schema::hasColumn('customers','country_code')){
+        if (Schema::hasTable('customers') && ! Schema::hasColumn('customers', 'country_code')) {
             Schema::table('customers', function (Blueprint $table) {
-                $table->after('full_mobile',function($query){
+                $table->after('full_mobile', function ($query) {
                     $query->string('country_code', 10)->nullable();
-                    $query->string('mobile',256)->nullable();
+                    $query->string('mobile', 256)->nullable();
                 });
             });
 
-            
             /**
              * Drop old unique index on full_mobile + email + type
              */
@@ -246,7 +243,7 @@ return new class extends Migration
              * Add new unique index on mobile + email + type
              */
             Schema::table('customers', function (Blueprint $table) {
-                $table->unique(['mobile', 'email', 'logintype','country_code'], 'unique_ids'); // Reuse same name
+                $table->unique(['mobile', 'email', 'logintype', 'country_code'], 'unique_ids'); // Reuse same name
             });
         }
 
@@ -276,27 +273,27 @@ return new class extends Migration
         /********************************************************************************* */
         Schema::dropIfExists('translations');
         /********************************************************************************* */
-        if(Schema::hasTable('seo_settings') && Schema::hasColumn('seo_settings','schema_markup')){
+        if (Schema::hasTable('seo_settings') && Schema::hasColumn('seo_settings', 'schema_markup')) {
             Schema::table('seo_settings', function (Blueprint $table) {
                 $table->dropColumn('schema_markup');
             });
         }
         /********************************************************************************* */
 
-        if(Schema::hasColumn('customers','full_mobile')){
+        if (Schema::hasColumn('customers', 'full_mobile')) {
             Schema::table('customers', function (Blueprint $table) {
                 $table->dropColumn('country_code');
                 $table->renameColumn('mobile', 'temp_mobile');
                 $table->renameColumn('full_mobile', 'mobile');
             });
 
-             /**
+            /**
              * Drop old unique index on full_mobile + email + type
              */
             Schema::table('customers', function (Blueprint $table) {
                 $table->dropUnique('unique_ids'); // Drop the existing unique index
             });
-    
+
             // Recreate the original unique index on full_mobile, email, type
             Schema::table('customers', function (Blueprint $table) {
                 $table->unique(['mobile', 'email', 'logintype'], 'unique_ids');
@@ -305,7 +302,7 @@ return new class extends Migration
             Schema::table('customers', function (Blueprint $table) {
                 $table->dropColumn('temp_mobile');
             });
-        };
+        }
 
         /********************************************************************************* */
     }
@@ -314,35 +311,36 @@ return new class extends Migration
     {
         $users = Customer::whereNotNull('full_mobile')->get();
         $phoneUtil = PhoneNumberUtil::getInstance();
-    
+
         foreach ($users as $user) {
             $raw = trim($user->full_mobile);
             $raw = preg_replace('/[^\d\+]/', '', $raw); // Keep digits and + only
-    
+
             // Try to parse with "+" if not present and number looks long
-            if (!str_starts_with($raw, '+') && preg_match('/^\d{11,15}$/', $raw)) {
-                $raw = '+' . $raw;
+            if (! str_starts_with($raw, '+') && preg_match('/^\d{11,15}$/', $raw)) {
+                $raw = '+'.$raw;
             }
-    
+
             try {
                 $proto = $phoneUtil->parse($raw, null); // autodetect region
-    
-                if (!$phoneUtil->isValidNumber($proto)) {
+
+                if (! $phoneUtil->isValidNumber($proto)) {
                     Log::warning("⚠️ Invalid number after parsing: {$user->full_mobile} (User ID: {$user->id})");
+
                     continue;
                 }
-    
+
                 $user->country_code = $proto->getCountryCode();           // e.g. 91
                 $user->mobile = $proto->getNationalNumber();              // e.g. 9876543210
                 $user->save();
-    
+
             } catch (NumberParseException $e) {
                 Log::warning("❌ Could not parse number: {$user->full_mobile} (User ID: {$user->id})");
+
                 continue;
             }
         }
-    
-        Log::info("✅ Phone number migration completed.");
-    }
 
+        Log::info('✅ Phone number migration completed.');
+    }
 };

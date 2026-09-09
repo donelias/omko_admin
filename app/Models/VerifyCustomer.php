@@ -2,23 +2,28 @@
 
 namespace App\Models;
 
-use App\Models\Customer;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Traits\HasAppTimezone;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
 class VerifyCustomer extends Model
 {
-    use HasFactory, HasAppTimezone;
+    use HasAppTimezone, HasFactory;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
+
+    protected $with = ['user', 'verify_customer_values'];
+
     protected $fillable = [
         'user_id',
-        'status'
+        'status',
     ];
 
     /**
      * Get the user that owns the VerifyCustomer
      *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     * @return BelongsTo
      */
     public function user()
     {
@@ -27,10 +32,15 @@ class VerifyCustomer extends Model
 
     /**
      * Get all of the Verify Form Values for the VerifyCustomer
-     *
      */
     public function verify_customer_values()
     {
         return $this->hasMany(VerifyCustomerValue::class, 'verify_customer_id');
+    }
+
+    // relation to reject reason if exist
+    public function rejectReason()
+    {
+        return $this->hasOne(RejectReason::class, 'verify_customer_id');
     }
 }

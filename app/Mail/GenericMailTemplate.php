@@ -11,7 +11,9 @@ class GenericMailTemplate extends Mailable
     use Queueable, SerializesModels;
 
     public $data;
+
     public $adminMail;
+
     public $companyName;
 
     public function __construct($data, $adminMail, $companyName)
@@ -24,8 +26,8 @@ class GenericMailTemplate extends Mailable
     public function build()
     {
         return $this->from($this->adminMail, $this->companyName)
-                    ->subject($this->data['title'])
-                    ->view('mail-templates.mail-template')
-                    ->with($this->data);
+            ->subject($this->data['title'])
+            ->view('mail-templates.mail-template')
+            ->with($this->data);
     }
 }

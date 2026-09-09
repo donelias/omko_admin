@@ -2,32 +2,33 @@
 
 namespace App\Http\Controllers;
 
-use Exception;
-use App\Models\Setting;
 use App\Models\Language;
-use Illuminate\Http\Request;
+use App\Models\Setting;
+use App\Services\BootstrapTableService;
 use App\Services\HelperService;
 use App\Services\ResponseService;
+use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
-use App\Services\BootstrapTableService;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Response;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Session as FacadesSession;
+use Illuminate\Support\Facades\Validator;
 
 class LanguageController extends Controller
 {
     private function resolveLanguageFilePath(string $languageCode, string $type): string
     {
         if ($type === 'app') {
-            return base_path('public/languages/' . $languageCode . '.json');
+            return base_path('public/languages/'.$languageCode.'.json');
         }
         if ($type === 'web') {
-            return base_path('public/web_languages/' . $languageCode . '.json');
+            return base_path('public/web_languages/'.$languageCode.'.json');
         }
+
         // default to admin panel translations
-        return base_path('resources/lang/' . $languageCode . '.json');
+        return base_path('resources/lang/'.$languageCode.'.json');
     }
 
     private function resolveBaselineEnFilePath(string $type): string
@@ -39,12 +40,14 @@ class LanguageController extends Controller
         if ($type === 'web') {
             return base_path('public/web_languages/en.json');
         }
+
         return base_path('resources/lang/en.json');
     }
 
     private function validateType(string $type): string
     {
         $allowed = ['admin', 'app', 'web'];
+
         return in_array($type, $allowed) ? $type : 'admin';
     }
 
@@ -55,19 +58,20 @@ class LanguageController extends Controller
      */
     public function index()
     {
-        if (!has_permissions('read', 'language')) {
+        if (! has_permissions('read', 'language')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $language_count = Language::count();
 
         if ($language_count == 0) {
-            $lang = new Language();
-            $lang->name = "English";
-            $lang->code = "en";
-            $lang->file_name = "en.json";
+            $lang = new Language;
+            $lang->name = 'English';
+            $lang->code = 'en';
+            $lang->file_name = 'en.json';
             $lang->status = 1;
             $lang->save();
         }
+
         return view('settings.language');
     }
 
@@ -84,35 +88,34 @@ class LanguageController extends Controller
     /**
      * Store a newly created resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request)
     {
 
-        if (!has_permissions('create', 'language')) {
+        if (! has_permissions('create', 'language')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $request->validate([
-            'name'              => 'required',
-            'code'              => 'required|regex:/^[a-z0-9-]+$/|unique:languages',
-            'file'              => 'required',
-            'file_for_web'      => 'required',
-            'file_for_panel'    => 'required',
+            'name' => 'required',
+            'code' => 'required|regex:/^[a-z0-9-]+$/|unique:languages',
+            'file' => 'required',
+            'file_for_web' => 'required',
+            'file_for_panel' => 'required',
         ]);
-        $language = new Language();
+        $language = new Language;
         $language->name = $request->name;
         $language->code = $request->code;
         $language->status = 0;
-        $language->rtl = $request->rtl == "true" ? true : false;
+        $language->rtl = $request->rtl == 'true' ? true : false;
 
-        if($request->code == 'en'){
+        if ($request->code == 'en') {
             $languageCode = 'en-new';
-            $languageExists = Language::whereIn('code', array('en-new', 'en'))->first();
-            if($languageExists){
+            $languageExists = Language::whereIn('code', ['en-new', 'en'])->first();
+            if ($languageExists) {
                 return redirect()->back()->with('error', trans('English language already exists'));
             }
-        }else{
+        } else {
             $languageCode = $request->code;
         }
         if ($request->hasFile('file')) {
@@ -120,7 +123,7 @@ class LanguageController extends Controller
             if (strtolower($file->getClientOriginalExtension()) != 'json') {
                 return redirect()->back()->with('error', 'Invalid File');
             }
-            $filename = $languageCode . '.' . strtolower($file->getClientOriginalExtension());
+            $filename = $languageCode.'.'.strtolower($file->getClientOriginalExtension());
             $file->move(base_path('public/languages/'), $filename);
             $language->file_name = $filename;
         }
@@ -129,7 +132,7 @@ class LanguageController extends Controller
             if (strtolower($file->getClientOriginalExtension()) != 'json') {
                 return redirect()->back()->with('error', 'Invalid File');
             }
-            $filename = $languageCode . '.' . strtolower($file->getClientOriginalExtension());
+            $filename = $languageCode.'.'.strtolower($file->getClientOriginalExtension());
             $file->move(base_path('public/web_languages/'), $filename);
             $language->file_name = $filename;
         }
@@ -138,7 +141,7 @@ class LanguageController extends Controller
             if (strtolower($file->getClientOriginalExtension()) != 'json') {
                 return redirect()->back()->with('error', 'Invalid File');
             }
-            $filename = $languageCode . '.' . strtolower($file->getClientOriginalExtension());
+            $filename = $languageCode.'.'.strtolower($file->getClientOriginalExtension());
             $file->move(base_path('resources/lang/'), $filename);
             $language->file_name = $filename;
         }
@@ -154,7 +157,7 @@ class LanguageController extends Controller
      */
     public function show(Request $request)
     {
-        if (!has_permissions('read', 'language')) {
+        if (! has_permissions('read', 'language')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $offset = $request->input('offset', 0);
@@ -164,26 +167,24 @@ class LanguageController extends Controller
 
         $sql = Language::query();
 
-
-        if (isset($_GET['search']) && !empty($_GET['search'])) {
+        if (isset($_GET['search']) && ! empty($_GET['search'])) {
             $search = $_GET['search'];
             $sql->where('id', 'LIKE', "%$search%")->orwhere('code', 'LIKE', "%$search%")->orwhere('name', 'LIKE', "%$search%");
         }
 
         $total = $sql->count();
 
-
         $res = $sql->orderBy($sort, $order)->skip($offset)->take($limit)->get();
-        $bulkData = array();
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
-        $tempRow = array();
+        $rows = [];
+        $tempRow = [];
         $count = 1;
         $operate = '';
         foreach ($res as $row) {
             $defaultLanguageCode = system_setting('default_language');
             $tempRow = $row->toArray();
-            $tempRow['rtl'] = $row->rtl ? "Yes" : "No";
+            $tempRow['rtl'] = $row->rtl ? 'Yes' : 'No';
             $tempRow['file_for_admin'] = file_exists(base_path('resources/lang/'.$row->file_name)) ? url('resources/lang/'.$row->file_name) : false;
             $tempRow['file_for_app'] = file_exists(base_path('public/languages/'.$row->file_name)) ? url('public/languages/'.$row->file_name) : false;
             $tempRow['file_for_web'] = file_exists(base_path('public/web_languages/'.$row->file_name)) ? url('public/web_languages/'.$row->file_name) : false;
@@ -191,30 +192,30 @@ class LanguageController extends Controller
             $tempRow['is_disabled'] = $defaultLanguageCode == $row->code ? true : false;
             $ids = isset($row->parameter_types) ? $row->parameter_types : '';
             $operate = '';
-            if(has_permissions('update', 'language')){
+            if (has_permissions('update', 'language')) {
                 $operate = BootstrapTableService::editButton('', true, null, null, $row->id, null);
                 $dropdownItems = [
                     [
                         'icon' => '',
                         'url' => route('language.translations.edit', ['id' => $row->id, 'type' => 'admin']),
-                        'text' => 'Edit Panel Json'
+                        'text' => 'Edit Panel Json',
                     ],
                     [
                         'icon' => '',
                         'url' => route('language.translations.edit', ['id' => $row->id, 'type' => 'web']),
-                        'text' => 'Edit Web Json'
+                        'text' => 'Edit Web Json',
                     ],
                     [
                         'icon' => '',
                         'url' => route('language.translations.edit', ['id' => $row->id, 'type' => 'app']),
-                        'text' => 'Edit App Json'
-                    ]
+                        'text' => 'Edit App Json',
+                    ],
                 ];
 
                 $operate .= BootstrapTableService::dropdown('fas fa-ellipsis-v', $dropdownItems);
             }
-            if(isset($defaultLanguageCode) && !empty($defaultLanguageCode && has_permissions('delete', 'language'))){
-                if($defaultLanguageCode != $row->code){
+            if (isset($defaultLanguageCode) && ! empty($defaultLanguageCode && has_permissions('delete', 'language'))) {
+                if ($defaultLanguageCode != $row->code) {
                     $operate .= BootstrapTableService::deleteButton(route('language.destroy', $row->id), $row->id);
                 }
             }
@@ -224,6 +225,7 @@ class LanguageController extends Controller
         }
 
         $bulkData['rows'] = $rows;
+
         return response()->json($bulkData);
     }
 
@@ -241,13 +243,12 @@ class LanguageController extends Controller
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
     public function update(Request $request)
     {
-        if (!has_permissions('update', 'language')) {
+        if (! has_permissions('update', 'language')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
         $request->validate([
@@ -258,25 +259,25 @@ class LanguageController extends Controller
 
         $language = Language::find($request->edit_id);
         $language->name = $request->edit_language_name;
-        $language->rtl = $request->edit_rtl == "on" ? true : false;
-        if($request->edit_language_code == 'en'){
+        $language->rtl = $request->edit_rtl == 'on' ? true : false;
+        if ($request->edit_language_code == 'en') {
             $languageCode = 'en-new';
-            $languageExists = Language::where('id', '!=', $request->edit_id)->whereIn('code', array('en-new', 'en'))->first();
-            if($languageExists){
+            $languageExists = Language::where('id', '!=', $request->edit_id)->whereIn('code', ['en-new', 'en'])->first();
+            if ($languageExists) {
                 return redirect()->back()->with('error', trans('English language already exists'));
             }
-        }else{
+        } else {
             $languageCode = $request->edit_language_code;
         }
-        if($defaultLanguageCode == $language->code){
-            Setting::where('type','default_language')->update(['data' => $languageCode]);
+        if ($defaultLanguageCode == $language->code) {
+            Setting::where('type', 'default_language')->update(['data' => $languageCode]);
         }
         $language->code = $languageCode;
 
         // Edit App JSON File
         if ($request->hasFile('edit_json_app')) {
             $file = $request->file('edit_json_app');
-            $filename = $languageCode . '.' . strtolower($file->getClientOriginalExtension());
+            $filename = $languageCode.'.'.strtolower($file->getClientOriginalExtension());
             if (strtolower($file->getClientOriginalExtension()) != 'json') {
                 return back()->with('error', 'Invalid File Type');
             }
@@ -290,7 +291,7 @@ class LanguageController extends Controller
         // Edit Admin JSON File
         if ($request->hasFile('edit_json_admin')) {
             $file = $request->file('edit_json_admin');
-            $filename = $languageCode . '.' . strtolower($file->getClientOriginalExtension());
+            $filename = $languageCode.'.'.strtolower($file->getClientOriginalExtension());
             if (strtolower($file->getClientOriginalExtension()) != 'json') {
                 return redirect()->back()->with('success', 'Invalid File');
             }
@@ -304,7 +305,7 @@ class LanguageController extends Controller
         // Edit Web JSON File
         if ($request->hasFile('edit_json_web')) {
             $file = $request->file('edit_json_web');
-            $filename = $languageCode . '.' . strtolower($file->getClientOriginalExtension());
+            $filename = $languageCode.'.'.strtolower($file->getClientOriginalExtension());
             if (strtolower($file->getClientOriginalExtension()) != 'json') {
                 return redirect()->back()->with('error', 'Invalid File Type');
             }
@@ -315,14 +316,13 @@ class LanguageController extends Controller
             $language->file_name = $filename;
         }
 
-
         $language->save();
         ResponseService::successRedirectResponse('Data Updated Successfully');
     }
 
     public function editTranslations(Request $request, int $id)
     {
-        if (!has_permissions('update', 'language')) {
+        if (! has_permissions('update', 'language')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $language = Language::findOrFail($id);
@@ -348,9 +348,9 @@ class LanguageController extends Controller
                 $baseline = $decoded;
             }
         }
-        if (!empty($baseline)) {
+        if (! empty($baseline)) {
             foreach ($baseline as $key => $enValue) {
-                if (!array_key_exists($key, $translations)) {
+                if (! array_key_exists($key, $translations)) {
                     $translations[$key] = '';
                 }
             }
@@ -366,7 +366,7 @@ class LanguageController extends Controller
     public function saveTranslations(Request $request, int $id)
     {
         // Fallback non-AJAX full-save endpoint (for small files or non-JS clients)
-        if (!has_permissions('update', 'language')) {
+        if (! has_permissions('update', 'language')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
@@ -378,9 +378,9 @@ class LanguageController extends Controller
         $this->mergeTranslationsIntoFile($request, $id, $request->input('translations', []));
 
         return redirect()->route('language.translations.edit', [
-                'id' => $id,
-                'type' => $this->validateType($request->input('type'))
-            ])
+            'id' => $id,
+            'type' => $this->validateType($request->input('type')),
+        ])
             ->with('success', trans('Data Updated Successfully'));
     }
 
@@ -390,7 +390,7 @@ class LanguageController extends Controller
      */
     public function saveTranslationsChunk(Request $request, int $id)
     {
-        if (!has_permissions('update', 'language')) {
+        if (! has_permissions('update', 'language')) {
             return response()->json([
                 'error' => true,
                 'message' => trans(PERMISSION_ERROR_MSG),
@@ -437,7 +437,7 @@ class LanguageController extends Controller
             $baselineDecoded = json_decode($baselineJson, true);
             if (is_array($baselineDecoded)) {
                 foreach ($baselineDecoded as $key => $_) {
-                    if (!array_key_exists($key, $existing)) {
+                    if (! array_key_exists($key, $existing)) {
                         $existing[$key] = '';
                     }
                 }
@@ -447,11 +447,11 @@ class LanguageController extends Controller
         // Merge this chunk only
         foreach ($chunk as $key => $value) {
             if (is_string($key)) {
-                $existing[$key] = is_null($value) ? '' : (string)$value;
+                $existing[$key] = is_null($value) ? '' : (string) $value;
             }
         }
 
-        if (!is_dir(dirname($filePath))) {
+        if (! is_dir(dirname($filePath))) {
             File::makeDirectory(dirname($filePath), 0755, true, true);
         }
 
@@ -466,16 +466,16 @@ class LanguageController extends Controller
      */
     public function destroy($id)
     {
-        if (env('DEMO_MODE') && Auth::user()->email != "superadmin@gmail.com") {
+        if (env('DEMO_MODE') && Auth::user()->email != 'superadmin@gmail.com') {
             return redirect()->back()->with('error', trans('This is not allowed in the Demo Version'));
         }
 
-        if (!has_permissions('delete', 'language')) {
+        if (! has_permissions('delete', 'language')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         } else {
             $language = Language::find($id);
             $languageData = $language;
-            if($language->code == 'en'){
+            if ($language->code == 'en') {
                 return redirect()->back()->with('error', trans('Default English is the default language and cannot be deleted'));
             }
             if ($language->delete()) {
@@ -488,44 +488,50 @@ class LanguageController extends Controller
                 if (file_exists(base_path('resources/lang/'.$languageData->file_name))) {
                     unlink(base_path('resources/lang/'.$languageData->file_name));
                 }
+
                 return redirect()->back()->with('success', trans('Data Deleted Successfully'));
             } else {
                 return redirect()->back()->with('error', trans('Something Went Wrong'));
             }
         }
     }
+
     public function set_language(Request $request)
     {
         FacadesSession::put('locale', $request->lang);
-        $language = Language::where('code',$request->lang)->first();
+        $language = Language::where('code', $request->lang)->first();
         FacadesSession::put('language', $language);
         FacadesSession::save();
         app()->setLocale($request->lang);
         Artisan::call('cache:clear');
+
         return redirect()->back();
     }
+
     public function downloadPanelFile()
     {
 
-        $file = base_path("resources/lang/en.json");
+        $file = base_path('resources/lang/en.json');
         $filename = 'admin_panel_en.json';
 
         return Response::download($file, $filename, [
             'Content-Type' => 'application/json',
         ]);
     }
+
     public function downloadAppFile()
     {
-        $file = public_path("languages/en.json");
+        $file = public_path('languages/en.json');
         $filename = 'app_en.json';
 
         return Response::download($file, $filename, [
             'Content-Type' => 'application/json',
         ]);
     }
+
     public function downloadWebFile()
     {
-        $file = public_path("web_languages/en.json");
+        $file = public_path('web_languages/en.json');
 
         $filename = 'web_en.json';
 
@@ -536,21 +542,21 @@ class LanguageController extends Controller
 
     public function updateStatus(Request $request)
     {
-        if (!has_permissions('update', 'language')) {
+        if (! has_permissions('update', 'language')) {
             return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         }
-        try{
+        try {
             $validator = Validator::make($request->all(), [
                 'id' => 'required|exists:languages,id',
                 'status' => 'required|in:0,1',
             ]);
-            if($validator->fails()){
+            if ($validator->fails()) {
                 return ResponseService::errorResponse($validator->errors()->first());
             }
             $language = Language::find($request->id);
-            if($request->status == 0){
+            if ($request->status == 0) {
                 $checkStatusOFAllLanguages = Language::where('status', 1)->whereNotIn('id', [$request->id])->count();
-                if($checkStatusOFAllLanguages == 0){
+                if ($checkStatusOFAllLanguages == 0) {
                     return response()->json([
                         'error' => true,
                         'message' => trans('At least one language must be active'),
@@ -558,7 +564,7 @@ class LanguageController extends Controller
                 }
 
                 $defaultLanguageCode = HelperService::getSettingData('default_language');
-                if($defaultLanguageCode == $language->getRawOriginal('code')){
+                if ($defaultLanguageCode == $language->getRawOriginal('code')) {
                     return response()->json([
                         'error' => true,
                         'message' => trans('Default language cannot be deactivated'),
@@ -569,9 +575,8 @@ class LanguageController extends Controller
             $language->status = $request->status;
             $language->save();
             ResponseService::successResponse('Data Updated Successfully');
-        }catch(Exception $e){
+        } catch (Exception $e) {
             ResponseService::logErrorResponse($e, 'Issue in update language status');
         }
     }
 }
-

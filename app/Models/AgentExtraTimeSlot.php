@@ -8,7 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 class AgentExtraTimeSlot extends Model
 {
     use HasFactory;
+
     protected $table = 'agent_extra_time_slots';
+
     protected $fillable = ['id', 'agent_id', 'date', 'start_time', 'end_time', 'reason', 'is_admin_data', 'admin_id'];
 
     public function agent()

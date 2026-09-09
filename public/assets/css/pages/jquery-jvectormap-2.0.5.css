@@ -21,6 +21,7 @@ svg {
     font-family: sans-serif, Verdana;
     font-size: smaller;
     padding: 3px;
+    z-index: 1050; /* Ensure tooltip is above other elements */
 }
 
 .jvectormap-zoomin,

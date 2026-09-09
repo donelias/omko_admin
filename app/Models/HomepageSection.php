@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
 use App\Traits\ManageTranslations;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class HomepageSection extends Model
 {
-    use HasFactory, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, ManageTranslations;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -19,11 +21,12 @@ class HomepageSection extends Model
      */
     protected $fillable = [
         'title',
+        'app_title',
         'section_type',
         'is_active',
         'sort_order',
         'created_at',
-        'updated_at'
+        'updated_at',
     ];
 
     /**
@@ -37,7 +40,6 @@ class HomepageSection extends Model
         });
     }
 
-
     /**
      * Translations relationship
      */
@@ -49,5 +51,10 @@ class HomepageSection extends Model
     public function getTranslatedTitleAttribute()
     {
         return HelperService::getTranslatedData($this, $this->title, 'title');
+    }
+
+    public function getTranslatedAppTitleAttribute()
+    {
+        return HelperService::getTranslatedData($this, $this->app_title, 'app_title');
     }
 }

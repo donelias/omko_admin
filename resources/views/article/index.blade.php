@@ -46,7 +46,7 @@
                                 <tr>
                                     <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
                                     <th scope="col" data-field="title" data-sortable="true">{{ __('Title') }}</th>
-                                    <th scope="col" data-field="raw_description" data-formatter="descriptionFormatter" data-sortable="true" style="max-width: 300px;">{{ __('Description') }}</th>
+                                    <th scope="col" data-field="description" data-formatter="descriptionFormatter" data-sortable="true" style="max-width: 300px;">{{ __('Description') }}</th>
                                     <th scope="col" data-field="category.category" data-sortable="false">{{ __('Category Title') }}</th>
                                     <th scope="col" data-field="view_count" data-sortable="true" data-align="center">{{ __('View Count') }}</th>
                                     <th scope="col" data-field="image" data-formatter="imageFormatter" data-sortable="false" data-align="center">{{ __('Image') }}</th>
@@ -84,6 +84,8 @@
 @endsection
 @section('script')
 <script>
+    window.articleDescriptions = {};
+
     function queryParams(p) {
         return {
             sort: p.sort,
@@ -100,6 +102,8 @@
     // Custom formatter for description column
     function descriptionFormatter(value, row, index) {
         if (!value) return '-';
+
+        window.articleDescriptions[row.id] = row.raw_description || row.description || value;
 
         // Sanitize the value to prevent XSS while preserving HTML formatting
         const sanitizedValue = sanitizeHtml(value);
@@ -119,8 +123,7 @@
         return `
             <div class="description-cell">
                 <div class="description-preview">${truncated}...</div>
-                <button type="button" class="btn btn-link btn-sm p-0 mt-1 read-more-btn"
-                        onclick="showFullDescription('${encodeURIComponent(row.raw_description)}')"
+                <button type="button" class="btn btn-link btn-sm p-0 mt-1 read-more-btn" data-article-id="${row.id}"
                         title="{{ __('Click to read full description') }}">
                     <i class="bi bi-eye"></i> {{ __('Read More') }}
                 </button>
@@ -129,10 +132,13 @@
     }
 
 
+    $(document).on('click', '.read-more-btn', function() {
+        const articleId = $(this).data('article-id');
+        showFullDescription(window.articleDescriptions[articleId] || '');
+    });
 
     // Function to show full description in modal
-    function showFullDescription(encodedDescription) {
-        const description = decodeURIComponent(encodedDescription);
+    function showFullDescription(description) {
         const contentElement = document.getElementById('modalDescriptionContent');
 
         // Remove any existing TinyMCE instance

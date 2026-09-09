@@ -120,7 +120,7 @@ return [
 
         'none' => [
             'driver' => 'monolog',
-            'handler' => Monolog\Handler\NullHandler::class,
+            'handler' => NullHandler::class,
         ],
 
     ],

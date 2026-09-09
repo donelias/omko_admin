@@ -2,22 +2,33 @@
 
 namespace App\Models;
 
-use Exception;
 use App\Services\FileService;
-use App\Traits\HasAppTimezone;
 use App\Services\HelperService;
+use App\Traits\HasAppTimezone;
+use App\Traits\HasRoleContext;
+use App\Traits\HasTenantFilter;
 use App\Traits\ManageTranslations;
-use Illuminate\Support\Facades\Log;
+use Exception;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Log;
+use App\Models\Projects;
 
 class Property extends Model
 {
-    use HasFactory, HasAppTimezone, ManageTranslations;
+    use HasAppTimezone, HasFactory, HasRoleContext, HasTenantFilter, ManageTranslations;
+
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
+
     protected $table = 'propertys';
+
+    const VIDEO_CUSTOM = 0;
+
+    const VIDEO_YOUTUBE = 1;
+
+    const VIDEO_VIMEO = 2;
 
     protected $fillable = [
         'category_id',
@@ -29,43 +40,54 @@ class Property extends Model
         'propery_type',
         'rentduration',
         'price',
+        'currency',
         'title_image',
         'state',
         'country',
-        'state',
+        'custom_video',
         'status',
         'request_status',
         'total_click',
+        'favourite_count',
+        'bedrooms',
+        'bathrooms',
+        'build_area',
+        'land_area',
         'latitude',
         'longitude',
         'three_d_image',
         'is_premium',
+        'expiry_date',
         'is_demo',
-        'edit_reason'
+        'edit_reason',
+        'role_context',
     ];
+
     protected $hidden = [
         'updated_at',
-        'deleted_at'
+        'deleted_at',
     ];
 
     protected $appends = [
         'gallery',
         'documents',
         'is_favourite',
-        'low_quality_title_image'
+        'low_quality_title_image',
+        'is_expired',
     ];
 
-    protected static function boot() {
+    protected static function boot()
+    {
         parent::boot();
         static::deleting(static function ($property) {
-            if(collect($property)->isNotEmpty()){
+            if (collect($property)->isNotEmpty()) {
                 // before delete() method call this
 
                 // Delete Title Image
                 if ($property->getRawOriginal('title_image') != '') {
                     $path = config('global.PROPERTY_TITLE_IMG_PATH');
                     $rawImage = $property->getRawOriginal('title_image');
-                    FileService::clearCachedBlurImageUrl('blur_property_title_image_' . $property->id);
+                    FileService::clearCachedBlurImageUrl('blur_property_title_image_'.$property->id);
                     FileService::delete($path, $rawImage);
                 }
 
@@ -77,7 +99,7 @@ class Property extends Model
                 }
 
                 // Delete Gallery Image
-                if(isset($property->gallery) && collect($property->gallery)->isNotEmpty()){
+                if (isset($property->gallery) && collect($property->gallery)->isNotEmpty()) {
                     foreach ($property->gallery as $row) {
                         if (PropertyImages::where('id', $row->id)->delete()) {
                             if ($row->getRawOriginal('image') != '') {
@@ -87,13 +109,13 @@ class Property extends Model
                             }
                         }
                     }
-                    if(is_dir(storage_path('app/public') . config('global.PROPERTY_GALLERY_IMG_PATH') . $property->id)){
-                        rmdir(storage_path('app/public') . config('global.PROPERTY_GALLERY_IMG_PATH') . $property->id);
+                    if (is_dir(storage_path('app/public').config('global.PROPERTY_GALLERY_IMG_PATH').$property->id)) {
+                        rmdir(storage_path('app/public').config('global.PROPERTY_GALLERY_IMG_PATH').$property->id);
                     }
                 }
 
                 // Delete Documents
-                if(isset($property->documents) && collect($property->documents)->isNotEmpty()){
+                if (isset($property->documents) && collect($property->documents)->isNotEmpty()) {
                     foreach ($property->documents as $row) {
                         if (PropertiesDocument::where('id', $row->id)->delete()) {
                             if ($row->getRawOriginal('name') != '') {
@@ -103,8 +125,8 @@ class Property extends Model
                             }
                         }
                     }
-                    if(is_dir(storage_path('app/public') . config('global.PROPERTY_DOCUMENT_PATH') . $property->id)){
-                        rmdir(storage_path('app/public') . config('global.PROPERTY_DOCUMENT_PATH') . $property->id);
+                    if (is_dir(storage_path('app/public').config('global.PROPERTY_DOCUMENT_PATH').$property->id)) {
+                        rmdir(storage_path('app/public').config('global.PROPERTY_DOCUMENT_PATH').$property->id);
                     }
                 }
                 /** Delete the properties associated data */
@@ -120,25 +142,25 @@ class Property extends Model
 
                 // Delete The Data with modal boot events
                 $chats = Chats::where('property_id', $property->id)->get();
-                if(collect($chats)->isNotEmpty()){
+                if (collect($chats)->isNotEmpty()) {
                     foreach ($chats as $chat) {
-                        if(collect($chat)->isNotEmpty()){
+                        if (collect($chat)->isNotEmpty()) {
                             $chat->delete(); // This will trigger the deleting and deleted events in modal
                         }
                     }
                 }
                 $sliders = Slider::where('propertys_id', $property->id)->get();
-                if(collect($sliders)->isNotEmpty()){
+                if (collect($sliders)->isNotEmpty()) {
                     foreach ($sliders as $slider) {
-                        if(collect($slider)->isNotEmpty()){
+                        if (collect($slider)->isNotEmpty()) {
                             $slider->delete(); // This will trigger the deleting and deleted events in modal
                         }
                     }
                 }
                 $notifications = Notifications::where('propertys_id', $property->id)->get();
-                if(collect($notifications)->isNotEmpty()){
+                if (collect($notifications)->isNotEmpty()) {
                     foreach ($notifications as $notification) {
-                        if(collect($notification)->isNotEmpty()){
+                        if (collect($notification)->isNotEmpty()) {
                             $notification->delete(); // This will trigger the deleting and deleted events in modal
                         }
                     }
@@ -147,14 +169,31 @@ class Property extends Model
         });
     }
 
+    public function project()
+    {
+        return $this->belongsTo(Projects::class, 'project_id');
+    }
+
+    public function availabilitySlots()
+    {
+        return $this->hasMany(PropertyAvailability::class, 'property_id');
+    }
+
+    public function shortTermReservations()
+    {
+        return $this->hasMany(ShortTermReservation::class, 'property_id');
+    }
+
     public function category()
     {
         return $this->hasOne(Category::class, 'id', 'category_id')->select('id', 'category', 'parameter_types', 'image');
     }
+
     public function customer()
     {
         return $this->hasOne(Customer::class, 'id', 'added_by', 'fcm_id', 'notification');
     }
+
     public function user()
     {
         return $this->hasMany(User::class, 'id', 'added_by', 'fcm_id', 'notification');
@@ -162,13 +201,14 @@ class Property extends Model
 
     public function assignParameter()
     {
-        return  $this->morphMany(AssignParameters::class, 'modal');
+        return $this->morphMany(AssignParameters::class, 'modal');
     }
 
     public function parameters()
     {
         return $this->belongsToMany(parameter::class, 'assign_parameters', 'modal_id', 'parameter_id')->withPivot('value');
     }
+
     public function assignfacilities()
     {
         return $this->hasMany(AssignedOutdoorFacilities::class, 'property_id', 'id');
@@ -176,12 +216,14 @@ class Property extends Model
 
     public function favourite()
     {
-        return $this->hasMany(Favourite::class,'property_id','id');
+        return $this->hasMany(Favourite::class, 'property_id', 'id');
     }
+
     public function interested_users()
     {
-        return $this->hasMany(InterestedUser::class,'property_id');
+        return $this->hasMany(InterestedUser::class, 'property_id');
     }
+
     // public function assign_parameter()
     // {
     //     return $this->hasMany(AssignParameters::class);
@@ -191,8 +233,19 @@ class Property extends Model
         return $this->hasMany(Advertisement::class)->where('for', 'property');
     }
 
-    public function reject_reason(){
-        return $this->hasMany(RejectReason::class,'property_id');
+    public function priceHistory()
+    {
+        return $this->hasMany(PriceHistory::class, 'property_id');
+    }
+
+    public function priceSuggestion()
+    {
+        return $this->hasOne(PriceSuggestion::class, 'property_id');
+    }
+
+    public function reject_reason()
+    {
+        return $this->hasMany(RejectReason::class, 'property_id');
     }
 
     /**
@@ -205,76 +258,91 @@ class Property extends Model
 
     public function getGalleryAttribute()
     {
-        $data = PropertyImages::select('id', 'propertys_id', 'image')->where('propertys_id', $this->id)->get()->map(function($item){
+        $data = PropertyImages::select('id', 'propertys_id', 'image')->where('propertys_id', $this->id)->get()->map(function ($item) {
             $image = $item->getRawOriginal('image');
-            if($image != ''){
+            if ($image != '') {
                 $item->image_url = $item->image;
             }
+
             return $item;
         });
+
         return $data;
     }
+
     public function getTitleImageAttribute($image)
     {
-        $path = !empty($image) ? config('global.PROPERTY_TITLE_IMG_PATH') . $image : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
-    }
+        $path = ! empty($image) ? config('global.PROPERTY_TITLE_IMG_PATH').$image : null;
 
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
+    }
 
     public function getMetaImageAttribute($image)
     {
-        $path = !empty($image) ? config('global.PROPERTY_SEO_IMG_PATH') . $image : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
-    }
-    public function getThreeDImageAttribute($image)
-    {
-        $path = !empty($image) ? config('global.3D_IMG_PATH') . $image : null;
-        return !empty($path) ? FileService::getFileUrl($path) : null;
+        $path = ! empty($image) ? config('global.PROPERTY_SEO_IMG_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
     }
 
-    public function getProperyTypeAttribute($value){
+    public function getThreeDImageAttribute($image)
+    {
+        $path = ! empty($image) ? config('global.3D_IMG_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
+    }
+
+    public function getProperyTypeAttribute($value)
+    {
         if ($value == 0) {
-            return "sell";
+            return 'sell';
         } elseif ($value == 1) {
-            return "rent";
+            return 'rent';
         } elseif ($value == 2) {
-            return "sold";
+            return 'sold';
         } elseif ($value == 3) {
-            return "rented";
+            return 'rented';
         }
     }
 
-
-    public function getIsPromotedAttribute() {
+    public function getIsPromotedAttribute()
+    {
         $id = $this->id;
-        return $this->whereHas('advertisement',function($query) use($id){
+
+        return $this->whereHas('advertisement', function ($query) use ($id) {
             $query->where(['property_id' => $id, 'status' => 0, 'is_enable' => 1]);
         })->count() ? true : false;
     }
 
-    public function getHomePromotedAttribute() {
+    public function getHomePromotedAttribute()
+    {
         $id = $this->id;
-        return $this->whereHas('advertisement',function($query) use($id){
-            $query->where(['property_id' => $id,'type' => 'HomeScreen', 'status' => 0, 'is_enable' => 1]);
+
+        return $this->whereHas('advertisement', function ($query) use ($id) {
+            $query->where(['property_id' => $id, 'type' => 'HomeScreen', 'status' => 0, 'is_enable' => 1]);
         })->count() ? true : false;
     }
 
-    public function getListPromotedAttribute() {
+    public function getListPromotedAttribute()
+    {
         $id = $this->id;
-        return $this->whereHas('advertisement',function($query) use($id){
-            $query->where(['property_id' => $id,'type' => 'ProductListing', 'status' => 0, 'is_enable' => 1]);
+
+        return $this->whereHas('advertisement', function ($query) use ($id) {
+            $query->where(['property_id' => $id, 'type' => 'ProductListing', 'status' => 0, 'is_enable' => 1]);
         })->count() ? true : false;
     }
 
-    public function getIsFavouriteAttribute() {
+    public function getIsFavouriteAttribute()
+    {
         $propertyId = $this->id;
         $auth = Auth::guard('sanctum');
-        if($auth->check()){
+        if ($auth->check()) {
             $userId = $auth->user()->id;
-            return $this->whereHas('favourite',function($query) use($userId,$propertyId){
+
+            return $this->whereHas('favourite', function ($query) use ($userId, $propertyId) {
                 $query->where(['user_id' => $userId, 'property_id' => $propertyId]);
             })->count() >= 1 ? 1 : 0;
         }
+
         return 0;
     }
 
@@ -282,35 +350,37 @@ class Property extends Model
     {
         $cacheKey = "property_parameters_{$this->id}";
 
-        return Cache::rememberForever($cacheKey, function() {
+        return Cache::rememberForever($cacheKey, function () {
             $parameterQueryData = $this->parameters()->with('translations')->get();
             $parameters = [];
 
-            if($parameterQueryData->isNotEmpty()){
+            if ($parameterQueryData->isNotEmpty()) {
                 foreach ($parameterQueryData as $res) {
-                    $res = (object)$res;
+                    $res = (object) $res;
 
                     // JSON decode & translation
                     if (is_string($res['pivot']['value']) && is_array(json_decode($res['pivot']['value'], true))) {
                         $value = json_decode($res['pivot']['value'], true);
                         $translatedValue = [];
-                        if($res->translated_option_value){
+                        if ($res->translated_option_value) {
                             $translatedMap = collect($res->translated_option_value)->keyBy('value');
-                            foreach($value as $val){
-                                if(isset($translatedMap[$val])) $translatedValue[] = $translatedMap[$val]['translated'];
+                            foreach ($value as $val) {
+                                if (isset($translatedMap[$val])) {
+                                    $translatedValue[] = $translatedMap[$val]['translated'];
+                                }
                             }
                         }
                     } else {
-                        if ($res['type_of_parameter'] == "file") {
-                            $value = ($res['pivot']['value'] == "null" || !$res['pivot']['value'])
-                                ? ""
-                                : FileService::getFileUrl(config('global.PARAMETER_IMG_PATH') . '/' . $res['pivot']['value']);
+                        if ($res['type_of_parameter'] == 'file') {
+                            $value = ($res['pivot']['value'] == 'null' || ! $res['pivot']['value'])
+                                ? ''
+                                : FileService::getFileUrl(config('global.PARAMETER_IMG_PATH').'/'.$res['pivot']['value']);
                         } else {
-                            $value = ($res['pivot']['value'] == "null") ? "" : $res['pivot']['value'];
+                            $value = ($res['pivot']['value'] == 'null') ? '' : $res['pivot']['value'];
                         }
                     }
 
-                    if(collect($value)->isNotEmpty()){
+                    if (collect($value)->isNotEmpty()) {
                         $parameters[] = [
                             'id' => $res->id,
                             'name' => $res->name,
@@ -322,7 +392,7 @@ class Property extends Model
                             'value' => $value,
                             'translated_value' => $translatedValue ?? [],
                             'translated_name' => $res->translated_name,
-                            'translations' => $res->translations->map(fn($t) => [
+                            'translations' => $res->translations->map(fn ($t) => [
                                 'language_id' => $t->language_id,
                                 'value' => $t->value,
                             ])->toArray(),
@@ -332,26 +402,25 @@ class Property extends Model
             }
 
             // Sort by category order
-            if($this->relationLoaded('category') && $this->category?->parameter_types){
+            if ($this->relationLoaded('category') && $this->category?->parameter_types) {
                 $orderIds = array_map('intval', explode(',', $this->category->parameter_types));
-                usort($parameters, fn($a,$b) => (array_search($a['id'],$orderIds) ?? PHP_INT_MAX) <=> (array_search($b['id'],$orderIds) ?? PHP_INT_MAX));
+                usort($parameters, fn ($a, $b) => (array_search($a['id'], $orderIds) ?? PHP_INT_MAX) <=> (array_search($b['id'], $orderIds) ?? PHP_INT_MAX));
             }
 
             return $parameters;
         });
     }
 
-
     public function getAssignFacilitiesAttribute()
     {
         $cacheKey = "property_assign_facilities_{$this->id}";
 
-        return Cache::rememberForever($cacheKey, function() {
+        return Cache::rememberForever($cacheKey, function () {
             $assignFacilitiesQuery = $this->assignfacilities()->with('outdoorfacilities.translations')->get();
             $assignFacilitiesData = [];
 
             foreach ($assignFacilitiesQuery as $facility) {
-                if($facility->outdoorfacilities){
+                if ($facility->outdoorfacilities) {
                     $assignFacilitiesData[] = [
                         'id' => $facility->id,
                         'property_id' => $facility->property_id,
@@ -362,7 +431,7 @@ class Property extends Model
                         'name' => $facility->outdoorfacilities->name,
                         'image' => $facility->outdoorfacilities->image,
                         'translated_name' => $facility->outdoorfacilities->translated_name,
-                        'translations' => $facility->outdoorfacilities->translations->map(fn($t) => [
+                        'translations' => $facility->outdoorfacilities->translations->map(fn ($t) => [
                             'language_id' => $t->language_id,
                             'value' => $t->value,
                         ])->toArray(),
@@ -374,21 +443,22 @@ class Property extends Model
         });
     }
 
-
     public function getDocumentsAttribute()
     {
-        return PropertiesDocument::select('id', 'property_id', 'name', 'type')->where('property_id', $this->id)->get()->map(function($document){
+        return PropertiesDocument::select('id', 'property_id', 'name', 'type')->where('property_id', $this->id)->get()->map(function ($document) {
             $document->id = $document->id;
             $document->file_name = $document->getRawOriginal('name');
             $document->file = $document->name;
             unset($document->name);
+
             return $document;
         });
     }
 
-    public function getIsUserVerifiedAttribute(){
-        return $this->whereHas('customer.verify_customer',function($query){
-            $query->where(['user_id' => $this->added_by, 'status' => 'success']);
+    public function getIsUserVerifiedAttribute()
+    {
+        return $this->whereHas('customer.verifyCustomer', function ($query) {
+            $query->where(['user_id' => $this->added_by, 'status' => 'approved']);
         })->count() ? true : false;
     }
 
@@ -403,13 +473,12 @@ class Property extends Model
 
         // Check if there is no advertisement or if the advertisement has expired
         $adsQuery = $this->advertisement()->where('property_id', $id);
-        $hasExpiredAdvertisement = !$adsQuery->exists() || !$adsQuery->where('status', '!=', 3)->exists();
+        $hasExpiredAdvertisement = ! $adsQuery->exists() || ! $adsQuery->where('status', '!=', 3)->exists();
 
         return $isPropertyTypeValid && $hasExpiredAdvertisement;
     }
 
-
-     /**
+    /**
      * Get translated name attribute
      */
     public function getTranslatedTitleAttribute()
@@ -417,7 +486,7 @@ class Property extends Model
         return HelperService::getTranslatedData($this, $this->title, 'title');
     }
 
-     /**
+    /**
      * Get translated name attribute
      */
     public function getTranslatedDescriptionAttribute()
@@ -427,7 +496,14 @@ class Property extends Model
 
     protected $casts = [
         'category_id' => 'integer',
-        'status' => 'integer'
+        'status' => 'integer',
+        'is_premium' => 'boolean',
+        'total_click' => 'integer',
+        'favourite_count' => 'integer',
+        'bedrooms' => 'integer',
+        'bathrooms' => 'integer',
+        'build_area' => 'integer',
+        'land_area' => 'integer',
     ];
 
     /**
@@ -437,19 +513,42 @@ class Property extends Model
     {
         try {
             $rawImage = $this->getRawOriginal('title_image');
-            if (!$rawImage) {
+            if (! $rawImage) {
                 return null;
             }
 
-            $propertyImagePath = config('global.PROPERTY_TITLE_IMG_PATH') . $rawImage;
-            $cacheKey = 'blur_property_title_image_' . $this->id;
+            $propertyImagePath = config('global.PROPERTY_TITLE_IMG_PATH').$rawImage;
+            $cacheKey = 'blur_property_title_image_'.$this->id;
             $blurUrl = FileService::getCachedBlurImageUrl($propertyImagePath, $cacheKey);
+
             return $blurUrl;
         } catch (Exception $e) {
-            Log::error('Error generating low-quality image: ' . $e->getMessage());
+            Log::error('Error generating low-quality image: '.$e->getMessage());
+
             return null;
         }
     }
 
+    public function getVideoLinkAttribute($value)
+    {
+        if ($this->video_type == self::VIDEO_CUSTOM && ! empty($value)) {
+            $path = config('global.PROPERTY_VIDEO_PATH').$value;
 
+            return FileService::getFileUrl($path);
+        }
+
+        return $value;
+    }
+
+    public function getIsExpiredAttribute()
+    {
+        return ($this->expiry_date !== null && $this->expiry_date < now()->startOfDay()) ? 1 : 0;
+    }
+
+    public function scopeOnlyActive($query)
+    {
+        return $query->where(['status' => 1, 'request_status' => 'approved'])->where(function ($q) {
+            $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
+        });
+    }
 }

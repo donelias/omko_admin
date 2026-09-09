@@ -14,17 +14,17 @@ return new class extends Migration
     public function up()
     {
         Schema::table('projects', function (Blueprint $table) {
-            if (!Schema::hasColumn('projects', 'slug_id')) {
+            if (! Schema::hasColumn('projects', 'slug_id')) {
                 Schema::table('projects', function (Blueprint $table) {
                     $table->text('slug_id');
                 });
             }
-            if (!Schema::hasColumn('projects', 'category_id')) {
+            if (! Schema::hasColumn('projects', 'category_id')) {
                 Schema::table('projects', function (Blueprint $table) {
                     $table->foreignId('category_id')->references('id')->on('categories')->onDelete('cascade');
                 });
             }
-            if (!Schema::hasColumn('projects', 'status')) {
+            if (! Schema::hasColumn('projects', 'status')) {
                 Schema::table('projects', function (Blueprint $table) {
                     $table->boolean('status')->default(0);
                 });

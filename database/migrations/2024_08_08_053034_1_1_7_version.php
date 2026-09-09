@@ -1,13 +1,13 @@
 <?php
 
-use App\Models\Slider;
 use App\Models\Property;
+use App\Models\Slider;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use function Laravel\Prompts\table;
 use Illuminate\Support\Facades\Schema;
 
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Database\Migrations\Migration;
+use function Laravel\Prompts\table;
 
 return new class extends Migration
 {
@@ -17,18 +17,18 @@ return new class extends Migration
     public function up(): void
     {
         // Add Required Column in parameters table
-        if (!Schema::hasColumn('parameters', 'is_required')) {
+        if (! Schema::hasColumn('parameters', 'is_required')) {
             Schema::table('parameters', function (Blueprint $table) {
                 $table->boolean('is_required')->default(0)->after('image');
             });
         }
 
         // Create Properties Documents Table
-        if (!Schema::hasTable('properties_documents')) {
+        if (! Schema::hasTable('properties_documents')) {
             Schema::create('properties_documents', function (Blueprint $table) {
                 $table->id();
                 $table->foreignId('property_id')->references('id')->on('propertys')->onDelete('cascade');
-                $table->string('name',255)->comment('file name with folder');
+                $table->string('name', 255)->comment('file name with folder');
                 $table->string('type')->comment('file type');
                 $table->timestamps();
                 $table->softDeletes();
@@ -36,9 +36,9 @@ return new class extends Migration
         }
 
         // Make property id and category id nullable and Add Type , Show Property Details, link and default data Column in Slider Table
-        if (!Schema::hasColumn('sliders', 'type')) {
+        if (! Schema::hasColumn('sliders', 'type')) {
             Schema::table('sliders', function (Blueprint $table) {
-                $table->enum('type',[1,2,3,4])->after('id')->comment('1 - only image, 2 - category, 3 - property, 4 - link');
+                $table->enum('type', [1, 2, 3, 4])->after('id')->comment('1 - only image, 2 - category, 3 - property, 4 - link');
                 $table->bigInteger('category_id')->nullable(true)->change();
                 $table->bigInteger('propertys_id')->nullable(true)->change();
                 $table->boolean('show_property_details')->after('propertys_id')->default(false);
@@ -51,7 +51,7 @@ return new class extends Migration
             DB::table('sliders')->update(['type' => 3]);
 
             // Add Slider Default Data
-            $slider = new Slider();
+            $slider = new Slider;
             $slider->type = 1;
             $slider->image = null;
             $slider->default_data = true;
@@ -59,7 +59,7 @@ return new class extends Migration
         }
 
         // Create Faq Table
-        if (!Schema::hasTable('faqs')) {
+        if (! Schema::hasTable('faqs')) {
             Schema::create('faqs', function (Blueprint $table) {
                 $table->id();
                 $table->text('question');
@@ -71,7 +71,7 @@ return new class extends Migration
         }
 
         // City Images
-        if (!Schema::hasTable('city_images')) {
+        if (! Schema::hasTable('city_images')) {
             Schema::create('city_images', function (Blueprint $table) {
                 $table->id();
                 $table->string('city')->unique();
@@ -81,15 +81,14 @@ return new class extends Migration
                 $table->softDeletes();
             });
 
-
             $propertiesCityData = Property::select('city')->groupBy('city')->where('status', 1)->pluck('city');
-            $citiesData = array();
+            $citiesData = [];
             foreach ($propertiesCityData as $propertyCity) {
-                $citiesData[] = array(
+                $citiesData[] = [
                     'city' => $propertyCity,
-                );
+                ];
             }
-            DB::table('city_images')->upsert($citiesData,'city');
+            DB::table('city_images')->upsert($citiesData, 'city');
 
         }
     }
@@ -115,7 +114,7 @@ return new class extends Migration
             Schema::table('sliders', function (Blueprint $table) {
 
                 // Delete Default Data entry
-                Slider::where('default_data',true)->delete();
+                Slider::where('default_data', true)->delete();
 
                 // Reverse other changes
                 $table->dropColumn('type');
