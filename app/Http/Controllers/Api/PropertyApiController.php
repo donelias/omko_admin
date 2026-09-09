@@ -3890,4 +3890,58 @@ class PropertyApiController extends Controller
 
         return null;
     }
+
+    public function updateUnitStatus(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'property_ids' => 'required|string',
+            'unit_status' => 'required|in:available,low_stock,sold_out,inactive',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponseService::errorResponse($validator->errors()->first());
+        }
+
+        try {
+            $propertyIds = explode(',', $request->property_ids);
+            $unitStatus = $request->unit_status;
+            $updated = 0;
+
+            foreach ($propertyIds as $id) {
+                $property = Property::find($id);
+                if (! $property) {
+                    continue;
+                }
+
+                $property->unit_status = $unitStatus;
+
+                switch ($unitStatus) {
+                    case 'sold_out':
+                        $property->available_units = 0;
+                        break;
+                    case 'available':
+                        $property->available_units = $property->total_units ?? 1;
+                        break;
+                    case 'low_stock':
+                        if (($property->available_units ?? 0) > 3) {
+                            $property->available_units = 3;
+                        } elseif ($property->available_units === null) {
+                            $property->available_units = 1;
+                        }
+                        break;
+                }
+
+                $property->save();
+                $updated++;
+            }
+
+            return ApiResponseService::successResponse('Unit status updated successfully', [
+                'updated' => $updated,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error updating unit status: '.$e->getMessage());
+
+            return ApiResponseService::errorResponse('Failed to update unit status');
+        }
+    }
 }

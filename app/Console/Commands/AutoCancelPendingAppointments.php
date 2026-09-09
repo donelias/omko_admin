@@ -6,6 +6,7 @@ use App\Models\AgentBookingPreference;
 use App\Models\Appointment;
 use App\Models\AppointmentCancellation;
 use App\Services\AppointmentNotificationService;
+use App\Services\ProjectUnitInventoryService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -79,6 +80,15 @@ class AutoCancelPendingAppointments extends Command
                             'reason' => $reason,
                             'cancelled_by' => 'system',
                         ]);
+
+                        $inventoryService = app(ProjectUnitInventoryService::class);
+                        $inventoryService->releaseForAppointment(
+                            $appt,
+                            'expire',
+                            'system',
+                            null,
+                            $reason
+                        );
 
                         DB::commit();
 

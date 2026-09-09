@@ -91,6 +91,7 @@ class HomepageApiController extends Controller
                     'state',
                     'country',
                     'price',
+                    'currency',
                     'propery_type',
                     'title',
                     'title_image',
@@ -130,7 +131,8 @@ class HomepageApiController extends Controller
                 $propertyMapper = function ($propertyData) {
                     $propertyData->promoted = $propertyData->is_promoted;
                     $propertyData->property_type = $propertyData->propery_type;
-                    $propertyData->is_premium = $propertyData->is_premium == 1;
+$propertyData->is_premium = $propertyData->is_premium == 1;
+                    $propertyData->currency = strtoupper($propertyData->currency ?? 'USD');
                     $propertyData->parameters = $propertyData->parameters;
                     $propertyData->category->translated_name = $propertyData->category->translated_name;
                     $propertyData->translated_title = $propertyData->translated_title;
@@ -273,6 +275,7 @@ class HomepageApiController extends Controller
                 'state',
                 'country',
                 'price',
+                'currency',
                 'propery_type',
                 'title',
                 'title_image',
@@ -304,6 +307,7 @@ class HomepageApiController extends Controller
                 $propertyData->promoted = $propertyData->is_promoted;
                 $propertyData->property_type = $propertyData->propery_type;
                 $propertyData->is_premium = $propertyData->is_premium == 1;
+                $propertyData->currency = strtoupper($propertyData->currency ?? 'USD');
                 $propertyData->parameters = $propertyData->parameters;
                 if ($propertyData->category) {
                     $propertyData->category->translated_name = $propertyData->category->translated_name;

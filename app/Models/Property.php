@@ -61,6 +61,14 @@ class Property extends Model
         'is_demo',
         'edit_reason',
         'role_context',
+        'project_id',
+        'is_project_unit',
+        'unit_code',
+        'total_units',
+        'available_units',
+        'sold_units',
+        'reserved_units',
+        'unit_status',
     ];
 
     protected $hidden = [

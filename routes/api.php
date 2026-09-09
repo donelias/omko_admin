@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\ChatApiController;
 use App\Http\Controllers\Api\ContentApiController;
 use App\Http\Controllers\Api\FavouriteApiController;
+use App\Http\Controllers\Api\FinancialEntityApiController;
 use App\Http\Controllers\Api\HomepageApiController;
 use App\Http\Controllers\Api\FreeMapApiController;
 use App\Http\Controllers\Api\LeadApiController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Api\NotificationApiController;
 use App\Http\Controllers\Api\PackageApiController;
 use App\Http\Controllers\Api\PaymentApiController;
 use App\Http\Controllers\Api\PersonalisationApiController;
+use App\Http\Controllers\Api\PreQualificationApiController;
 use App\Http\Controllers\Api\ProfileApiController;
 use App\Http\Controllers\Api\ProjectApiController;
 use App\Http\Controllers\Api\ProjectInventoryApiController;
@@ -27,6 +29,7 @@ use App\Http\Controllers\Api\PropertyApiController;
 use App\Http\Controllers\Api\SettingsApiController;
 use App\Http\Controllers\Api\StoryApiController;
 use App\Http\Controllers\Api\VerificationApiController;
+use App\Http\Controllers\Api\ExchangeRateController;
 use App\Http\Controllers\PriceIntelligenceController;
 use App\Http\Controllers\ApiController;
 use App\Http\Controllers\GeminiAIController;
@@ -57,6 +60,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('delete_property', [PropertyApiController::class, 'delete_property'])->name('delete-property');
     Route::post('interested_users', [PropertyApiController::class, 'interested_users'])->name('interested-users');
     Route::post('change-property-status', [PropertyApiController::class, 'changePropertyStatus'])->name('change-property-status');
+    Route::post('update-unit-status', [PropertyApiController::class, 'updateUnitStatus'])->name('update-unit-status');
+    Route::post('update-plan-status', [ProjectApiController::class, 'updatePlanStatus'])->name('update-plan-status');
 
     Route::get('get-added-properties', [PropertyApiController::class, 'getAddedProperties'])->name('get-added-properties');
 
@@ -126,6 +131,9 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('post_project', [ProjectApiController::class, 'post_project'])->name('post-project');
     Route::post('delete_project', [ProjectApiController::class, 'delete_project'])->name('delete-project');
     Route::post('change-project-status', [ProjectApiController::class, 'changeProjectStatus'])->name('change-project-status');
+    Route::post('upload-project-document', [ProjectApiController::class, 'uploadProjectDocument'])->name('upload-project-document');
+    Route::post('preview-import-units', [ProjectApiController::class, 'previewImport'])->name('preview-import-units');
+    Route::post('bulk-import-units', [ProjectApiController::class, 'bulkImportUnits'])->name('bulk-import-units');
     /*********************************************************************** */
 
     /** Stories — agent upload/delete (auth:sanctum + agent) */
@@ -380,6 +388,21 @@ Route::get('get-projects', [ProjectApiController::class, 'getProjects'])->name('
 Route::get('get-project-detail', [ProjectApiController::class, 'getProjectDetail'])->name('get-project-detail');
 /*********************************************************************** */
 
+/** Financial Entities */
+Route::get('banks', [FinancialEntityApiController::class, 'banks'])->name('banks');
+Route::get('cooperatives', [FinancialEntityApiController::class, 'cooperatives'])->name('cooperatives');
+Route::get('financial-advisors', [FinancialEntityApiController::class, 'advisors'])->name('financial-advisors');
+/*********************************************************************** */
+
+/** Pre-Qualification (authenticated) */
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('pre-qualification', [PreQualificationApiController::class, 'store'])->name('pre-qualification.store');
+    Route::get('pre-qualifications', [PreQualificationApiController::class, 'index'])->name('pre-qualifications.index');
+    Route::get('pre-qualifications/{id}', [PreQualificationApiController::class, 'show'])->name('pre-qualifications.show');
+    Route::post('agent/pre-qualification', [PreQualificationApiController::class, 'agentStore'])->name('agent.pre-qualification.store');
+});
+/*********************************************************************** */
+
 /** Package */
 // Route::get('get_package', [ApiController::class, 'get_package']);
 Route::get('get-package', [PackageApiController::class, 'getPackages'])->name('get-package');
@@ -429,4 +452,8 @@ Route::group(['middleware' => ['user']], function () {
 Route::withoutMiddleware(ActiveRoleMiddleware::class)->group(function () {
     Route::get('get-agent-packages', [PackageApiController::class, 'getAgentPackages'])->name('get-agent-packages');
 });
+/*********************************************************************** */
+
+/** Tasa de cambio */
+Route::get('/exchange-rate', [ExchangeRateController::class, 'getUsdToDop']);
 /*********************************************************************** */

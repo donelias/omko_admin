@@ -23,6 +23,7 @@
         "mahesh-kerai/update-generator": "^3.1",
         "nesbot/carbon": "^2.72",
         "opcodesio/log-viewer": "^3.10",
+        "openspout/openspout": "^5.7",
         "php-webdriver/webdriver": "^1.14",
         "propaganistas/laravel-phone": "^5.3",
         "razorpay/razorpay": "2.*",

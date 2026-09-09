@@ -20,6 +20,7 @@ use App\Models\VerifyCustomer;
 use App\Services\ApiResponseService;
 use App\Services\AppointmentNotificationService;
 use App\Services\HelperService;
+use App\Services\ProjectUnitInventoryService;
 use App\Services\ResponseService;
 use Carbon\Carbon;
 use DateTimeZone;
@@ -31,6 +32,13 @@ use Illuminate\Support\Facades\Validator;
 
 class AppointmentApiController extends Controller
 {
+    protected ProjectUnitInventoryService $projectUnitInventoryService;
+
+    public function __construct(ProjectUnitInventoryService $projectUnitInventoryService)
+    {
+        $this->projectUnitInventoryService = $projectUnitInventoryService;
+    }
+
     public function storeBookingPreferences(Request $request)
     {
         try {
@@ -926,6 +934,19 @@ class AppointmentApiController extends Controller
             $appointmentIds = [];
 
             foreach ($appointments as $appt) {
+                $inventoryRelease = $this->projectUnitInventoryService->releaseForAppointment(
+                    $appt,
+                    'cancel',
+                    'agent',
+                    $loggedInUser->id,
+                    $defaultCancelReason
+                );
+                if (! $inventoryRelease['success']) {
+                    DB::rollBack();
+
+                    return ApiResponseService::validationError($inventoryRelease['message'] ?? trans('Unable to update unit inventory.'));
+                }
+
                 $cancelData[] = [
                     'appointment_id' => $appt->id,
                     'cancelled_by' => 'agent',
@@ -1814,6 +1835,20 @@ class AppointmentApiController extends Controller
                 $isAdminAgent ? $agent : null
             );
 
+            $inventoryReserve = $this->projectUnitInventoryService->reserveForAppointment(
+                $property,
+                $appointment->id,
+                'user',
+                $userId,
+                'Reservation created via createAppointment'
+            );
+
+            if (! $inventoryReserve['success']) {
+                DB::rollBack();
+
+                return ApiResponseService::validationError($inventoryReserve['message'] ?? trans('This unit is not available for reservation.'));
+            }
+
             DB::commit();
 
             return ApiResponseService::successResponse(trans('Appointment created successfully'), $appointment);
@@ -2153,6 +2188,20 @@ class AppointmentApiController extends Controller
                     'reason' => $reason,
                     'cancelled_by' => $isAgent ? 'agent' : 'user',
                 ]);
+
+                $inventoryRelease = $this->projectUnitInventoryService->releaseForAppointment(
+                    $appointment,
+                    'cancel',
+                    $isAgent ? 'agent' : 'user',
+                    $loggedInUser->id,
+                    $reason
+                );
+
+                if (! $inventoryRelease['success']) {
+                    DB::rollBack();
+
+                    return ApiResponseService::validationError($inventoryRelease['message'] ?? trans('Unable to update unit inventory.'));
+                }
             }
 
             $changedBy = $isAgent ? 'agent' : 'user';
@@ -2460,8 +2509,24 @@ class AppointmentApiController extends Controller
             $appointments = Appointment::where(['agent_id' => $agentId, 'user_id' => $userId])->with('property:id,title')->get();
             if (collect($appointments)->isNotEmpty()) {
                 $appointmentIds = $appointments->pluck('id');
+
+                foreach ($appointments as $appointment) {
+                    $inventoryRelease = $this->projectUnitInventoryService->releaseForAppointment(
+                        $appointment,
+                        'reject',
+                        'system',
+                        null,
+                        $reason
+                    );
+                    if (! $inventoryRelease['success']) {
+                        DB::rollBack();
+
+                        return ApiResponseService::validationError($inventoryRelease['message'] ?? trans('Unable to update unit inventory.'));
+                    }
+                }
+
                 // Cancel appointments
-                Appointment::whereIn('id', $appointmentIds)->update(['status' => 'cancelled']);
+                Appointment::whereIn('id', $appointmentIds)->update(['status' => 'cancelled', 'last_status_updated_by' => 'system']);
                 // Create appointment cancellations with reason
                 $appointmentCancellationData = [];
                 foreach ($appointmentIds as $appointmentId) {

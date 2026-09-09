@@ -15,6 +15,7 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class SettingsApiController extends Controller
@@ -148,7 +149,7 @@ class SettingsApiController extends Controller
     {
         try {
             // Types for web requirement only
-            $types = ['company_name', 'currency_symbol', 'default_language', 'number_with_suffix', 'web_maintenance_mode', 'company_tel', 'company_tel2', 'system_version', 'web_favicon', 'web_logo', 'web_footer_logo', 'web_placeholder_logo', 'company_email', 'latitude', 'longitude', 'company_address', 'system_color', 'iframe_link', 'facebook_id', 'instagram_id', 'twitter_id', 'youtube_id', 'linkedin_id', 'playstore_id', 'sell_background', 'appstore_id', 'category_background', 'web_maintenance_mod', 'seo_settings', 'company_tel1', 'sell_web_color', 'sell_web_background_color', 'rent_web_color', 'rent_web_background_color', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider','auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'allow_cookies', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'homepage_location_alert_status', 'email_password_login', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_whatsapp_button','show_premium_toggle', 'show_exact_location', 'map_service_provider', 'story_max_duration', 'story_video_max_size'];
+            $types = ['company_name', 'currency_symbol', 'default_language', 'number_with_suffix', 'web_maintenance_mode', 'company_tel', 'company_tel2', 'system_version', 'web_favicon', 'web_logo', 'web_footer_logo', 'web_placeholder_logo', 'company_email', 'latitude', 'longitude', 'company_address', 'system_color', 'iframe_link', 'facebook_id', 'instagram_id', 'twitter_id', 'youtube_id', 'linkedin_id', 'playstore_id', 'sell_background', 'appstore_id', 'category_background', 'web_maintenance_mod', 'seo_settings', 'company_tel1', 'place_api_key', 'stripe_publishable_key', 'paystack_public_key', 'sell_web_color', 'sell_web_background_color', 'rent_web_color', 'rent_web_background_color', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'allow_cookies', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'homepage_location_alert_status', 'email_password_login', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_whatsapp_button', 'show_premium_toggle', 'show_exact_location', 'map_service_provider', 'story_max_duration', 'story_video_max_size'];
 
             // Query the Types to Settings Table to get its data
             $result = Setting::whereIn('type', $types)->with('translations')->select('id', 'type', 'data')->get();
@@ -245,21 +246,21 @@ class SettingsApiController extends Controller
                 $settingsData['img_placeholder'] = url('/assets/images/placeholder.svg');
 
                 // Homepage Section Data
-                // $sections = HomepageSection::where('is_active', 1)
-                //     ->orderBy('sort_order')
-                //     ->with('translations')
-                //     ->get()
-                //     ->map(function ($section) {
-                //         return [
-                //             'id' => $section->id,
-                //             'type' => $section->section_type,
-                //             'title' => $section->title,
-                //             'translated_title' => $section->translated_title,
-                //             'sort_order' => $section->sort_order,
-                //             'is_active' => $section->is_active,
-                //         ];
-                //     });
-                // $settingsData['homepage_sections'] = $sections;
+                $sections = HomepageSection::where('is_active', 1)
+                    ->orderBy('sort_order')
+                    ->with('translations')
+                    ->get()
+                    ->map(function ($section) {
+                        return [
+                            'id' => $section->id,
+                            'type' => $section->section_type,
+                            'title' => $section->title,
+                            'translated_title' => $section->translated_title,
+                            'sort_order' => $section->sort_order,
+                            'is_active' => $section->is_active,
+                        ];
+                    });
+                $settingsData['homepage_sections'] = $sections;
 
                 // if Token is passed of current user.
                 if (collect(Auth::guard('sanctum')->user())->isNotEmpty()) {
@@ -282,6 +283,15 @@ class SettingsApiController extends Controller
                     } else {
                         $settingsData['is_active'] = false;
                     }
+
+                    // Check the subscription
+                    if (collect($customerData)->isNotEmpty()) {
+                        $settingsData['is_premium'] = $customerData->is_premium == 1 ? true : ($customerData->subscription == 1 ? true : false);
+                        $settingsData['subscription'] = $customerData->subscription == 1 ? true : false;
+                    } else {
+                        $settingsData['is_premium'] = false;
+                        $settingsData['subscription'] = false;
+                    }
                 }
 
                 // Check the min_price and max_price
@@ -289,10 +299,10 @@ class SettingsApiController extends Controller
                 $settingsData['max_price'] = DB::table('propertys')->selectRaw('MAX(price) as max_price')->value('max_price');
 
                 // Check the features available
-                // $settingsData['features_available'] = [
-                //     'premium_properties' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'), true, true, $request->user_active_role)['feature_available'],
-                //     'premium_projects' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROJECTS.TYPE'), true, true, $request->user_active_role)['feature_available'],
-                // ];
+                $settingsData['features_available'] = [
+                    'premium_properties' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'), true, true, $request->user_active_role)['feature_available'],
+                    'premium_projects' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROJECTS.TYPE'), true, true, $request->user_active_role)['feature_available'],
+                ];
 
                 // Get Languages Data
                 $specificSelect = ['id', 'code', 'name'];
@@ -310,6 +320,12 @@ class SettingsApiController extends Controller
 
             return response()->json($response);
         } catch (Exception $e) {
+            Log::error('getWebSettings error: '.$e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             $response = [
                 'error' => true,
                 'message' => trans('Something Went Wrong'),
@@ -322,7 +338,7 @@ class SettingsApiController extends Controller
     public function getAppSettings(Request $request)
     {
         try {
-            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address','playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'auto_approve', 'verification_required_for_user', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_whatsapp_button', 'show_premium_toggle', 'show_exact_location', 'agent_auto_approve', 'verification_required_for_agent', 'map_service_provider', 'story_max_duration', 'story_video_max_size'];
+            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address', 'place_api_key', 'playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_whatsapp_button', 'show_premium_toggle', 'show_exact_location', 'agent_auto_approve', 'verification_required_for_agent', 'map_service_provider', 'story_max_duration', 'story_video_max_size'];
 
             // Query the Types to Settings Table to get its data
             $result = Setting::whereIn('type', $types)->with('translations')->select('id', 'type', 'data')->get();
@@ -431,6 +447,15 @@ class SettingsApiController extends Controller
                     } else {
                         $settingsData['is_active'] = false;
                     }
+
+                    // Check the subscription
+                    if (collect($customerData)->isNotEmpty()) {
+                        $settingsData['is_premium'] = $customerData->is_premium == 1 ? true : ($customerData->subscription == 1 ? true : false);
+                        $settingsData['subscription'] = $customerData->subscription == 1 ? true : false;
+                    } else {
+                        $settingsData['is_premium'] = false;
+                        $settingsData['subscription'] = false;
+                    }
                 }
 
                 // Check the min_price and max_price
@@ -438,27 +463,27 @@ class SettingsApiController extends Controller
                 $settingsData['max_price'] = DB::table('propertys')->selectRaw('MAX(price) as max_price')->value('max_price');
 
                 // Homepage Section Data
-                // $sections = HomepageSection::where('is_active', 1)
-                //     ->orderBy('sort_order')
-                //     ->with('translations')
-                //     ->get()
-                //     ->map(function ($section) {
-                //         return [
-                //             'id' => $section->id,
-                //             'type' => $section->section_type,
-                //             'title' => $section->title,
-                //             'translated_title' => $section->translated_title,
-                //             'sort_order' => $section->sort_order,
-                //             'is_active' => $section->is_active,
-                //         ];
-                //     });
-                // $settingsData['homepage_sections'] = $sections;
+                $sections = HomepageSection::where('is_active', 1)
+                    ->orderBy('sort_order')
+                    ->with('translations')
+                    ->get()
+                    ->map(function ($section) {
+                        return [
+                            'id' => $section->id,
+                            'type' => $section->section_type,
+                            'title' => $section->title,
+                            'translated_title' => $section->translated_title,
+                            'sort_order' => $section->sort_order,
+                            'is_active' => $section->is_active,
+                        ];
+                    });
+                $settingsData['homepage_sections'] = $sections;
 
                 // Check the features available
-                // $settingsData['features_available'] = [
-                //     'premium_properties' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'), true, true, $request->user_active_role)['feature_available'],
-                //     'premium_projects' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROJECTS.TYPE'), true, true, $request->user_active_role)['feature_available'],
-                // ];
+                $settingsData['features_available'] = [
+                    'premium_properties' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'), true, true, $request->user_active_role)['feature_available'],
+                    'premium_projects' => HelperService::checkPackageLimit(config('constants.FEATURES.PREMIUM_PROJECTS.TYPE'), true, true, $request->user_active_role)['feature_available'],
+                ];
 
                 // Get Languages Data
                 $specificSelect = ['id', 'code', 'name'];
@@ -476,10 +501,15 @@ class SettingsApiController extends Controller
 
             return response()->json($response);
         } catch (Exception $e) {
+            Log::error('getAppSettings error: '.$e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             $response = [
                 'error' => true,
                 'message' => trans('Something Went Wrong'),
-                'data' => $e->getMessage(),
             ];
 
             return response()->json($response, 500);
@@ -489,7 +519,7 @@ class SettingsApiController extends Controller
     public function getSystemSettings(Request $request)
     {
         try {
-            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address', 'map_service_provider', 'playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_premium_toggle', 'show_exact_location', 'story_max_duration', 'story_video_max_size'];
+            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address', 'place_api_key', 'map_service_provider', 'playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_premium_toggle', 'show_exact_location', 'story_max_duration', 'story_video_max_size'];
 
             $data = Setting::whereIn('type', $types)->get();
 
