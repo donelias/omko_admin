@@ -22,20 +22,6 @@
       0 => 'Barryvdh\\DomPDF\\ServiceProvider',
     ),
   ),
-  'barryvdh/laravel-ide-helper' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Barryvdh\\LaravelIdeHelper\\IdeHelperServiceProvider',
-    ),
-  ),
-  'beyondcode/laravel-query-detector' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'BeyondCode\\QueryDetector\\QueryDetectorServiceProvider',
-    ),
-  ),
   'intervention/image' => 
   array (
     'aliases' => 
@@ -56,13 +42,6 @@
     'providers' => 
     array (
       0 => 'KingFlamez\\Rave\\RaveServiceProvider',
-    ),
-  ),
-  'laravel/sail' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Laravel\\Sail\\SailServiceProvider',
     ),
   ),
   'laravel/sanctum' => 
@@ -124,13 +103,6 @@
     'providers' => 
     array (
       0 => 'Carbon\\Laravel\\ServiceProvider',
-    ),
-  ),
-  'nunomaduro/collision' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'NunoMaduro\\Collision\\Adapters\\Laravel\\CollisionServiceProvider',
     ),
   ),
   'nunomaduro/termwind' => 

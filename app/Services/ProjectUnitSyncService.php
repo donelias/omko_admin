@@ -89,6 +89,12 @@ class ProjectUnitSyncService
                 $property->total_units = $totalUnits;
                 $property->available_units = $availableUnits;
 
+                $soldUnits = array_key_exists('sold_units', $plan) ? $this->toNullableInt($plan['sold_units']) : $property->sold_units;
+                $reservedUnits = array_key_exists('reserved_units', $plan) ? $this->toNullableInt($plan['reserved_units']) : $property->reserved_units;
+
+                $property->sold_units = $soldUnits;
+                $property->reserved_units = $reservedUnits;
+
                 $requestedStatus = $plan['unit_status'] ?? null;
                 $property->unit_status = $this->resolveUnitStatus($requestedStatus, $availableUnits);
 

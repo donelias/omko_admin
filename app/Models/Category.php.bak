@@ -91,8 +91,7 @@ class Category extends Model
 
     public function getParametersAttribute()
     {
-        $raw = (string) $this->getRawOriginal('parameter_types');
-        $parameterTypes = explode(',', $raw);
+        $parameterTypes = explode(',', $this->parameter_types);
         if (! empty($parameterTypes)) {
             $parameters = parameter::whereIn('id', $parameterTypes)->with('translations')->get();
             $sortedParameters = $parameters->sortBy(function ($item) use ($parameterTypes) {

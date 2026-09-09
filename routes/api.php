@@ -58,6 +58,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::get('get_interested_users', [PropertyApiController::class, 'getInterestedUsers'])->name('get-interested-users');
     Route::post('remove_post_images', [PropertyApiController::class, 'remove_post_images'])->name('remove-post-images');
     Route::post('user_interested_property', [PropertyApiController::class, 'user_interested_property'])->name('user-interested-property');
+    Route::post('update-unit-status', [PropertyApiController::class, 'updateUnitStatus'])->name('update-unit-status');
+    Route::post('update-plan-status', [ProjectApiController::class, 'updatePlanStatus'])->name('update-plan-status');
 
     /*********************************************************************** */
 
@@ -114,6 +116,8 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::get('get-added-projects', [ProjectApiController::class, 'getAddedProjects'])->name('get-added-projects');
     Route::post('change-project-status', [ProjectApiController::class, 'changeProjectStatus'])->name('change-project-status');
     Route::post('upload-project-document', [ProjectApiController::class, 'uploadProjectDocument'])->name('upload-project-document');
+    Route::post('preview-import-units', [ProjectApiController::class, 'previewImport'])->name('preview-import-units');
+    Route::post('bulk-import-units', [ProjectApiController::class, 'bulkImportUnits'])->name('bulk-import-units');
     /*********************************************************************** */
 
     /** Agent Specific Action APIs */
