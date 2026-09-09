@@ -34,6 +34,7 @@ return [
     'AGENT_PROFILE_BANNER_PATH' => 'agent_banner/',
     'AGENT_WATERMARK_IMG_PATH' => 'agent_watermark/',
     'CUSTOMER_PROFILE_IMG_PATH' => 'customer_profile/',
+    'PRE_QUALIFICATION_PATH' => 'pre_qualification/',
 
     // ============================================
     // PRICE INTELLIGENCE / CONVERSIÓN DE PRECIOS
