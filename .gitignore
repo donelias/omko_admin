@@ -29,3 +29,6 @@ storage
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Published Scramble views (runtime artifact)
+resources/views/vendor/scramble/
