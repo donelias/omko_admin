@@ -80,7 +80,7 @@ class Customer extends Model implements AuthenticatableContract
      * fields. Mutates the model so name/email/profile reflect the resolved
      * agent identity for serialization, and returns the resolved values.
      *
-     * @return array{agent_name: string|null, agent_email: string|null, agent_profile_photo: string|null}
+     * @return array{id: int|null, customer_id: int|null, agent_name: string|null, agent_email: string|null, agent_profile_photo: string|null, agent_address: string|null, agent_mobile: string|null, agent_country_code: string|null, about_me: string|null, facebook_id: string|null, twitter_id: string|null, youtube_id: string|null, instagram_id: string|null, linkedin_id: string|null, created_at: mixed, updated_at: mixed}
      */
     public function applyResolvedAgentProfile(): array
     {
@@ -99,10 +99,32 @@ class Customer extends Model implements AuthenticatableContract
         $this->profile = $photo;
 
         return [
+            'id' => $agentProfile?->id,
+            'customer_id' => $this->id,
             'agent_name' => $name,
             'agent_email' => $email,
             'agent_profile_photo' => $photo,
+            'agent_address' => $agentProfile?->agent_address,
+            'agent_mobile' => $agentProfile?->agent_mobile,
+            'agent_country_code' => $agentProfile?->agent_country_code,
+            'about_me' => $agentProfile?->about_me,
+            'facebook_id' => $agentProfile?->facebook_id,
+            'twitter_id' => $agentProfile?->twitter_id,
+            'youtube_id' => $agentProfile?->youtube_id,
+            'instagram_id' => $agentProfile?->instagram_id,
+            'linkedin_id' => $agentProfile?->linkedin_id,
+            'created_at' => $agentProfile?->created_at,
+            'updated_at' => $agentProfile?->updated_at,
         ];
+    }
+
+    /**
+     * Accessor alias for applyResolvedAgentProfile() so code that reads
+     * ->resolved_agent_profile keeps working.
+     */
+    public function getResolvedAgentProfileAttribute(): array
+    {
+        return $this->applyResolvedAgentProfile();
     }
 
     public function usertokens()
