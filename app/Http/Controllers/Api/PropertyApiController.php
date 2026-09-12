@@ -266,6 +266,14 @@ class PropertyApiController extends Controller
                     //     $property_details[$key]['become_agent_status'] = $meta['become_agent_status'] ?? 'not_applied';
                     //     $property_details[$key]['user_verification_status'] = $meta['user_verification_status'] ?? 'not_applied';
                     // }
+
+                    // Meta Ads: exponer únicamente el pixel_id del agente dueño de la
+                    // propiedad (para que el front inicialice el pixel correcto). Nunca tokens.
+                    if (($request->has('id') || $request->has('slug_id')) && $key === 0 && $customerId) {
+                        $property_details[$key]['customer']['pixel_id'] = \App\Models\AgentAdIntegration::where('agent_id', $customerId)
+                            ->where('is_active', true)
+                            ->value('pixel_id');
+                    }
                 }
                 /**
                  * Check that id or slug id passed and get the similar properties data according to param passed

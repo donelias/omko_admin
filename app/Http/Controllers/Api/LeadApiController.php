@@ -3,87 +3,40 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ScoreLeadJob;
+use App\Models\Appointment;
+use App\Models\AgentBookingPreference;
 use App\Models\CrmInteraction;
 use App\Models\CrmLeadScoring;
 use App\Models\Lead;
 use App\Models\Property;
+use App\Models\User;
 use App\Services\HelperService;
+use App\Services\LeadCaptureService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class LeadApiController extends Controller
 {
     /**
      * Registra un lead de un visitante NO autenticado (guest-to-lead) para una
      * propiedad concreta, sin forzarle a crearse una cuenta o iniciar sesión.
-     * FASE 3 (T4): aumento de conversión — captura de leads anónimos.
      *
-     * El agent_id se resuelve automáticamente desde el dueño de la propiedad
-     * (propertys.added_by). origin = 'formulario'.
+     * Delega todo el pipeline (crear lead + campaña + CAPI + notificación) en
+     * LeadCaptureService para compartirlo con las citas de invitados.
      */
     public function storeGuest(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'property_id' => 'required|integer|exists:propertys,id',
-            'nombre' => 'required|string|max:191',
-            'email' => 'nullable|email|max:191',
-            'telefono' => 'nullable|string|max:191',
-            'whatsapp' => 'nullable|string|max:191',
-            'notas' => 'nullable|string|max:5000',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validator->errors()->first(),
-            ], 422);
-        }
-
-        // email y teléfono: al menos uno debe venir (para poder contactar al lead)
-        if (! $request->filled('email') && ! $request->filled('telefono') && ! $request->filled('whatsapp')) {
-            return response()->json([
-                'error' => true,
-                'message' => trans('Se requiere al menos un medio de contacto (email o teléfono)'),
-            ], 422);
-        }
-
-        $property = Property::find($request->property_id);
-        if (! $property) {
-            return response()->json([
-                'error' => true,
-                'message' => trans('Propiedad no encontrada'),
-            ], 404);
-        }
-
-        $lead = Lead::create([
-            'nombre' => $request->nombre,
-            'email' => $request->email,
-            'telefono' => $request->telefono,
-            'whatsapp' => $request->whatsapp ?? $request->telefono,
-            'property_id' => $property->id,
-            'agent_id' => $property->added_by,
-            'status' => 'nuevo',
-            'origin' => 'formulario',
-            'notas' => $request->notas,
-            'metadata' => [
-                'page' => 'property-details',
-                'ip' => $request->ip(),
-                'user_agent' => substr($request->userAgent() ?? '', 0, 500),
-            ],
-            'score' => 0,
-            'fecha_primer_contacto' => now(),
-        ]);
-
-        // FASE 7 (T1) — Calificación automática por IA en segundo plano.
-        // Si el despacho falla (config de cola, etc.), el lead ya quedó creado
-        // y solo se loguea — el registro nunca debe fallar por esta operación.
         try {
-            ScoreLeadJob::dispatch($lead->id);
-        } catch (\Throwable $e) {
-            Log::warning('storeGuest: no se pudo encolar calificación IA', ['lead_id' => $lead->id, 'error' => $e->getMessage()]);
+            $lead = LeadCaptureService::createFromRequest($request, $request->input('origin', 'formulario'));
+        } catch (ValidationException $e) {
+            return response()->json([
+                'error' => true,
+                'message' => $e->errors() ? collect($e->errors())->flatten()->first() : trans('Datos inválidos'),
+            ], 422);
         }
 
         return response()->json([
@@ -91,6 +44,147 @@ class LeadApiController extends Controller
             'message' => trans('Interest submitted successfully'),
             'data' => [
                 'id' => $lead->id,
+            ],
+        ]);
+    }
+
+    /**
+     * Solicitud de cita de un visitante SIN cuenta (guest-to-appointment).
+     *
+     * Crea primero el lead (LeadCaptureService) y luego la cita en appointments
+     * con user_id NULL + datos del visitante (guest_*) + lead_id asociado, de
+     * modo que el agente la vea junto al resto de sus citas. El slot se valida
+     * contra preferencias de horario del agente y traslapes con otras citas.
+     */
+    public function createGuestAppointment(Request $request)
+    {
+        $adminTimezone = HelperService::getSettingData('timezone') ?: 'UTC';
+        $currentDate = Carbon::now()->setTimezone($adminTimezone)->toDateString();
+
+        $validator = Validator::make($request->all(), [
+            'property_id' => 'required|integer|exists:propertys,id',
+            'nombre' => 'required|string|max:191',
+            'email' => 'nullable|email|max:191',
+            'telefono' => 'nullable|string|max:191',
+            'meeting_type' => 'required|in:phone,virtual,in_person',
+            'date' => 'required|date_format:Y-m-d|after_or_equal:'.$currentDate,
+            'start_time' => 'required|date_format:H:i',
+            'end_time' => 'required|date_format:H:i|after:start_time',
+            'notes' => 'nullable|string|max:5000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        if (! $request->filled('email') && ! $request->filled('telefono')) {
+            return response()->json([
+                'error' => true,
+                'message' => trans('Se requiere al menos un medio de contacto (email o teléfono)'),
+            ], 422);
+        }
+
+        $property = Property::with('customer')->find($request->property_id);
+        if (! $property) {
+            return response()->json(['error' => true, 'message' => trans('Propiedad no encontrada')], 404);
+        }
+
+        if ($property->expiry_date && Carbon::parse($property->expiry_date)->lt(Carbon::now()->startOfDay())) {
+            return response()->json([
+                'error' => true,
+                'message' => trans('Esta propiedad ha expirado y no puede recibir citas'),
+            ], 422);
+        }
+
+        $isAdminAgent = $property->added_by == 0;
+        if ($isAdminAgent) {
+            $agentId = User::where('type', 0)->first()->id ?? 0;
+        } else {
+            $agentId = $property->added_by;
+        }
+
+        $bookingPref = $isAdminAgent
+            ? AgentBookingPreference::where(['is_admin_data' => 1, 'admin_id' => $agentId])->first()
+            : AgentBookingPreference::where('agent_id', $agentId)->first();
+
+        $agentTimezone = $bookingPref && $bookingPref->timezone
+            ? $bookingPref->timezone
+            : (config('app.timezone') ?? 'UTC');
+
+        $slotStartAgent = Carbon::parse($request->date.' '.$request->start_time, $adminTimezone)->setTimezone($agentTimezone);
+        $slotEndAgent = Carbon::parse($request->date.' '.$request->end_time, $adminTimezone)->setTimezone($agentTimezone);
+        $startUtc = (clone $slotStartAgent)->setTimezone('UTC')->toDateTimeString();
+        $endUtc = (clone $slotEndAgent)->setTimezone('UTC')->toDateTimeString();
+
+        if ($slotEndAgent <= $slotStartAgent) {
+            return response()->json(['error' => true, 'message' => trans('La hora de fin debe ser mayor que la de inicio')], 422);
+        }
+
+        $meetingDurationMinutes = (int) ($bookingPref->meeting_duration_minutes ?? 0);
+        if ($meetingDurationMinutes > 0 && $slotStartAgent->diffInMinutes($slotEndAgent) !== $meetingDurationMinutes) {
+            return response()->json([
+                'error' => true,
+                'message' => trans('La duración del turno no corresponde a la configurada por el agente'),
+            ], 422);
+        }
+
+        // Traslape con citas existentes del agente (pending/confirmed/rescheduled).
+        $overlap = Appointment::where(function ($q) use ($agentId, $isAdminAgent) {
+            if ($isAdminAgent) {
+                $q->where('admin_id', $agentId)->where('is_admin_appointment', 1);
+            } else {
+                $q->where('agent_id', $agentId);
+            }
+        })
+            ->whereIn('status', ['pending', 'confirmed', 'rescheduled'])
+            ->where('start_at', '<', $endUtc)
+            ->where('end_at', '>', $startUtc)
+            ->exists();
+
+        if ($overlap) {
+            return response()->json(['error' => true, 'message' => trans('El horario seleccionado no está disponible')], 422);
+        }
+
+        $lead = null;
+        try {
+            $lead = LeadCaptureService::createFromRequest($request); // origin='formulario'
+        } catch (ValidationException $e) {
+            return response()->json([
+                'error' => true,
+                'message' => $e->errors() ? collect($e->errors())->flatten()->first() : trans('Datos inválidos'),
+            ], 422);
+        }
+
+        $autoConfirm = (bool) ($bookingPref->auto_confirm ?? false);
+
+        $appointment = Appointment::create([
+            'is_admin_appointment' => $isAdminAgent ? 1 : 0,
+            'admin_id' => $isAdminAgent ? $agentId : null,
+            'agent_id' => $isAdminAgent ? null : $agentId,
+            'user_id' => null,
+            'guest_name' => $request->nombre,
+            'guest_email' => $request->email,
+            'guest_phone' => $request->telefono,
+            'lead_id' => $lead->id,
+            'property_id' => $property->id,
+            'meeting_type' => $request->meeting_type,
+            'start_at' => $startUtc,
+            'end_at' => $endUtc,
+            'status' => $autoConfirm ? 'confirmed' : 'pending',
+            'is_auto_confirmed' => $autoConfirm,
+            'last_status_updated_by' => $autoConfirm ? 'system' : 'user',
+            'notes' => $request->notes,
+        ]);
+
+        $appointment->start_at = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($adminTimezone)->format('Y-m-d H:i:s');
+        $appointment->end_at = Carbon::parse($appointment->end_at, 'UTC')->setTimezone($adminTimezone)->format('Y-m-d H:i:s');
+
+        return response()->json([
+            'error' => false,
+            'message' => trans('Cita solicitada correctamente'),
+            'data' => [
+                'appointment' => $appointment,
+                'lead_id' => $lead->id,
             ],
         ]);
     }

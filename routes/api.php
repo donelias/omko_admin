@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdIntegrationApiController;
 use App\Http\Controllers\Api\AdvertisementApiController;
 use App\Http\Controllers\Api\AgentApiController;
 use App\Http\Controllers\Api\AppointmentApiController;
@@ -183,6 +184,11 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
             // Update Meeting Type
 
         });
+
+        /** Integraciones de marketing por agente (Meta Pixel/Conversions API + WhatsApp) */
+        Route::get('agent/ad-integrations', [AdIntegrationApiController::class, 'show'])->name('ad-integrations-show');
+        Route::post('agent/ad-integrations', [AdIntegrationApiController::class, 'store'])->name('ad-integrations-store');
+        Route::post('agent/ad-integrations/test', [AdIntegrationApiController::class, 'test'])->name('ad-integrations-test');
     });
     /*********************************************************************** */
 
@@ -296,6 +302,7 @@ Route::get('get-properties-on-map', [PropertyApiController::class, 'getPropertie
 Route::get('compare-properties', [PropertyApiController::class, 'compareProperties'])->name('compare-properties');
 Route::get('get_property', [PropertyApiController::class, 'get_property'])->name('get-property');
 Route::post('lead/guest', [LeadApiController::class, 'storeGuest'])->name('lead-guest');
+Route::post('appointment/guest-request', [LeadApiController::class, 'createGuestAppointment'])->name('appointment-guest-request');
 /** Asistente inmobiliario (chatbot) — FASE 7 (T4). Público. */
 Route::post('assistant/chat', [AssistantChatController::class, 'chat'])->name('assistant-chat');
 /** Búsquedas guardadas + alertas — FASE 8 (T3). Requiere auth. */

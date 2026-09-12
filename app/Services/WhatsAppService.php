@@ -84,6 +84,47 @@ class WhatsAppService
     }
 
     /**
+     * Envía un mensaje usando credenciales por agente recibidas como parámetro.
+     * Usado para notificaciones de lead donde el token/phone son del agente
+     * (AgentAdIntegration), no del .env global.
+     */
+    public function sendWithConfig(string $mode, ?string $token, ?string $phoneId, string $to, string $text): array
+    {
+        if ($mode !== 'live' || ! $token || ! $phoneId) {
+            return $this->mockSend('text', $to, ['text' => $text]);
+        }
+
+        $url = "https://graph.facebook.com/v19.0/{$phoneId}/messages";
+
+        try {
+            $response = Http::withToken($token)
+                ->withoutVerifying()
+                ->post($url, [
+                    'messaging_product' => 'whatsapp',
+                    'to' => $to,
+                    'type' => 'text',
+                    'text' => ['preview_url' => false, 'body' => $text],
+                ]);
+
+            if ($response->successful()) {
+                return [
+                    'success' => true,
+                    'message_id' => data_get($response->json(), 'messages.0.id'),
+                    'mock' => false,
+                ];
+            }
+
+            Log::error('WhatsApp sendWithConfig failed: '.$response->body());
+
+            return ['success' => false, 'message' => 'Error enviando mensaje de WhatsApp', 'mock' => false];
+        } catch (\Throwable $e) {
+            Log::error('WhatsApp sendWithConfig exception: '.$e->getMessage());
+
+            return ['success' => false, 'message' => 'Excepción en WhatsAppService', 'mock' => false];
+        }
+    }
+
+    /**
      * Envía una plantilla aprobada (requerida para mensajes comerciales de primer contacto).
      */
     public function sendTemplate(string $to, string $templateName, array $components = []): array

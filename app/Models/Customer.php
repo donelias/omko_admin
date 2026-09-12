@@ -182,6 +182,11 @@ class Customer extends Model implements AuthenticatableContract
         return $this->hasMany(Lead::class, 'agent_id');
     }
 
+    public function ad_integration()
+    {
+        return $this->hasOne(AgentAdIntegration::class, 'agent_id');
+    }
+
     public function agent_booking_preferences()
     {
         return $this->hasOne(AgentBookingPreference::class, 'agent_id');
