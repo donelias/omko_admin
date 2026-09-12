@@ -458,7 +458,7 @@ class VerifyCustomerFormController extends Controller
             ];
         }
 
-        return view('verify-customer-form.agent-form-details', compact('customerVerification', 'sections'));
+        return view('agent-verification-form.agent-form-details', compact('customerVerification', 'sections'));
     }
 
     public function updateVerificationStatus(Request $request)
@@ -479,8 +479,6 @@ class VerifyCustomerFormController extends Controller
             $verifyCustomerData->status = $request->edit_status;
             $verifyCustomerData->save();
 
-            Log::info('Record updated. Form type: '.$verifyCustomerData->form_type);
-
             if ($request->edit_status == 'approved') {
                 $statusText = 'Approved';
 
@@ -488,7 +486,6 @@ class VerifyCustomerFormController extends Controller
                 if ($verifyCustomerData->form_type == 'become_agent') {
                     $title = 'Become Agent Request Approved';
                     $translatedMessage = 'Congratulations! Your request to become an agent has been approved.';
-                    Log::info('Setting is_agent = 1 for user: '.$verifyCustomerData->customer_id);
                     $verifyCustomerData->user->update(['is_agent' => 1]);
 
                     // Sync customer data to agent_profile
@@ -501,6 +498,7 @@ class VerifyCustomerFormController extends Controller
                             'agent_country_code' => $verifyCustomerData->user->country_code ?? '',
                             'agent_address' => $verifyCustomerData->user->address ?? '',
                             'agent_profile_photo' => $verifyCustomerData->user->getRawOriginal('profile') ?? null,
+                            // 'agent_banner' => $verifyCustomerData->user->agentProfile->getRawOriginal('agent_banner') ?? null,
                         ]
                     );
                 } else {
@@ -561,6 +559,7 @@ class VerifyCustomerFormController extends Controller
                     'type' => '1',
                     'send_type' => '0',
                     'customers_id' => $verifyCustomerData->customer_id,
+                    'role_context' => 'agent',
                 ]);
             }
 
@@ -573,7 +572,7 @@ class VerifyCustomerFormController extends Controller
 
                     // Email Template
                     $agentVerificationTemplateData = system_setting($emailTypeData['type']);
-                    $appName = env('APP_NAME') ?? 'eBroker';
+                    $appName = env('APP_NAME') ?? 'omko';
                     $variables = [
                         'app_name' => $appName,
                         'user_name' => $verifyCustomerData->user->name,
@@ -827,6 +826,7 @@ class VerifyCustomerFormController extends Controller
                         'type' => '1',
                         'send_type' => '0',
                         'customers_id' => $user->id,
+                        'role_context' => 'user',
                     ]);
                 }
 
@@ -835,7 +835,7 @@ class VerifyCustomerFormController extends Controller
                     try {
                         $emailTypeData = HelperService::getEmailTemplatesTypes('user_verification_status');
                         $userVerificationTemplateData = system_setting($emailTypeData['type']);
-                        $appName = env('APP_NAME') ?? 'eBroker';
+                        $appName = env('APP_NAME') ?? 'omko';
                         $variables = [
                             'app_name' => $appName,
                             'user_name' => $user->name,

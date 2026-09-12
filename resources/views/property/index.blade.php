@@ -21,8 +21,11 @@
             @if (has_permissions('create', 'property'))
                 <div class="card-header">
                     <div class="row ">
-                        {{-- Add Property Button --}}
-                        <div class="col-12 col-xs-12 d-flex justify-content-end">
+                        {{-- Add Property & Bulk Import Buttons --}}
+                        <div class="col-12 col-xs-12 d-flex justify-content-end gap-2">
+                            <a href="{{ route('bulk-import.property') }}" class="btn btn-success">
+                                <i class="bi bi-file-earmark-arrow-up me-1"></i>{{ __('Bulk Upload') }}
+                            </a>
                             {!! Form::open(['route' => 'property.create']) !!}
                             {{ method_field('get') }}
                             {{ Form::submit(__('Add Property'), ['class' => 'btn btn-primary']) }}
@@ -112,7 +115,7 @@
                                     <th scope="col" data-field="customer_name" data-align="center" data-sortable="false"> {{ __('Client Name') }}</th>
                                     <th scope="col" data-field="mobile" data-align="center" data-sortable="false"> {{ __('Mobile') }} </th>
                                     <th scope="col" data-field="client_address" data-align="center" data-sortable="false">{{ __('Client Address') }}</th>
-                                    <th scope="col" data-field="title" data-sortable="false" class="max-width-row">{{ __('Title') }}</th>
+                                    <th scope="col" data-field="title" data-sortable="false" data-align="center" data-width="220" data-formatter="titleFormatter">{{ __('Title') }}</th>
                                     <th scope="col" data-field="slug_id" data-visible="false" data-sortable="true" data-align="center">{{ __('Slug') }}</th>
                                     <th scope="col" data-field="address" data-align="center" data-sortable="false"> {{ __('Address') }}</th>
                                     <th scope="col" data-field="category.category" data-align="center" data-sortable="false"> {{ __('Category') }}</th>

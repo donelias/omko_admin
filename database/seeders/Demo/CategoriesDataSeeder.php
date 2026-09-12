@@ -170,6 +170,7 @@ class CategoriesDataSeeder extends Seeder
             }
         } catch (Exception $e) {
             Log::error('Error in category data seeder: '.$e->getMessage());
+            throw $e;
         }
     }
 }

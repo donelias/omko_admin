@@ -6,6 +6,7 @@ use App\Services\FileService;
 use App\Services\HelperService;
 use App\Traits\HasAppTimezone;
 use App\Traits\HasRoleContext;
+use App\Traits\HasTenantFilter;
 use App\Traits\ManageTranslations;
 use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,10 +14,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use App\Models\Projects;
 
 class Property extends Model
 {
-    use HasAppTimezone, HasFactory, HasRoleContext, ManageTranslations;
+    use HasAppTimezone, HasFactory, HasRoleContext, HasTenantFilter, ManageTranslations;
 
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
@@ -29,15 +31,6 @@ class Property extends Model
     const VIDEO_VIMEO = 2;
 
     protected $fillable = [
-        'project_id',
-        'is_project_unit',
-        'unit_code',
-        'total_units',
-        'available_units',
-        'sold_units',
-        'reserved_units',
-        'unit_status',
-        'currency',
         'category_id',
         'title',
         'slug_id',
@@ -47,6 +40,7 @@ class Property extends Model
         'propery_type',
         'rentduration',
         'price',
+        'currency',
         'title_image',
         'state',
         'country',
@@ -54,6 +48,11 @@ class Property extends Model
         'status',
         'request_status',
         'total_click',
+        'favourite_count',
+        'bedrooms',
+        'bathrooms',
+        'build_area',
+        'land_area',
         'latitude',
         'longitude',
         'three_d_image',
@@ -62,6 +61,14 @@ class Property extends Model
         'is_demo',
         'edit_reason',
         'role_context',
+        'project_id',
+        'is_project_unit',
+        'unit_code',
+        'total_units',
+        'available_units',
+        'sold_units',
+        'reserved_units',
+        'unit_status',
     ];
 
     protected $hidden = [
@@ -170,14 +177,24 @@ class Property extends Model
         });
     }
 
+    public function project()
+    {
+        return $this->belongsTo(Projects::class, 'project_id');
+    }
+
+    public function availabilitySlots()
+    {
+        return $this->hasMany(PropertyAvailability::class, 'property_id');
+    }
+
+    public function shortTermReservations()
+    {
+        return $this->hasMany(ShortTermReservation::class, 'property_id');
+    }
+
     public function category()
     {
         return $this->hasOne(Category::class, 'id', 'category_id')->select('id', 'category', 'parameter_types', 'image');
-    }
-
-    public function project()
-    {
-        return $this->belongsTo(Projects::class, 'project_id', 'id');
     }
 
     public function customer()
@@ -222,6 +239,16 @@ class Property extends Model
     public function advertisement()
     {
         return $this->hasMany(Advertisement::class)->where('for', 'property');
+    }
+
+    public function priceHistory()
+    {
+        return $this->hasMany(PriceHistory::class, 'property_id');
+    }
+
+    public function priceSuggestion()
+    {
+        return $this->hasOne(PriceSuggestion::class, 'property_id');
     }
 
     public function reject_reason()
@@ -476,16 +503,15 @@ class Property extends Model
     }
 
     protected $casts = [
-        'project_id' => 'integer',
-        'is_project_unit' => 'boolean',
-        'total_units' => 'integer',
-        'available_units' => 'integer',
-        'sold_units' => 'integer',
-        'reserved_units' => 'integer',
         'category_id' => 'integer',
         'status' => 'integer',
         'is_premium' => 'boolean',
         'total_click' => 'integer',
+        'favourite_count' => 'integer',
+        'bedrooms' => 'integer',
+        'bathrooms' => 'integer',
+        'build_area' => 'integer',
+        'land_area' => 'integer',
     ];
 
     /**
@@ -524,25 +550,13 @@ class Property extends Model
 
     public function getIsExpiredAttribute()
     {
-        return ($this->expiry_date !== null && $this->expiry_date < now()) ? 1 : 0;
+        return ($this->expiry_date !== null && $this->expiry_date < now()->startOfDay()) ? 1 : 0;
     }
 
     public function scopeOnlyActive($query)
     {
         return $query->where(['status' => 1, 'request_status' => 'approved'])->where(function ($q) {
-            $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
-        });
-    }
-
-    public function scopeProjectUnits($query)
-    {
-        return $query->where('is_project_unit', true);
-    }
-
-    public function scopeStandaloneProperties($query)
-    {
-        return $query->where(function ($q) {
-            $q->where('is_project_unit', false)->orWhereNull('is_project_unit');
+            $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
         });
     }
 }

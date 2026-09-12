@@ -120,12 +120,6 @@
                         {{ Form::label('price', __('Price') . '(' . $currency_symbol . ')', ['class' => 'form-label col-12 ']) }}
                         {{ Form::number('price', '', [ 'class' => 'form-control mt-1 ', 'placeholder' => trans('Price'), 'required' => 'true', 'min' => '1', 'id' => 'price', 'max' => '9223372036854775807' ]) }}
                     </div>
-
-                    {{-- Currency --}}
-                    <div class="control-label col-12 form-group mt-2 mandatory">
-                        {{ Form::label('currency', __('Currency'), ['class' => 'form-label col-12']) }}
-                        {{ Form::select('currency', ['USD' => 'USD', 'DOP' => 'RD$'], 'USD', ['class' => 'form-select', 'required' => true]) }}
-                    </div>
                 </div>
             </div>
         </div>
@@ -416,8 +410,17 @@
     {!! Form::close() !!}
 @endsection
 @section('script')
-    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
-    <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @if (system_setting('map_service_provider') === 'open_street_maps')
+        <script>window.MAP_SERVICE_PROVIDER = 'open_street_maps';</script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="{{ asset('assets/js/osm-maps-helper.js') }}"></script>
+        <script>jQuery(document).ready(function () { if (typeof initMap === 'function') initMap(); });</script>
+    @else
+        <script>window.MAP_SERVICE_PROVIDER = 'google_maps';</script>
+        <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
+        <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @endif
     <script type="text/javascript">
         $(document).ready(function() {
             // $("#category").val($("#category option:first").val()).trigger('change');
@@ -464,7 +467,7 @@
 
 
         function initMap() {
-            window.initBackendPlacesMap({
+            var mapOptions = {
                 mapElementId: 'map',
                 inputSelector: '#searchInput',
                 citySelector: '#city',
@@ -475,7 +478,12 @@
                 longitudeSelector: '#longitude',
                 defaultLatitudeSelector: '#default-latitude',
                 defaultLongitudeSelector: '#default-longitude'
-            });
+            };
+            if (window.MAP_SERVICE_PROVIDER === 'open_street_maps') {
+                window.initOsmPlacesMap(mapOptions);
+            } else {
+                window.initBackendPlacesMap(mapOptions);
+            }
         }
         jQuery(document).ready(function() {
             $('.select2').prepend('<option value="" selected></option>');

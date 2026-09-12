@@ -109,8 +109,8 @@ class ContentApiController extends Controller
     public function getSlider(Request $request)
     {
         $sliderData = Slider::select('id', 'type', 'image', 'web_image', 'category_id', 'propertys_id', 'show_property_details', 'link')->with(['category' => function ($query) {
-            $query->select('id,category')->where('status', 1)->with('translations');
-        }], 'property:id,title,title_image,price,propery_type as property_type')->orderBy('id', 'desc')->get()->map(function ($slider) {
+            $query->select('id', 'category')->where('status', 1)->with('translations');
+        }], 'property:id,title,title_image,price,currency,propery_type as property_type')->orderBy('id', 'desc')->get()->map(function ($slider) {
             if (collect($slider->property)->isNotEmpty()) {
                 $slider->property->parameters = $slider->property->parameters;
                 if ($slider->category) {
@@ -338,6 +338,7 @@ class ContentApiController extends Controller
             $contactrequest->first_name = $request->first_name;
             $contactrequest->last_name = $request->last_name;
             $contactrequest->email = $request->email;
+            $contactrequest->telefono = $request->telefono;
             $contactrequest->subject = $request->subject;
             $contactrequest->message = $request->message;
             $contactrequest->save();

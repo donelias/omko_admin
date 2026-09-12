@@ -79,7 +79,7 @@ class CashfreePayment implements PaymentInterface
                 'link_id' => $linkId,
                 'link_amount' => round($amount, 2),
                 'link_currency' => $this->currencyCode,
-                'link_purpose' => $customMetaData['description'] ?? 'Payment',
+                'link_purpose' => strlen($customMetaData['description'] ?? '') >= 3 ? $customMetaData['description'] : 'Payment',
                 'customer_details' => [
                     'customer_name' => $customerName,
                     'customer_email' => $customMetaData['email'] ?? '',
@@ -123,7 +123,9 @@ class CashfreePayment implements PaymentInterface
                     'response' => $errorBody,
                     'headers' => $response->headers(),
                 ]);
-                throw new RuntimeException('Somthing Went Wrong');
+                $errorJson = $response->json();
+                $errorMessage = $errorJson['message'] ?? $errorJson['code'] ?? $errorBody;
+                throw new RuntimeException('Cashfree Error ('.$statusCode.'): '.$errorMessage);
             }
 
             $responseData = $response->json();
@@ -151,7 +153,8 @@ class CashfreePayment implements PaymentInterface
             ];
 
         } catch (Throwable $e) {
-            Log::error('Cashfree createPaymentIntent failed: '.$e->getMessage());
+            Log::error('Cashfree createPaymentIntent failed: '.$e);
+
             throw new RuntimeException($e->getMessage());
         }
     }

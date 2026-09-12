@@ -62,13 +62,13 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $exception)
     {
-        if ($exception instanceof AuthenticationException) {
-            return $this->unauthenticated($request, $exception);
-        }
+        if ($request->expectsJson()) {
+            // Deja que el método unauthenticated() maneje los 401 correctamente.
+            if ($exception instanceof AuthenticationException) {
+                return parent::render($request, $exception);
+            }
 
-        if ($request->expectsJson() || $request->is('api/*')) {
             $details = '';
-            $statusCode = method_exists($exception, 'getStatusCode') ? $exception->getStatusCode() : 500;
 
             if (method_exists($exception, 'getMessages')) {
                 // For validation exceptions
@@ -81,8 +81,8 @@ class Handler extends ExceptionHandler
                 'error' => true,
                 'message' => $exception->getMessage(),
                 'details' => $details,
-                'code' => $statusCode,
-            ], $statusCode);
+                'code' => 500,
+            ], 500);
         }
 
         return parent::render($request, $exception);
@@ -96,7 +96,7 @@ class Handler extends ExceptionHandler
      */
     protected function unauthenticated($request, AuthenticationException $exception)
     {
-        if ($request->expectsJson() || $request->is('api/*')) {
+        if ($request->expectsJson()) {
             return response()->json([
                 'error' => true,
                 'message' => 'User is not authenticated',

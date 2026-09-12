@@ -41,7 +41,6 @@
                                     <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
                                     <th scope="col" data-field="title" data-sortable="true">{{ __('Title') }}</th>
                                     <th scope="col" data-field="slug_id" data-sortable="true">{{ __('Slug') }}</th>
-                                    <th scope="col" data-field="icon" data-formatter="imageFormatter" data-sortable="false" data-align="center">{{ __('Icon') }}</th>
                                     @if (has_permissions('update', 'custom_page'))
                                         <th scope="col" data-field="edit_status" data-sortable="false" data-align="center"
                                             data-formatter="enableDisableSwitchFormatter">{{ __('Status') }}</th>

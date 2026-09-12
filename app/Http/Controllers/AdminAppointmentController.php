@@ -1417,7 +1417,7 @@ class AdminAppointmentController extends Controller
 
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             // Get timezone for the target party
             $targetTimezone = $targetParty->timezone ?? config('app.timezone');

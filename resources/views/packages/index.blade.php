@@ -19,6 +19,17 @@
 @endsection
 
 @section('content')
+    <style>
+        /* Fixed width for the Features column so each feature stays on one line */
+        .package-features-col {
+            min-width: 400px;
+            white-space: nowrap;
+            vertical-align: top;
+        }
+        .package-features-col ul {
+            padding-left: 18px;
+        }
+    </style>
     <section class="section">
         <div class="card">
             @if (has_permissions('create', 'package'))
@@ -74,6 +85,7 @@
                                                 data-sortable="false" data-formatter="packagePriceFormatter">
                                                 {{ __('Price') }} </th>
                                             <th scope="col" data-field="package_features" data-sortable="false"
+                                                data-width="320" data-class="package-features-col"
                                                 data-formatter="packageFeaturesFormatter"> {{ __('Features') }} </th>
                                             @if (has_permissions('update', 'package') && has_permissions('delete', 'package'))
                                                 <th scope="col" data-field="status" data-sortable="false"

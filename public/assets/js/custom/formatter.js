@@ -527,3 +527,9 @@ function addedAsFormatter(value, row) {
     }
     return '<span class="badge rounded-pill bg-secondary">' + (window.trans['User'] || 'User') + '</span>';
 }
+
+function titleFormatter(value) {
+    if (!value) return '-';
+    var escaped = value.replace(/"/g, '&quot;');
+    return '<span title="' + escaped + '" data-bs-toggle="tooltip" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + value + '</span>';
+}

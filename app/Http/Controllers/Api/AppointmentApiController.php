@@ -32,7 +32,7 @@ use Illuminate\Support\Facades\Validator;
 
 class AppointmentApiController extends Controller
 {
-    private ProjectUnitInventoryService $projectUnitInventoryService;
+    protected ProjectUnitInventoryService $projectUnitInventoryService;
 
     public function __construct(ProjectUnitInventoryService $projectUnitInventoryService)
     {
@@ -244,7 +244,7 @@ class AppointmentApiController extends Controller
             if ($agentId == 0) {
                 $agentData = User::where('type', 0)->first();
                 if (Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->where(function ($q) {
-                    $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                    $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                 })->whereIn('propery_type', [0, 1])->count() == 0) {
                     return ApiResponseService::validationError('Agent has no properties');
                 }
@@ -963,10 +963,7 @@ class AppointmentApiController extends Controller
                 AppointmentCancellation::insert($cancelData);
 
                 // Bulk update appointments to cancelled
-                Appointment::whereIn('id', $appointmentIds)->update([
-                    'status' => 'cancelled',
-                    'last_status_updated_by' => 'agent',
-                ]);
+                Appointment::whereIn('id', $appointmentIds)->update(['status' => 'cancelled']);
             }
 
             $cancelledCount = count($appointmentIds);
@@ -1429,7 +1426,7 @@ class AppointmentApiController extends Controller
             }
 
             // Check if property is expired
-            if ($property->expiry_date && Carbon::parse($property->expiry_date)->lt(Carbon::now())) {
+            if ($property->expiry_date && Carbon::parse($property->expiry_date)->lt(Carbon::now()->startOfDay())) {
                 return ApiResponseService::validationError(trans('This property has expired. You cannot book an appointment for an expired listing.'));
             }
             $isAdminAgent = $property->added_by == 0 ? true : false;
@@ -1825,6 +1822,18 @@ class AppointmentApiController extends Controller
                 'last_status_updated_by' => $autoConfirm ? 'system' : 'user',
                 'notes' => $request->notes,
             ]);
+            $appointment->start_at = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($adminTimezone)->format('Y-m-d H:i:s');
+            $appointment->end_at = Carbon::parse($appointment->end_at, 'UTC')->setTimezone($adminTimezone)->format('Y-m-d H:i:s');
+
+            // Send notifications using the appointment notification service
+            AppointmentNotificationService::sendNewAppointmentRequestNotification(
+                $appointment,
+                $isAdminAgent ? null : $agent,
+                $loggedInUser,
+                $property,
+                $autoConfirm,
+                $isAdminAgent ? $agent : null
+            );
 
             $inventoryReserve = $this->projectUnitInventoryService->reserveForAppointment(
                 $property,
@@ -1839,19 +1848,6 @@ class AppointmentApiController extends Controller
 
                 return ApiResponseService::validationError($inventoryReserve['message'] ?? trans('This unit is not available for reservation.'));
             }
-
-            $appointment->start_at = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($adminTimezone)->format('Y-m-d H:i:s');
-            $appointment->end_at = Carbon::parse($appointment->end_at, 'UTC')->setTimezone($adminTimezone)->format('Y-m-d H:i:s');
-
-            // Send notifications using the appointment notification service
-            AppointmentNotificationService::sendNewAppointmentRequestNotification(
-                $appointment,
-                $isAdminAgent ? null : $agent,
-                $loggedInUser,
-                $property,
-                $autoConfirm,
-                $isAdminAgent ? $agent : null
-            );
 
             DB::commit();
 
@@ -2187,6 +2183,11 @@ class AppointmentApiController extends Controller
                 $appointment->status = 'cancelled';
                 $appointment->last_status_updated_by = $isAgent ? 'agent' : 'user';
                 $appointment->save();
+                AppointmentCancellation::create([
+                    'appointment_id' => $appointment->id,
+                    'reason' => $reason,
+                    'cancelled_by' => $isAgent ? 'agent' : 'user',
+                ]);
 
                 $inventoryRelease = $this->projectUnitInventoryService->releaseForAppointment(
                     $appointment,
@@ -2195,17 +2196,12 @@ class AppointmentApiController extends Controller
                     $loggedInUser->id,
                     $reason
                 );
+
                 if (! $inventoryRelease['success']) {
                     DB::rollBack();
 
                     return ApiResponseService::validationError($inventoryRelease['message'] ?? trans('Unable to update unit inventory.'));
                 }
-
-                AppointmentCancellation::create([
-                    'appointment_id' => $appointment->id,
-                    'reason' => $reason,
-                    'cancelled_by' => $isAgent ? 'agent' : 'user',
-                ]);
             }
 
             $changedBy = $isAgent ? 'agent' : 'user';
@@ -2348,14 +2344,20 @@ class AppointmentApiController extends Controller
                 $appointment->date = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($agentTimezone)->format('d M Y');
                 $appointment->start_at = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($agentTimezone)->format('Y-m-d H:i:s');
                 $appointment->end_at = Carbon::parse($appointment->end_at, 'UTC')->setTimezone($agentTimezone)->format('Y-m-d H:i:s');
-                $appointment->property->translated_title = $appointment->property->translated_title;
-                $appointment->property->property_type = $appointment->property->propery_type;
-                $appointment->property->is_premium = $appointment->property->is_premium;
-                $appointment->property->is_promoted = $appointment->property->is_promoted;
-                $appointment->property->parameters = $appointment->property->parameters;
-                $appointment->property->category->translated_name = $appointment->property->category->translated_name;
-                $appointment->agent->is_user_verified = $appointment->agent->is_user_verified;
-                $appointment->availability_types = $appointment->agent->agent_booking_preferences->availability_types;
+                if ($appointment->property) {
+                    $appointment->property->translated_title = $appointment->property->translated_title;
+                    $appointment->property->property_type = $appointment->property->propery_type;
+                    $appointment->property->is_premium = $appointment->property->is_premium;
+                    $appointment->property->is_promoted = $appointment->property->is_promoted;
+                    $appointment->property->parameters = $appointment->property->parameters;
+                    if ($appointment->property->category) {
+                        $appointment->property->category->translated_name = $appointment->property->category->translated_name;
+                    }
+                }
+                if ($appointment->agent) {
+                    $appointment->agent->is_user_verified = $appointment->agent->is_user_verified;
+                }
+                $appointment->availability_types = $appointment->agent?->agent_booking_preferences?->availability_types;
                 $appointment->reason = $appointment->status === 'cancelled' ? optional($appointment->cancellations->last())->reason : null;
                 unset($appointment->agent);
 
@@ -2431,23 +2433,29 @@ class AppointmentApiController extends Controller
                 $appointment->date = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($userTimezone)->format('d M Y');
                 $appointment->start_at = Carbon::parse($appointment->start_at, 'UTC')->setTimezone($userTimezone)->format('Y-m-d H:i:s');
                 $appointment->end_at = Carbon::parse($appointment->end_at, 'UTC')->setTimezone($userTimezone)->format('Y-m-d H:i:s');
-                $appointment->property->translated_title = $appointment->property->translated_title;
-                $appointment->property->property_type = $appointment->property->propery_type;
-                $appointment->property->is_premium = $appointment->property->is_premium;
-                $appointment->property->is_promoted = $appointment->property->is_promoted;
-                $appointment->property->parameters = $appointment->property->parameters;
-                $appointment->property->category->translated_name = $appointment->property->category->translated_name;
+                if ($appointment->property) {
+                    $appointment->property->translated_title = $appointment->property->translated_title;
+                    $appointment->property->property_type = $appointment->property->propery_type;
+                    $appointment->property->is_premium = $appointment->property->is_premium;
+                    $appointment->property->is_promoted = $appointment->property->is_promoted;
+                    $appointment->property->parameters = $appointment->property->parameters;
+                    if ($appointment->property->category) {
+                        $appointment->property->category->translated_name = $appointment->property->category->translated_name;
+                    }
+                }
                 if ($appointment->status == 'cancelled') {
-                    $appointment->reason = $appointment->cancellations->last()->reason;
+                    $appointment->reason = optional($appointment->cancellations->last())->reason;
                 } else {
                     $appointment->reason = null;
                 }
                 if ($appointment->is_admin_appointment) {
-                    $appointment->admin->is_user_verified = true;
-                } else {
+                    if ($appointment->admin) {
+                        $appointment->admin->is_user_verified = true;
+                    }
+                } elseif ($appointment->agent) {
                     $appointment->agent->is_user_verified = $appointment->agent->is_user_verified;
                 }
-                $appointment->availability_types = $appointment->is_admin_appointment ? $appointment->admin->agent_booking_preferences->availability_types : $appointment->agent->agent_booking_preferences->availability_types;
+                $appointment->availability_types = $appointment->is_admin_appointment ? $appointment->admin?->agent_booking_preferences?->availability_types : $appointment->agent?->agent_booking_preferences?->availability_types;
                 if ($appointment->is_admin_appointment) {
                     unset($appointment->agent);
                     $appointment->admin->name = trans('Admin');
@@ -2518,10 +2526,7 @@ class AppointmentApiController extends Controller
                 }
 
                 // Cancel appointments
-                Appointment::whereIn('id', $appointmentIds)->update([
-                    'status' => 'cancelled',
-                    'last_status_updated_by' => 'system',
-                ]);
+                Appointment::whereIn('id', $appointmentIds)->update(['status' => 'cancelled', 'last_status_updated_by' => 'system']);
                 // Create appointment cancellations with reason
                 $appointmentCancellationData = [];
                 foreach ($appointmentIds as $appointmentId) {

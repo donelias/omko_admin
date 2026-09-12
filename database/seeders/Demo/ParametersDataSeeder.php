@@ -111,6 +111,7 @@ class ParametersDataSeeder extends Seeder
             }
         } catch (Exception $e) {
             Log::error('Error parameter data seeder : '.$e->getMessage());
+            throw $e;
         }
     }
 }

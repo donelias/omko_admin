@@ -195,7 +195,7 @@ class SliderController extends Controller
         foreach ($res as $row) {
             $operate = BootstrapTableService::editButton(route('slider.update', $row->id), true, null, null, $row->id);
             if ($row->default_data == 0) {
-                $operate .= BootstrapTableService::deleteButton(route('slider.destroy', $row->id));
+                $operate .= BootstrapTableService::deleteButton(route('slider.destroy.url', $row->id));
             }
             $tempRow = $row->toArray();
             $tempRow['type'] = trans($row->type);

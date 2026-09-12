@@ -9,6 +9,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Facades\Image;
 
 class AddWatermarkJob implements ShouldQueue
@@ -19,158 +20,244 @@ class AddWatermarkJob implements ShouldQueue
 
     public string $extension;
 
-    public $timeout = 300; // seconds (5 minutes)
+    public array $watermarkConfig = [];
 
-    public $tries = 3;     // retry at most twice
+    public $timeout = 300;
+
+    public $tries = 3;
 
     public $failOnTimeout = true;
 
-    public function __construct(string $imagePath, string $extension)
-    {
-        // Normalize slashes — replace double (or mixed) slashes with a single one
-        $normalizedPath = preg_replace('#[\\\\/]+#', DIRECTORY_SEPARATOR, $imagePath);
+    // Max dimension for processing — keeps GD memory bounded (~15 MB per image at 2000px)
+    private const MAX_DIMENSION = 2000;
 
-        $this->imagePath = $normalizedPath;
+    // Max tiles for tiled watermark style
+    private const MAX_TILES = 150;
+
+    public function __construct(string $imagePath, string $extension, array $watermarkConfig = [])
+    {
+        $this->imagePath = preg_replace('#[\\\\/]+#', DIRECTORY_SEPARATOR, $imagePath);
         $this->extension = $extension;
+        $this->watermarkConfig = $watermarkConfig;
     }
 
     public function handle(): void
     {
+        // GD needs width × height × 4 bytes per image in RAM.
+        // Raise the limit only for this job process.
+        ini_set('memory_limit', '512M');
+
+        $image     = null;
+        $watermark = null;
+
         try {
-            // Get watermark configuration from settings
-            $watermarkConfig = HelperService::getWatermarkConfigDecoded();
-            $watermarkPath = public_path('assets/images/logo/'.$watermarkConfig['watermark_image']);
-            if (! isset($watermarkConfig['watermark_image']) || empty($watermarkConfig['watermark_image']) || ! file_exists($watermarkPath)) {
-                $companyLogo = HelperService::getSettingData('company_logo');
-                if ($companyLogo) {
-                    $watermarkPath = public_path('assets/images/logo/'.$companyLogo);
-                } else {
-                    $watermarkPath = public_path('assets/images/logo/logo.png');
-                }
-            }
-            if (! file_exists($watermarkPath)) {
+            $watermarkConfig = $this->watermarkConfig ?: HelperService::resolveListingWatermarkConfig();
+            $watermarkPath   = $watermarkConfig['watermark_path'] ?? null;
+
+            Log::info('AddWatermarkJob: Starting watermark process', [
+                'imagePath'       => $this->imagePath,
+                'extension'       => $this->extension,
+                'watermarkConfig' => $watermarkConfig,
+            ]);
+
+            if (empty($watermarkPath) || ! file_exists($watermarkPath)) {
                 Log::error('Watermark not found', ['watermarkPath' => $watermarkPath]);
 
                 return;
             }
 
-            // Set defaults if config is empty
-            $opacity = $watermarkConfig['opacity'] ?? 25;
-            $size = $watermarkConfig['size'] ?? 10;
-            $style = $watermarkConfig['style'] ?? 'tile';
+            $opacity  = (int) ($watermarkConfig['opacity'] ?? 25);
+            $size     = (int) ($watermarkConfig['size'] ?? 10);
+            $style    = $watermarkConfig['style'] ?? 'tile';
             $position = $watermarkConfig['position'] ?? 'center';
-            $rotation = $watermarkConfig['rotation'] ?? 0;
+            $rotation = (int) ($watermarkConfig['rotation'] ?? 0);
 
-            // Convert negative rotations to positive range (legacy)
             if ($rotation < 0) {
                 $rotation = 360 + $rotation;
             }
 
-            // Load image
-            $image = Image::make($this->imagePath);
-            $originalWidth = $image->width();
-            $originalHeight = $image->height();
+            // Load the main image at the capped dimension immediately to avoid holding
+            // both the full-size and resized bitmaps in RAM at the same time.
+            $image = $this->loadAndScale($this->imagePath, self::MAX_DIMENSION);
+            if ($image === null) {
+                Log::error('AddWatermarkJob: Could not load image', ['path' => $this->imagePath]);
 
-            // Only resize very large images (over 3000px) to speed up processing
-            // This maintains quality for most images while improving performance
-            $maxDimension = 3000;
-
-            if ($originalWidth > $maxDimension || $originalHeight > $maxDimension) {
-                if ($originalWidth > $originalHeight) {
-                    $image->resize($maxDimension, null, fn ($c) => $c->aspectRatio());
-                } else {
-                    $image->resize(null, $maxDimension, fn ($c) => $c->aspectRatio());
-                }
+                return;
             }
 
-            // Load and prepare watermark once
-            $watermark = Image::make($watermarkPath);
+            // Load watermark pre-scaled to target width so we never hold an oversized
+            // watermark bitmap in memory longer than necessary.
+            $targetWmWidth = max(10, (int) ($image->width() * ($size / 100)));
+            $watermark     = $this->loadAndScale($watermarkPath, $targetWmWidth);
+            if ($watermark === null) {
+                Log::error('AddWatermarkJob: Could not load watermark', ['path' => $watermarkPath]);
+
+                return;
+            }
+
+            Log::info('AddWatermarkJob: image and watermark loaded', [
+                'image_w'        => $image->width(),
+                'image_h'        => $image->height(),
+                'watermark_w_before_resize' => $watermark->width(),
+                'targetWmWidth'  => $targetWmWidth,
+                'opacity'        => $opacity,
+                'style'          => $style,
+                'rotation'       => $rotation,
+                'file_size_before' => file_exists($this->imagePath) ? filesize($this->imagePath) : 'missing',
+            ]);
+
             $watermark->opacity($opacity);
-            $watermarkWidth = $image->width() * ($size / 100);
-            $watermark->resize($watermarkWidth, null, fn ($c) => $c->aspectRatio());
-            // Convert clockwise degrees to Intervention's counterclockwise rotation
-            $rotation = 360 - $rotation; // ✅ This line fixes the issue
 
-            $watermark->rotate($rotation);
+            // Resize to exact target width (loadAndScale caps, not forces)
+            if ($watermark->width() !== $targetWmWidth) {
+                $watermark->resize($targetWmWidth, null, fn ($c) => $c->aspectRatio());
+            }
 
-            /**
-             * 🧩 Apply watermark based on style (optimized)
-             */
+            Log::info('AddWatermarkJob: watermark ready', [
+                'watermark_w' => $watermark->width(),
+                'watermark_h' => $watermark->height(),
+            ]);
+
+            // Convert clockwise to Intervention's counterclockwise
+            $watermark->rotate(360 - $rotation);
+
             if ($style === 'tile') {
-                // Optimized tiling: Calculate optimal spacing to limit operations
-                $baseSpacing = 1.5;
-                $xStep = (int) ($watermark->width() * $baseSpacing);
-                $yStep = (int) ($watermark->height() * $baseSpacing);
-
-                // Calculate number of tiles and optimize spacing if too many
-                $tilesX = (int) ceil($image->width() / $xStep);
-                $tilesY = (int) ceil($image->height() / $yStep);
-                $totalTiles = $tilesX * $tilesY;
-
-                // Limit to max 150 tiles for performance (adjust spacing if needed)
-                $maxTiles = 150;
-                if ($totalTiles > $maxTiles) {
-                    $factor = sqrt($totalTiles / $maxTiles);
-                    $xStep = (int) ($xStep * $factor);
-                    $yStep = (int) ($yStep * $factor);
-                    // Recalculate after adjustment
-                    $tilesX = (int) ceil($image->width() / $xStep);
-                    $tilesY = (int) ceil($image->height() / $yStep);
-                }
-
-                // Apply tiles efficiently
-                for ($y = 0; $y < $image->height(); $y += $yStep) {
-                    for ($x = 0; $x < $image->width(); $x += $xStep) {
-                        $image->insert($watermark, 'top-left', $x, $y);
-                    }
-                }
+                $this->applyTile($image, $watermark);
             } else {
-                // Single watermark at specified position
-                // Use 'top-left' as anchor and calculate absolute coordinates for all positions
-                $x = 0;
-                $y = 0;
-                $padding = 10;
+                $this->applySingle($image, $watermark, $position);
+            }
 
-                switch ($position) {
-                    case 'top-left':
-                        $x = $padding;
-                        $y = $padding;
-                        break;
-                    case 'top-right':
-                        $x = $image->width() - $watermark->width() - $padding;
-                        $y = $padding;
-                        break;
-                    case 'bottom-left':
-                        $x = $padding;
-                        $y = $image->height() - $watermark->height() - $padding;
-                        break;
-                    case 'bottom-right':
-                        $x = $image->width() - $watermark->width() - $padding;
-                        $y = $image->height() - $watermark->height() - $padding;
-                        break;
-                    case 'center':
-                    default:
-                        $x = (int) (($image->width() - $watermark->width()) / 2);
-                        $y = (int) (($image->height() - $watermark->height()) / 2);
-                        break;
-                }
+            // Free watermark memory before the encode buffer is allocated
+            $watermark->destroy();
+            $watermark = null;
 
-                // Always use 'top-left' as anchor with absolute coordinates
+            $image->encode($this->extension, 82)->save($this->imagePath);
+
+            // The admin panel shows a blurred low-quality preview cached in
+            // blur_cache/blur_{filename}. That cache was generated before the
+            // watermark was applied, so delete it now — getCachedBlurImageUrl()
+            // checks file existence and regenerates automatically on next load.
+            $blurStoragePath = 'blur_cache/blur_' . basename($this->imagePath);
+            if (Storage::disk('public')->exists($blurStoragePath)) {
+                Storage::disk('public')->delete($blurStoragePath);
+            }
+
+            Log::info('AddWatermarkJob: Successfully processed watermark', [
+                'source'          => $watermarkConfig['source'] ?? 'admin',
+                'driver'          => 'gd',
+                'file_size_after' => file_exists($this->imagePath) ? filesize($this->imagePath) : 'missing',
+                'save_path'       => $this->imagePath,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Error in AddWatermarkJob: ' . $e->getMessage(), [
+                'imagePath' => $this->imagePath,
+                'trace'     => $e->getTraceAsString(),
+            ]);
+            $this->fail($e);
+            throw $e;
+        } finally {
+            if ($image !== null) {
+                try { $image->destroy(); } catch (\Throwable $e) {}
+            }
+            if ($watermark !== null) {
+                try { $watermark->destroy(); } catch (\Throwable $e) {}
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GD helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Load an image via native GD, downscale immediately if wider than $maxWidth,
+     * free the original GD resource before returning. This avoids holding both
+     * the full-size and the resized bitmap in RAM at the same time.
+     */
+    private function loadAndScale(string $path, int $maxWidth): ?\Intervention\Image\Image
+    {
+        $info = @getimagesize($path);
+        if (! $info) {
+            return null;
+        }
+
+        [$origW, $origH, $type] = $info;
+
+        if ($origW <= $maxWidth) {
+            // Already within budget — let Intervention Image handle it normally
+            return Image::make($path);
+        }
+
+        // Scale factor to bring width down to $maxWidth
+        $scale   = $maxWidth / $origW;
+        $targetW = $maxWidth;
+        $targetH = (int) round($origH * $scale);
+
+        $src = match ($type) {
+            IMAGETYPE_JPEG => @imagecreatefromjpeg($path),
+            IMAGETYPE_PNG  => @imagecreatefrompng($path),
+            IMAGETYPE_WEBP => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($path) : null,
+            default        => null,
+        };
+
+        if (! $src) {
+            // Fall back to Intervention (will use more memory but won't crash)
+            return Image::make($path);
+        }
+
+        $dst = imagecreatetruecolor($targetW, $targetH);
+
+        // Preserve transparency for PNG/WebP
+        if (in_array($type, [IMAGETYPE_PNG, IMAGETYPE_WEBP])) {
+            imagealphablending($dst, false);
+            imagesavealpha($dst, true);
+        }
+
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $targetW, $targetH, $origW, $origH);
+        imagedestroy($src); // free the full-size bitmap immediately
+
+        return Image::make($dst);
+    }
+
+    private function applyTile(\Intervention\Image\Image $image, \Intervention\Image\Image $watermark): void
+    {
+        $xStep = max(1, (int) ($watermark->width() * 1.5));
+        $yStep = max(1, (int) ($watermark->height() * 1.5));
+
+        $tilesX = (int) ceil($image->width() / $xStep);
+        $tilesY = (int) ceil($image->height() / $yStep);
+        $total  = $tilesX * $tilesY;
+
+        if ($total > self::MAX_TILES) {
+            $factor = sqrt($total / self::MAX_TILES);
+            $xStep  = (int) ($xStep * $factor);
+            $yStep  = (int) ($yStep * $factor);
+        }
+
+        for ($y = 0; $y < $image->height(); $y += $yStep) {
+            for ($x = 0; $x < $image->width(); $x += $xStep) {
                 $image->insert($watermark, 'top-left', $x, $y);
             }
-
-            /**
-             * 💾 Save optimized image (replace original)
-             */
-            $image->encode($this->extension, 85)->save($this->imagePath);
-            Log::info('AddWatermarkJob: Successfully processed watermark');
-        } catch (\Throwable $e) {
-            Log::error('Error in AddWatermarkJob: '.$e->getMessage(), [
-                'imagePath' => $this->imagePath,
-                'trace' => $e->getTraceAsString(),
-            ]);
-            $this->fail($e); // ensures retry
-            throw $e;        // optional, for standard behavior
         }
+    }
+
+    private function applySingle(\Intervention\Image\Image $image, \Intervention\Image\Image $watermark, string $position): void
+    {
+        $pad = 10;
+        $w   = $image->width();
+        $h   = $image->height();
+        $wmW = $watermark->width();
+        $wmH = $watermark->height();
+
+        [$x, $y] = match ($position) {
+            'top-left'     => [$pad, $pad],
+            'top-right'    => [$w - $wmW - $pad, $pad],
+            'bottom-left'  => [$pad, $h - $wmH - $pad],
+            'bottom-right' => [$w - $wmW - $pad, $h - $wmH - $pad],
+            default        => [(int) (($w - $wmW) / 2), (int) (($h - $wmH) / 2)],
+        };
+
+        $image->insert($watermark, 'top-left', $x, $y);
     }
 }

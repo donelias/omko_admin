@@ -1,3 +1,4 @@
+
 @extends('layouts.main')
 
 @section('title')
@@ -16,6 +17,69 @@
 @endsection
 
 @section('content')
+
+    <section class="section">
+        <div class="card">
+            <div class="card-header">
+                <h4>{{ __("Static Sections Settings") }}</h4>
+            </div>
+            <div class="card-body">
+                {!! Form::open(["url" => route("homepage-sections.update-toggles"), "method" => "POST"]) !!}
+                <div class="row my-3">
+                    @php
+                        $sliderStatus = system_setting("slider_section");
+                        $searchStatus = system_setting("search_section");
+                        $allPropertiesStatus = system_setting("all_properties_section");
+                        
+                        $sliderStatus = $sliderStatus !== null ? $sliderStatus : 1;
+                        $searchStatus = $searchStatus !== null ? $searchStatus : 1;
+                        $allPropertiesStatus = $allPropertiesStatus !== null ? $allPropertiesStatus : 1;
+                    @endphp
+                    <div class="col-md-4">
+                        <div class="card shadow-sm h-100" style="border: 2px solid var(--bs-primary);">
+                            <div class="card-body d-flex justify-content-between align-items-center p-3">
+                                <label class="form-check-label h6 mb-0" for="slider_section">{{ __("Slider Section") }}</label>
+                                <div class="form-check form-switch mb-0">
+                                    <input type="hidden" name="slider_section" value="0">
+                                    <input class="form-check-input" type="checkbox" id="slider_section" name="slider_section" value="1" {{ $sliderStatus == 1 ? "checked" : "" }} style="width: 2.5em; height: 1.25em;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card shadow-sm h-100" style="border: 2px solid var(--bs-primary);">
+                            <div class="card-body d-flex justify-content-between align-items-center p-3">
+                                <label class="form-check-label h6 mb-0" for="search_section">{{ __("Search Section") }}</label>
+                                <div class="form-check form-switch mb-0">
+                                    <input type="hidden" name="search_section" value="0">
+                                    <input class="form-check-input" type="checkbox" id="search_section" name="search_section" value="1" {{ $searchStatus == 1 ? "checked" : "" }} style="width: 2.5em; height: 1.25em;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card shadow-sm h-100" style="border: 2px solid var(--bs-primary);">
+
+                        <div class="card-body d-flex justify-content-between align-items-center p-3">
+                                <label class="form-check-label h6 mb-0" for="all_properties_section">{{ __("All Properties Section") }}</label>
+                                <div class="form-check form-switch mb-0">
+                                    <input type="hidden" name="all_properties_section" value="0">
+                                    <input class="form-check-input" type="checkbox" id="all_properties_section" name="all_properties_section" value="1" {{ $allPropertiesStatus == 1 ? "checked" : "" }} style="width: 2.5em; height: 1.25em;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12 text-end">
+                        <button type="submit" class="btn btn-primary">{{ __("Save") }}</button>
+                    </div>
+                </div>
+                {!! Form::close() !!}
+            </div>
+        </div>
+    </section>
+
 
     <section class="section">
 
@@ -55,10 +119,16 @@
                         {!! Form::open(['url' => route('homepage-sections.store'), 'data-parsley-validate', 'class' => 'create-form']) !!}
                         <div class=" row">
 
-                            {{-- Title --}}
+                            {{-- Title (Web) --}}
                             <div class="col-lg-12 col-xl-6 form-group mandatory">
-                                {{ Form::label('title', __('Title'), ['class' => 'form-label text-center']) }}
-                                {{ Form::text('title', '', [ 'class' => 'form-control', 'placeholder' => trans('Title'), 'data-parsley-required' => 'true', 'id' => 'title']) }}
+                                {{ Form::label('title', __('Web Title'), ['class' => 'form-label text-center']) }}
+                                {{ Form::text('title', '', [ 'class' => 'form-control', 'placeholder' => trans('Web Title'), 'data-parsley-required' => 'true', 'id' => 'title']) }}
+                            </div>
+
+                            {{-- App Title --}}
+                            <div class="col-lg-12 col-xl-6 form-group">
+                                {{ Form::label('app_title', __('App Title'), ['class' => 'form-label text-center']) }}
+                                {{ Form::text('app_title', '', [ 'class' => 'form-control', 'placeholder' => trans('App Title'), 'id' => 'app_title']) }}
                             </div>
 
                             {{-- Section Type --}}
@@ -69,12 +139,12 @@
 
                             {{-- Translations --}}
                             @if(isset($languages) && $languages->count() > 0)
-                                {{-- Translations Div --}}
+                                {{-- Web Title Translations Div --}}
                                 <div class="translation-div mt-4">
                                     <div class="col-12">
                                         <div class="divider">
                                             <div class="divider-text">
-                                                <h5>{{ __('Translations for Title') }}</h5>
+                                                <h5>{{ __('Translations for Web Title') }}</h5>
                                             </div>
                                         </div>
                                     </div>
@@ -84,7 +154,28 @@
                                             <div class="form-group">
                                                 <label for="translation-{{ $language->id }}">{{ $language->name }}</label>
                                                 <input type="hidden" name="translations[{{ $key }}][language_id]" value="{{ $language->id }}">
-                                                <input type="text" name="translations[{{ $key }}][value]" id="translation-{{ $language->id }}" class="form-control" value="" placeholder="{{ __('Enter Title') }}">
+                                                <input type="text" name="translations[{{ $key }}][value]" id="translation-{{ $language->id }}" class="form-control" value="" placeholder="{{ __('Enter Web Title') }}">
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+
+                                {{-- App Title Translations Div --}}
+                                <div class="translation-div mt-4">
+                                    <div class="col-12">
+                                        <div class="divider">
+                                            <div class="divider-text">
+                                                <h5>{{ __('Translations for App Title') }}</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {{-- Fields for App Translations --}}
+                                    @foreach($languages as $key =>$language)
+                                        <div class="col-md-6 col-xl-4">
+                                            <div class="form-group">
+                                                <label for="app-translation-{{ $language->id }}">{{ $language->name }}</label>
+                                                <input type="hidden" name="app_translations[{{ $key }}][language_id]" value="{{ $language->id }}">
+                                                <input type="text" name="app_translations[{{ $key }}][value]" id="app-translation-{{ $language->id }}" class="form-control" value="" placeholder="{{ __('Enter App Title') }}">
                                             </div>
                                         </div>
                                     @endforeach
@@ -120,7 +211,8 @@
                             <thead class="thead-dark">
                                 <tr>
                                     <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
-                                    <th scope="col" data-field="title" data-sortable="true">{{ __('Title') }}</th>
+                                    <th scope="col" data-field="title" data-sortable="true">{{ __('Web Title') }}</th>
+                                    <th scope="col" data-field="app_title" data-sortable="true">{{ __('App Title') }}</th>
                                     <th scope="col" data-field="section_type" data-sortable="true" data-formatter="homepageSectionTypeFormatter">{{ __('Section Type') }}</th>
                                     <th scope="col" data-field="sort_order" data-sortable="true" data-align="center" data-width="5%"> {{ __('Order') }}</th>
                                     @if(has_permissions('update', 'homepage-sections'))
@@ -154,10 +246,16 @@
                     <form class="form-horizontal edit-form" action="{{ url('homepage-sections') }}" enctype="multipart/form-data">
                         {{ csrf_field() }}
                         <input type="hidden" id="edit-id" name="edit_id">
-                        {{-- Title --}}
+                        {{-- Title (Web) --}}
                         <div class="col-lg-12 form-group">
-                            {{ Form::label('edit-title', __('Title'), ['class' => 'form-label text-center']) }}
-                            {{ Form::text('title', '', [ 'class' => 'form-control', 'placeholder' => trans('Title'), 'required' => true, 'id' => 'edit-title']) }}
+                            {{ Form::label('edit-title', __('Web Title'), ['class' => 'form-label text-center']) }}
+                            {{ Form::text('title', '', [ 'class' => 'form-control', 'placeholder' => trans('Web Title'), 'required' => true, 'id' => 'edit-title']) }}
+                        </div>
+
+                        {{-- App Title --}}
+                        <div class="col-lg-12 form-group">
+                            {{ Form::label('edit-app_title', __('App Title'), ['class' => 'form-label text-center']) }}
+                            {{ Form::text('app_title', '', [ 'class' => 'form-control', 'placeholder' => trans('App Title'), 'id' => 'edit-app_title']) }}
                         </div>
 
                         {{-- Section Type --}}
@@ -168,12 +266,12 @@
 
                         {{-- Translations --}}
                         @if(isset($languages) && $languages->count() > 0)
-                        {{-- Translations Div --}}
+                        {{-- Web Title Translations Div --}}
                         <div class="translation-div mt-4">
                             <div class="col-12">
                                 <div class="divider">
                                     <div class="divider-text">
-                                        <h5>{{ __('Translations for Title') }}</h5>
+                                        <h5>{{ __('Translations for Web Title') }}</h5>
                                     </div>
                                 </div>
                             </div>
@@ -184,7 +282,29 @@
                                         <label for="translation-{{ $language->id }}">{{ $language->name }}</label>
                                         <input type="hidden" name="translations[{{ $key }}][id]" class="edit-translations" id="edit-translation-id-{{ $language->id }}">
                                         <input type="hidden" name="translations[{{ $key }}][language_id]" value="{{ $language->id }}" id="edit-translation-language-id-{{ $language->id }}">
-                                        <input type="text" name="translations[{{ $key }}][value]" id="edit-translation-{{ $language->id }}" class="form-control edit-translations" value="" placeholder="{{ __('Enter Title') }}">
+                                        <input type="text" name="translations[{{ $key }}][value]" id="edit-translation-{{ $language->id }}" class="form-control edit-translations" value="" placeholder="{{ __('Enter Web Title') }}">
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        {{-- App Title Translations Div --}}
+                        <div class="translation-div mt-4">
+                            <div class="col-12">
+                                <div class="divider">
+                                    <div class="divider-text">
+                                        <h5>{{ __('Translations for App Title') }}</h5>
+                                    </div>
+                                </div>
+                            </div>
+                            {{-- Fields for App Translations --}}
+                            @foreach($languages as $key =>$language)
+                                <div class="col-12">
+                                    <div class="form-group">
+                                        <label for="app-translation-{{ $language->id }}">{{ $language->name }}</label>
+                                        <input type="hidden" name="app_translations[{{ $key }}][id]" class="edit-app-translations" id="edit-app-translation-id-{{ $language->id }}">
+                                        <input type="hidden" name="app_translations[{{ $key }}][language_id]" value="{{ $language->id }}" id="edit-app-translation-language-id-{{ $language->id }}">
+                                        <input type="text" name="app_translations[{{ $key }}][value]" id="edit-app-translation-{{ $language->id }}" class="form-control edit-app-translations" value="" placeholder="{{ __('Enter App Title') }}">
                                     </div>
                                 </div>
                             @endforeach
@@ -231,13 +351,20 @@
             'click .edit_btn': function(e, value, row, index) {
                 $("#edit-id").val(row.id);
                 $("#edit-title").val(row.title);
+                $("#edit-app_title").val(row.app_title);
                 $("#edit-section_type").val(row.section_type);
 
                 $(".edit-translations").val("");
-                if(row.translations.length > 0){
+                $(".edit-app-translations").val("");
+                if(row.translations && row.translations.length > 0){
                     row.translations.forEach(translation => {
-                        $("#edit-translation-id-" + translation.language_id).val(translation.id);
-                        $("#edit-translation-" + translation.language_id).val(translation.value);
+                        if(translation.key === 'app_title'){
+                            $("#edit-app-translation-id-" + translation.language_id).val(translation.id);
+                            $("#edit-app-translation-" + translation.language_id).val(translation.value);
+                        } else {
+                            $("#edit-translation-id-" + translation.language_id).val(translation.id);
+                            $("#edit-translation-" + translation.language_id).val(translation.value);
+                        }
                     });
                 }
             }
@@ -254,6 +381,7 @@
             let MostViewedProperties = "{{ __(config('constants.HOMEPAGE_SECTION_TYPES.MOST_VIEWED_PROPERTIES_SECTION.TITLE')) }}";
             let NearbyProperties = "{{ __(config('constants.HOMEPAGE_SECTION_TYPES.NEARBY_PROPERTIES_SECTION.TITLE')) }}";
             let Projects = "{{ __(config('constants.HOMEPAGE_SECTION_TYPES.PROJECTS_SECTION.TITLE')) }}";
+            let PremiumProjects = "{{ __(config('constants.HOMEPAGE_SECTION_TYPES.PREMIUM_PROJECTS_SECTION.TITLE')) }}";
             let PremiumProperties = "{{ __(config('constants.HOMEPAGE_SECTION_TYPES.PREMIUM_PROPERTIES_SECTION.TITLE')) }}";
             let UserRecommendations = "{{ __(config('constants.HOMEPAGE_SECTION_TYPES.USER_RECOMMENDATIONS_SECTION.TITLE')) }}";
             let PropertiesByCities = "{{ __(config('constants.HOMEPAGE_SECTION_TYPES.PROPERTIES_BY_CITIES_SECTION.TITLE')) }}";
@@ -278,6 +406,8 @@
                 return NearbyProperties;
             }else if(value == 'projects_section'){
                 return Projects;
+            }else if(value == 'premium_projects_section'){
+                return PremiumProjects;
             }else if(value == 'premium_properties_section'){
                 return PremiumProperties;
             }else if(value == 'user_recommendations_section'){

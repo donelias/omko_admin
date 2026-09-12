@@ -16,6 +16,7 @@ use App\Models\Projects;
 use App\Models\ProjectView;
 use App\Models\Property;
 use App\Models\PropertyView;
+use App\Models\Story;
 use App\Models\User;
 use App\Services\ApiResponseService;
 use App\Services\FileService;
@@ -49,7 +50,7 @@ class AgentApiController extends Controller
             $longitude = $request->has('longitude') ? $request->longitude : null;
 
             if (! empty($request->limit)) {
-                $agentsListQuery = Customer::select('id', 'name', 'email', 'profile', 'slug_id', 'is_agent')
+                $agentsListQuery = Customer::select('id', 'name', 'email', 'profile', 'slug_id', 'is_agent', 'is_agent_verified')
                     ->with('agent_profile')
                     ->where(function ($query) {
                         $query->where('isActive', 1);
@@ -82,7 +83,8 @@ class AgentApiController extends Controller
                                 $query->where('latitude', $latitude)->where('longitude', $longitude);
                             });
                         },
-                    ]);
+                    ])
+                    ->withExists(['stories as has_active_story' => fn ($q) => $q->active()]);
 
                 // $agentData = AgentProfile::where('user_id', Auth::user()->id);
 
@@ -91,14 +93,14 @@ class AgentApiController extends Controller
                 $agentListData = $agentsListQuery->clone()
                     ->get()
                     ->map(function ($customer) {
-                        $resolved = $customer->resolved_agent_profile;
+                        $resolved = $customer->applyResolvedAgentProfile();
                         $customer->name = $resolved['agent_name'];
                         $customer->email = $resolved['agent_email'];
                         $customer->profile = $resolved['agent_profile_photo'];
                         $customer->agent_address = $resolved['agent_address'];
-                        $customer->agent_profile = $resolved;
                         $customer->total_count = $customer->projects_count + $customer->property_count;
                         $customer->is_admin = false;
+                        $customer->has_active_story = (bool) $customer->has_active_story;
 
                         return $customer;
                     })
@@ -125,13 +127,11 @@ class AgentApiController extends Controller
                 })->count();
                 $totalCount = $adminPropertiesCount + $adminProjectsCount;
 
-                $adminData = User::where('type', 0)->select('id', 'name', 'profile')->first();
-
-                $adminQuery = User::where('type', 0)->select('id', 'slug_id')->first();
+                $adminQuery = User::where('type', 0)->select('id', 'slug_id', 'name', 'profile')->first();
                 if ($adminQuery && ($adminPropertiesCount > 0 || $adminProjectsCount > 0)) {
                     $adminData = [
                         'id' => $adminQuery->id,
-                        'name' => 'Admin',
+                        'name' => $adminQuery->name,
                         'slug_id' => $adminQuery->slug_id,
                         'email' => ! empty($adminEmail) ? $adminEmail : '',
                         'property_count' => $adminPropertiesCount,
@@ -140,7 +140,7 @@ class AgentApiController extends Controller
                         // 'is_verified' => true,
                         // 'is_verified_user' => true,
                         'is_agent_verified' => true,
-                        'profile' => ! empty($adminData->getRawOriginal('profile')) ? $adminData->profile : url('assets/images/faces/2.jpg'),
+                        'profile' => ! empty($adminQuery->getRawOriginal('profile')) ? $adminQuery->profile : url('assets/images/faces/2.jpg'),
                         'is_admin' => true,
                     ];
                     if ($offset == 0) {
@@ -203,6 +203,7 @@ class AgentApiController extends Controller
                 'country_code' => $customerData->country_code ?? '',
                 'default_language' => $customerData->default_language ?? '',
                 'about_me' => $resolvedProfile['about_me'] ?? '',
+                'agent_banner' => $resolvedProfile['agent_banner'] ?? '',
                 'is_admin_added' => $customerData->is_admin_added ?? false,
                 'isActive' => $customerData->isActive ?? false,
                 'is_demo_user' => $customerData->is_demo_user ?? false,
@@ -214,6 +215,15 @@ class AgentApiController extends Controller
                 'twitter_id' => $resolvedProfile['twitter_id'] ?? '',
                 'youtube_id' => $resolvedProfile['youtube_id'] ?? '',
                 'instagram_id' => $resolvedProfile['instagram_id'] ?? '',
+                'linkedin_id' => $resolvedProfile['linkedin_id'] ?? '',
+                'watermark_enabled' => $resolvedProfile['watermark_enabled'] ?? false,
+                'watermark_image' => $resolvedProfile['watermark_image'] ?? '',
+                'watermark_opacity' => $resolvedProfile['watermark_opacity'] ?? 25,
+                'watermark_size' => $resolvedProfile['watermark_size'] ?? 10,
+                'watermark_style' => $resolvedProfile['watermark_style'] ?? 'tile',
+                'watermark_position' => $resolvedProfile['watermark_position'] ?? 'center',
+                'watermark_rotation'  => $resolvedProfile['watermark_rotation'] ?? 30,
+                'has_active_story'    => Story::where('agent_id', $customerData->id)->active()->exists(),
             ];
 
             return response()->json([
@@ -227,6 +237,104 @@ class AgentApiController extends Controller
         }
     }
 
+    public function getAgentWatermarkSettings(Request $request)
+    {
+        try {
+            $customer = Auth::user();
+            $agentProfile = AgentProfile::firstOrNew(['customer_id' => $customer->id]);
+            $feature = HelperService::checkAgentWatermarkFeature($customer->id);
+
+            return ApiResponseService::successResponse(trans('Data Fetched Successfully'), $this->formatAgentWatermarkSettings($agentProfile, $feature));
+        } catch (Exception $e) {
+            return ApiResponseService::errorResponse($e->getMessage());
+        }
+    }
+
+    public function updateAgentWatermarkSettings(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'watermark_enabled' => 'nullable|in:0,1,true,false',
+                'watermark_image' => 'nullable|file|max:3000|mimes:jpeg,png,jpg,webp',
+                'watermark_opacity' => 'nullable|required_if:watermark_enabled,1|required_if:watermark_enabled,true|numeric|min:0|max:100',
+                'watermark_size' => 'nullable|required_if:watermark_enabled,1|required_if:watermark_enabled,true|numeric|min:1|max:100',
+                'watermark_style' => 'nullable|required_if:watermark_enabled,1|required_if:watermark_enabled,true|in:tile,single,center',
+                'watermark_position' => 'nullable|required_if:watermark_style,single|in:top-left,top-right,bottom-left,bottom-right,center',
+                'watermark_rotation' => 'nullable|numeric|min:0|max:360',
+            ]);
+            if ($validator->fails()) {
+                return ApiResponseService::validationError($validator->errors()->first());
+            }
+
+            $customer = Auth::user();
+            $feature = HelperService::checkAgentWatermarkFeature($customer->id);
+            if (empty($feature['feature_available']) || empty($feature['limit_available'])) {
+                return ApiResponseService::validationError(trans('Agent Watermark feature is not available in your active package'), null, $feature);
+            }
+
+            DB::beginTransaction();
+            $agentProfile = AgentProfile::firstOrNew(['customer_id' => $customer->id]);
+
+            if ($request->has('watermark_enabled')) {
+                $agentProfile->watermark_enabled = filter_var($request->watermark_enabled, FILTER_VALIDATE_BOOLEAN);
+            }
+
+            if ($request->has('watermark_opacity')) {
+                $agentProfile->watermark_opacity = $request->watermark_opacity;
+            }
+
+            if ($request->has('watermark_size')) {
+                $agentProfile->watermark_size = $request->watermark_size;
+            }
+
+            if ($request->has('watermark_style')) {
+                $agentProfile->watermark_style = $request->watermark_style;
+            }
+
+            if ($request->has('watermark_position')) {
+                $agentProfile->watermark_position = $request->watermark_position;
+            }
+
+            if ($request->has('watermark_rotation')) {
+                $agentProfile->watermark_rotation = $request->watermark_rotation;
+            }
+
+            if ($request->hasFile('watermark_image')) {
+                $rawImage = $agentProfile->getRawOriginal('watermark_image');
+                $agentProfile->watermark_image = FileService::compressAndReplace(
+                    $request->file('watermark_image'),
+                    config('global.AGENT_WATERMARK_IMG_PATH'),
+                    $rawImage
+                );
+            }
+
+            $agentProfile->save();
+            DB::commit();
+
+            return ApiResponseService::successResponse(trans('Watermark Settings Updated Successfully'), $this->formatAgentWatermarkSettings($agentProfile->fresh(), $feature));
+        } catch (Exception $e) {
+            DB::rollback();
+
+            return ApiResponseService::errorResponse($e->getMessage());
+        }
+    }
+
+    private function formatAgentWatermarkSettings(AgentProfile $agentProfile, array $feature = []): array
+    {
+        return [
+            'feature_available' => $feature['feature_available'] ?? false,
+            'package_available' => $feature['package_available'] ?? false,
+            'limit_available' => $feature['limit_available'] ?? false,
+            'watermark_enabled' => $agentProfile->watermark_enabled ?? false,
+            'watermark_image' => $agentProfile->watermark_image,
+            'watermark_opacity' => $agentProfile->watermark_opacity ?? 25,
+            'watermark_size' => $agentProfile->watermark_size ?? 10,
+            'watermark_style' => $agentProfile->watermark_style ?? 'tile',
+            'watermark_position' => $agentProfile->watermark_position ?? 'center',
+            'watermark_rotation' => $agentProfile->watermark_rotation ?? 30,
+        ];
+    }
+
     public function updateAgentProfile(Request $request)
     {
         try {
@@ -235,13 +343,21 @@ class AgentApiController extends Controller
                 'agent_email' => 'nullable|email|max:255',
                 'agent_profile_photo' => 'nullable|file|max:3000|mimes:jpeg,png,jpg,webp',
                 'about_me' => 'nullable|string|max:1000',
-                'facebook_id' => 'nullable|string|max:255',
-                'twitter_id' => 'nullable|string|max:255',
-                'youtube_id' => 'nullable|string|max:255',
-                'instagram_id' => 'nullable|string|max:255',
+                'facebook_id' => ['nullable', 'string', 'max:255', 'regex:/^(https?:\/\/)?(www\.)?(facebook|fb)\.com\/.+$/i'],
+                'twitter_id' => ['nullable', 'string', 'max:255', 'regex:/^(https?:\/\/)?(www\.)?(twitter|x)\.com\/.+$/i'],
+                'youtube_id' => ['nullable', 'string', 'max:255', 'regex:/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/i'],
+                'instagram_id' => ['nullable', 'string', 'max:255', 'regex:/^(https?:\/\/)?(www\.)?instagram\.com\/.+$/i'],
+                'linkedin_id' => ['nullable', 'string', 'max:255', 'regex:/^(https?:\/\/)?(www\.)?linkedin\.com\/.+$/i'],
+                'agent_banner' => 'nullable|file|max:3000|mimes:jpeg,png,jpg,webp',
                 'agent_address' => 'nullable|string|max:500',
                 'agent_mobile' => 'nullable|string|max:20',
                 'agent_country_code' => 'nullable|string|max:10',
+            ], [
+                'facebook_id.regex' => trans('Please enter a valid Facebook URL.'),
+                'twitter_id.regex' => trans('Please enter a valid Twitter/X URL.'),
+                'youtube_id.regex' => trans('Please enter a valid YouTube URL.'),
+                'instagram_id.regex' => trans('Please enter a valid Instagram URL.'),
+                'linkedin_id.regex' => trans('Please enter a valid LinkedIn URL.'),
             ]);
             if ($validator->fails()) {
                 return ApiResponseService::validationError($validator->errors()->first());
@@ -279,6 +395,10 @@ class AgentApiController extends Controller
                 $agentProfile->instagram_id = $request->instagram_id;
             }
 
+            if ($request->has('linkedin_id')) {
+                $agentProfile->linkedin_id = $request->linkedin_id;
+            }
+
             if ($request->has('agent_address')) {
                 $agentProfile->agent_address = $request->agent_address;
             }
@@ -289,6 +409,15 @@ class AgentApiController extends Controller
 
             if ($request->has('agent_country_code')) {
                 $agentProfile->agent_country_code = $request->agent_country_code;
+            }
+
+            if ($request->hasFile('agent_banner')) {
+                $rawBanner = $agentProfile->getRawOriginal('agent_banner');
+                $agentProfile->agent_banner = FileService::compressAndReplace(
+                    $request->file('agent_banner'),
+                    config('global.AGENT_PROFILE_BANNER_PATH'),
+                    $rawBanner
+                );
             }
 
             if ($request->hasFile('agent_profile_photo')) {
@@ -331,6 +460,7 @@ class AgentApiController extends Controller
                 'agent_name' => ! empty($agentProfile?->getRawOriginal('agent_name')),
                 'agent_email' => ! empty($agentProfile?->agent_email),
                 'agent_profile_photo' => ! empty($agentProfile?->getRawOriginal('agent_profile_photo')),
+                'agent_banner' => ! empty($agentProfile?->getRawOriginal('agent_banner')),
             ];
 
             $completedFields = array_keys(array_filter($fields));
@@ -362,18 +492,18 @@ class AgentApiController extends Controller
             $last12Months = now()->subMonths(12);
             // Properties Query (only sell and rent properties)
             $propertiesQuery = Property::where(['added_by' => $loggedInUser->id, 'status' => 1, 'request_status' => 'approved', 'role_context' => $request->user_active_role])->where(function ($q) {
-                $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
             })->whereIn('propery_type', [0, 1]);
 
             // Projects Query
             $projectsQuery = Projects::where(['added_by' => $loggedInUser->id, 'status' => 1, 'request_status' => 'approved', 'role_context' => $request->user_active_role])->where(function ($q) {
-                $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
             });
 
             // Property Views Query
             $propertyViewsQuery = PropertyView::whereHas('property', function ($query) use ($loggedInUser, $request) {
                 $query->where(['added_by' => $loggedInUser->id, 'status' => 1, 'request_status' => 'approved', 'role_context' => $request->user_active_role])->where(function ($q) {
-                    $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                    $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                 });
             })->orderBy('views', 'DESC');
 
@@ -424,12 +554,15 @@ class AgentApiController extends Controller
                     'created_at',
                     'message',
                     DB::raw('LEAST(sender_id, receiver_id) as user1_id'),
-                    DB::raw('GREATEST(sender_id, receiver_id) as user2_id'),
-                    DB::raw('COUNT(CASE WHEN receiver_id = '.$loggedInUser->id.' AND is_read = 0 THEN 1 END) AS unread_count')
+                    DB::raw('GREATEST(sender_id, receiver_id) as user2_id')
                 )
-                ->where(function ($query) use ($loggedInUser) {
-                    $query->where('sender_id', $loggedInUser->id)
-                        ->orWhere('receiver_id', $loggedInUser->id);
+                ->selectRaw('COUNT(CASE WHEN receiver_id = ? AND receiver_role_context = ? AND is_read = 0 THEN 1 END) AS unread_count', [$loggedInUser->id, $request->user_active_role])
+                ->where(function ($query) use ($loggedInUser, $request) {
+                    $query->where(function ($q) use ($loggedInUser, $request) {
+                        $q->where('sender_id', $loggedInUser->id)->where('sender_role_context', $request->user_active_role);
+                    })->orWhere(function ($q) use ($loggedInUser, $request) {
+                        $q->where('receiver_id', $loggedInUser->id)->where('receiver_role_context', $request->user_active_role);
+                    });
                 })
                 ->orderBy('id', 'desc')
                 ->groupBy('user1_id', 'user2_id', 'property_id')
@@ -452,7 +585,7 @@ class AgentApiController extends Controller
                     }
                     $chat->other_user = [
                         'id' => $otherUserID ?? null,
-                        'name' => $otherUserID == 0 ? 'Admin' : $otherUser->name ?? null,
+                        'name' => $otherUser->name ?? null,
                         'email' => $otherUser->email ?? null,
                         'profile' => $otherUser->profile ?? null,
                         'slug_id' => $otherUser->slug_id ?? null,
@@ -526,7 +659,7 @@ class AgentApiController extends Controller
             if ($type == 'property') {
                 // Properties Query (only sell and rent properties)
                 $propertiesQuery = Property::where(['added_by' => $loggedInUser->id, 'status' => 1, 'request_status' => 'approved', 'role_context' => 'agent'])->where(function ($q) {
-                    $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                    $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                 })->whereIn('propery_type', [0, 1]);
 
                 // Range Property Query
@@ -612,12 +745,12 @@ class AgentApiController extends Controller
             if ($type == 'property') {
                 // Get Recently Added Properties
                 $recentlyListedData = Property::where(['added_by' => $loggedInUser->id, 'status' => 1, 'request_status' => 'approved', 'role_context' => 'agent'])->where(function ($q) {
-                    $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                    $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                 })->whereIn('propery_type', [0, 1])->clone()->with('category.translations', 'advertisement', 'interested_users:id,property_id,customer_id', 'interested_users.customer:id,name,profile', 'translations')->latest()->limit(5)->get()->map($propertyMapper);
             } elseif ($type == 'project') {
                 // Get Recently Added Projects
                 $recentlyListedData = Projects::where(['added_by' => $loggedInUser->id, 'status' => 1, 'request_status' => 'approved', 'role_context' => 'agent'])->where(function ($q) {
-                    $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                    $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                 })->clone()->with('category:id,slug_id,image,category', 'gallary_images', 'customer:id,name,profile,email,mobile', 'category.translations', 'translations')->latest()->limit(5)->get()->map($propertyMapper);
             } else {
                 return ApiResponseService::errorResponse(trans('Invalid type'));
@@ -732,6 +865,7 @@ class AgentApiController extends Controller
                             'added_by' => $loggedInUser->id,
                             'status' => 1,
                             'request_status' => 'approved',
+                            'role_context' => 'agent',
                         ]);
                     })
                     ->groupBy('property_id')
@@ -754,6 +888,7 @@ class AgentApiController extends Controller
                             'added_by' => $loggedInUser->id,
                             'status' => 1,
                             'request_status' => 'approved',
+                            'role_context' => 'agent',
                         ]);
                     })
                     ->groupBy('project_id')
@@ -808,6 +943,7 @@ class AgentApiController extends Controller
                         'added_by' => $loggedInUser->id,
                         'status' => 1,
                         'request_status' => 'approved',
+                        'role_context' => 'agent',
                     ]);
                 })
                 ->with('property:id,category_id', 'property.category.translations')
@@ -822,6 +958,7 @@ class AgentApiController extends Controller
                         'added_by' => $loggedInUser->id,
                         'status' => 1,
                         'request_status' => 'approved',
+                        'role_context' => 'agent',
                     ]);
                 })
                 ->with('project:id,category_id', 'project.category.translations')
@@ -930,6 +1067,7 @@ class AgentApiController extends Controller
             'is_projects' => 'nullable|in:1',
             'is_admin' => 'nullable|in:1',
             'search' => 'nullable|string',
+            'filters' => 'nullable|string',
         ]);
         if ($validator->fails()) {
             return response()->json([
@@ -938,6 +1076,45 @@ class AgentApiController extends Controller
             ]);
         }
         try {
+            // First decode filters from base64
+            $filters = $request->filters ?? null;
+            if (! empty($filters)) {
+                $filters = base64_decode($filters);
+                if (json_validate($filters)) {
+                    $filters = json_decode($filters, true);
+                } else {
+                    
+                    $filters = [];
+                }
+            } else {
+                $filters = [];
+            }
+
+            // Get Filters Variables
+            $propertyType = isset($filters['property_type']) ? $filters['property_type'] : null;
+            $categoryId = isset($filters['category_id']) ? $filters['category_id'] : null;
+            $categorySlugId = isset($filters['category_slug_id']) ? $filters['category_slug_id'] : null;
+            $country = isset($filters['location']['country']) ? $filters['location']['country'] : null;
+            $state = isset($filters['location']['state']) ? $filters['location']['state'] : null;
+            $city = isset($filters['location']['city']) ? $filters['location']['city'] : null;
+            $placeId = isset($filters['location']['place_id']) ? $filters['location']['place_id'] : null;
+            $latitude = isset($filters['location']['latitude']) ? $filters['location']['latitude'] : null;
+            $longitude = isset($filters['location']['longitude']) ? $filters['location']['longitude'] : null;
+            $radius = isset($filters['location']['radius']) ? $filters['location']['radius'] : null;
+            $minPrice = isset($filters['price']['min_price']) ? $filters['price']['min_price'] : null;
+            $maxPrice = isset($filters['price']['max_price']) ? $filters['price']['max_price'] : null;
+            $postedSince = $filters['posted_since'] ?? null;
+            $parameters = isset($filters['parameters']) ? $filters['parameters'] : null;
+            $nearbyPlaces = isset($filters['nearby_places']) ? $filters['nearby_places'] : null;
+            $search = isset($filters['search']) ? $filters['search'] : $request->search;
+            $projectType = isset($filters['project_type']) ? $filters['project_type'] : null;
+
+            // Get Flags from filters
+            $promoted = isset($filters['flags']['promoted']) ? $filters['flags']['promoted'] : null;
+            $getPremiumProperties = isset($filters['flags']['get_all_premium_properties']) ? $filters['flags']['get_all_premium_properties'] : null;
+            $mostViewed = isset($filters['flags']['most_views']) ? $filters['flags']['most_views'] : null;
+            $mostLiked = isset($filters['flags']['most_liked']) ? $filters['flags']['most_liked'] : null;
+
             $response = [
                 'package_available' => false,
                 'feature_available' => false,
@@ -963,7 +1140,7 @@ class AgentApiController extends Controller
                 $adminAddress = $settings['company_address'];
                 $customerData = [];
                 $adminPropertiesCount = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved', 'role_context' => 'agent'])->count();
-                $adminProjectsCount = Projects::where(['is_admin_listing' => 1, 'status' => 1, 'role_context' => 'agent'])->count();
+                $adminProjectsCount = Projects::where(['is_admin_listing' => 1, 'status' => 1])->count();
                 $totalCount = $adminPropertiesCount + $adminProjectsCount;
 
                 $adminData = User::where('type', 0)->select('id', 'name', 'profile', 'slug_id', 'type')->first();
@@ -972,7 +1149,7 @@ class AgentApiController extends Controller
                 if ($adminData) {
                     $customerData = [
                         'id' => $adminData->id,
-                        'name' => 'Admin',
+                        'name' => $adminData->name,
                         'slug_id' => $adminData->slug_id,
                         'email' => ! empty($adminEmail) ? $adminEmail : '',
                         'mobile' => ! empty($adminCompanyTel1) ? $adminCompanyTel1 : '',
@@ -990,18 +1167,14 @@ class AgentApiController extends Controller
                 }
             } else {
                 // Customer Query
-                $customerQuery = Customer::select('id', 'slug_id', 'name', 'profile', 'mobile', 'email', 'address', 'city', 'country', 'state', 'latitude', 'longitude', 'is_agent')
+                $customerQuery = Customer::select('id', 'slug_id', 'name', 'profile', 'mobile', 'email', 'address', 'city', 'country', 'state', 'latitude', 'longitude', 'is_agent', 'is_agent_verified')
                     ->with('agent_profile')
                     ->where(function ($query) {
                         $query->where('isActive', 1);
                     })->withCount(['projects' => function ($query) {
-                        $query->where('status', 1)->where('role_context', 'agent');
-                    }, 'property' => function ($query) use ($response) {
-                        if ($response['package_available'] == true && $response['feature_available'] == true) {
-                            $query->onlyActive()->where('role_context', 'agent');
-                        } else {
-                            $query->where(['status' => 1, 'request_status' => 'approved', 'is_premium' => 0, 'role_context' => 'agent']);
-                        }
+                        $query->onlyActive()->where('role_context', 'agent');
+                    }, 'property' => function ($query) {
+                        $query->onlyActive()->where('role_context', 'agent');
                     }]);
                 // Check if id exists or slug id on the basis of get agent id
                 if ($request->has('id') && ! empty($request->id)) {
@@ -1019,12 +1192,11 @@ class AgentApiController extends Controller
                 // !empty($customerData) ? $customerData->is_verify = $customerData->is_user_verified : "";
                 // !empty($customerData) ? $customerData->is_verified_user = $customerData->is_user_verified : "";
                 if (! empty($customerData)) {
-                    $resolved = $customerData->resolved_agent_profile;
+                    $resolved = $customerData->applyResolvedAgentProfile();
                     $customerData->name = $resolved['agent_name'];
                     $customerData->email = $resolved['agent_email'];
                     $customerData->profile = $resolved['agent_profile_photo'];
                     $customerData->mobile = $resolved['agent_mobile'];
-                    $customerData->agent_profile = $resolved;
                     $customerData->is_agent = $customerData->is_agent;
                     $customerData->is_appointment_available = $customerData->is_appointment_available;
                     $customerData->is_agent_verified = $customerData->is_agent_verified;
@@ -1035,9 +1207,83 @@ class AgentApiController extends Controller
             if (! empty($addedBy) || $addedBy === 0) {
                 if (($request->has('is_projects') && ! empty($request->is_projects) && $request->is_projects == 1)) {
                     // Always fetch non-premium projects regardless of package
-                    $projectQuery = Projects::select('id', 'slug_id', 'city', 'state', 'country', 'title', 'type', 'image', 'location', 'category_id', 'added_by', 'is_premium')->when($request->has('search') && ! empty($request->search), function ($query) use ($request) {
-                        $query->where('title', 'LIKE', "%$request->search%");
+                    $projectQuery = Projects::select('id', 'slug_id', 'city', 'state', 'country', 'title', 'type', 'image', 'location', 'category_id', 'added_by', 'is_premium');
+
+                    // If Project Type is passed (0 = upcoming, 1 = under_construction)
+                    if (isset($projectType) && $projectType !== null) {
+                        $typeValue = $projectType == 0 ? 'upcoming' : 'under_construction';
+                        $projectQuery = $projectQuery->where('type', $typeValue);
+                    }
+
+                    // If Category Id is Passed
+                    if (isset($categoryId) && ! empty($categoryId)) {
+                        $projectQuery = $projectQuery->where('category_id', $categoryId);
+                    }
+
+                    // If Category Slug is Passed
+                    if (isset($categorySlugId) && ! empty($categorySlugId)) {
+                        $projectQuery = $projectQuery->whereHas('category', function ($query) use ($categorySlugId) {
+                            $query->where('slug_id', $categorySlugId);
+                        });
+                    }
+
+                    // If Country is passed
+                    if (isset($country) && ! empty($country)) {
+                        $projectQuery = $projectQuery->where('country', 'like', '%'.$country.'%');
+                    }
+
+                    // If State is passed
+                    if (isset($state) && ! empty($state)) {
+                        $projectQuery = $projectQuery->where('state', 'like', '%'.$state.'%');
+                    }
+
+                    // If City is passed
+                    if (isset($city) && ! empty($city)) {
+                        $projectQuery = $projectQuery->where('city', 'like', '%'.$city.'%');
+                    }
+
+                    // If place ID is passed, resolve it to city name
+                    if (isset($placeId) && ! empty($placeId)) {
+                        $locationData = $this->resolvePlaceIdToLocation($placeId);
+                        if ($locationData) {
+                            if ($locationData['city']) {
+                                $projectQuery = $projectQuery->where('city', $locationData['city']);
+                            }
+                            if ($locationData['state']) {
+                                $projectQuery = $projectQuery->where('state', $locationData['state']);
+                            }
+                            if ($locationData['country']) {
+                                $projectQuery = $projectQuery->where('country', $locationData['country']);
+                            }
+                        }
+                    }
+
+                    // Location radius filter (lat/long + radius in km)
+                    if (! empty($latitude) && ! empty($longitude) && $latitude != 'null' && $longitude != 'null') {
+                        if (! empty($radius) && $radius != 'null') {
+                            $projectQuery = $projectQuery->where('latitude', '!=', 0)
+                                ->where('longitude', '!=', 0)
+                                ->whereRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?', [$latitude, $longitude, $latitude, $radius]);
+                        } else {
+                            $projectQuery = $projectQuery->where('latitude', $latitude)->where('longitude', $longitude);
+                        }
+                    }
+
+                    $projectQuery = $projectQuery->when(! empty($search), function ($query) use ($search) {
+                        $query->where(function ($whereCondition) use ($search) {
+                            $whereCondition->where('title', 'like', '%'.$search.'%')
+                                ->orWhere('city', 'like', '%'.$search.'%')
+                                ->orWhere('state', 'like', '%'.$search.'%')
+                                ->orWhere('country', 'like', '%'.$search.'%')
+                                ->orWhereHas('category', function ($query) use ($search) {
+                                    $query->where('category', 'like', '%'.$search.'%');
+                                })
+                                ->orWhere(function ($query) use ($search) {
+                                    $query->searchInAnyTranslation($search);
+                                });
+                        });
                     });
+
                     if ($isAdminListing == true) {
                         $projectQuery = $projectQuery->clone()->where(['status' => 1, 'is_admin_listing' => 1]);
                     } else {
@@ -1047,8 +1293,42 @@ class AgentApiController extends Controller
                     if ($response['feature_available'] == false) {
                         $projectQuery = $projectQuery->where('is_premium', 0);
                     }
+
+                    // Flag: promoted -> only projects with an active advertisement
+                    if (isset($promoted) && ! empty($promoted) && $promoted == 1) {
+                        $projectQuery = $projectQuery->whereHas('advertisement', function ($query) {
+                            $query->where(['status' => 0, 'is_enable' => 1]);
+                        });
+                    }
+
+                    // Flag: get_all_premium_properties -> only premium projects
+                    if (isset($getPremiumProperties) && ! empty($getPremiumProperties) && $getPremiumProperties == 1) {
+                        $projectQuery = $projectQuery->where('is_premium', 1);
+                    }
+
+                    // Note: most_liked is not supported for projects (no favourite relationship on Projects)
+
                     $totalProjects = $projectQuery->clone()->count();
                     $totalData = $totalProjects;
+
+                    // Add promoted_count for promoted-first ordering
+                    $projectQuery = $projectQuery->withCount([
+                        'advertisement as promoted_count' => function ($query) {
+                            $query->where('status', 0)
+                                ->where('is_enable', 1)
+                                ->where('for', 'project')
+                                ->groupBy('project_id');
+                        },
+                    ]);
+
+                    // Always group promoted projects first
+                    $projectQuery = $projectQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END');
+
+                    // Flag: most_views -> randomize promoted, order non-promoted by total_click DESC
+                    if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
+                        $projectQuery = $projectQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - total_click) END');
+                    }
+
                     // Always return project data (no package check)
                     $projectData = $projectQuery->clone()->with('gallary_images', 'category:id,slug_id,image,category', 'category.translations', 'translations')->skip($offset)->take($limit)->get()->map(function ($project) {
                         if ($project->category) {
@@ -1064,10 +1344,150 @@ class AgentApiController extends Controller
                     $response['package_available'] = $response['package_available'] ?? true;
                 } else {
                     // Create a proeprty query
-                    $propertiesQuery = Property::onlyActive()->where(['added_by' => $addedBy, 'role_context' => 'agent'])
-                        ->when($request->has('search') && ! empty($request->search), function ($query) use ($request) {
-                            $query->where('title', 'LIKE', "%$request->search%");
+                    $basePropertiesQuery = Property::onlyActive()->where(['added_by' => $addedBy, 'role_context' => 'agent'])
+                        ->when(! empty($search), function ($query) use ($search) {
+                            $query->where(function ($whereCondition) use ($search) {
+                                $whereCondition->where('title', 'like', '%'.$search.'%')
+                                    ->orWhere('address', 'like', '%'.$search.'%')
+                                    ->orWhereHas('category', function ($query) use ($search) {
+                                        $query->where('category', 'like', '%'.$search.'%');
+                                    })
+                                    ->orWhere(function ($query) use ($search) {
+                                        $query->searchInAnyTranslation($search);
+                                    });
+                            });
                         });
+                        
+                    $propertiesQuery = $basePropertiesQuery->clone();
+
+                    // If Property Type Passed
+                    if (isset($propertyType) && (! empty($propertyType) || $propertyType == 0)) {
+                        $propertiesQuery = $propertiesQuery->where('propery_type', $propertyType);
+                    }
+
+                    // If Category Id is Passed
+                    if (isset($categoryId) && ! empty($categoryId)) {
+                        $propertiesQuery = $propertiesQuery->where('category_id', $categoryId);
+                    }
+
+                    // If Category Slug is Passed
+                    if (isset($categorySlugId) && ! empty($categorySlugId)) {
+                        $propertiesQuery = $propertiesQuery->whereHas('category', function ($query) use ($categorySlugId) {
+                            $query->where('slug_id', $categorySlugId);
+                        });
+                    }
+
+                    // If parameter id passed
+                    if (isset($parameters) && ! empty($parameters)) {
+                        foreach ($parameters as $parameter) {
+                            $parameterId = $parameter['id'];
+                            $propertiesQuery = $propertiesQuery->whereHas('assignParameter', function ($query) use ($parameterId) {
+                                $query->where('parameter_id', $parameterId)
+                                    ->where(function ($q) {
+                                        $q->whereNotNull('value')
+                                            ->orWhere('value', '!=', '')
+                                            ->orWhere('value', '!=', 'null');
+                                    });
+                            });
+                        }
+                    }
+
+                    if (isset($nearbyPlaces) && ! empty($nearbyPlaces)) {
+                        foreach ($nearbyPlaces as $nearbyPlace) {
+                            $nearbyPlaceId = $nearbyPlace['id'];
+                            $nearbyPlaceValue = $nearbyPlace['value'];
+                            if (isset($nearbyPlace['value']) && ! empty($nearbyPlace['value'])) {
+                                $propertiesQuery = $propertiesQuery->whereHas('assignfacilities', function ($query) use ($nearbyPlaceId, $nearbyPlaceValue) {
+                                    $query->where('facility_id', $nearbyPlaceId)->where('distance', '<=', $nearbyPlaceValue);
+                                });
+                            } else {
+                                $propertiesQuery = $propertiesQuery->whereHas('assignfacilities', function ($query) use ($nearbyPlaceId) {
+                                    $query->where('facility_id', $nearbyPlaceId);
+                                });
+                            }
+                        }
+                    }
+
+                    // If Country is passed
+                    if (isset($country) && ! empty($country)) {
+                        $propertiesQuery = $propertiesQuery->where('country', 'like', '%'.$country.'%');
+                    }
+
+                    // If State is passed
+                    if (isset($state) && ! empty($state)) {
+                        $propertiesQuery = $propertiesQuery->where('state', 'like', '%'.$state.'%');
+                    }
+
+                    // If City is passed
+                    if (isset($city) && ! empty($city)) {
+                        $propertiesQuery = $propertiesQuery->where('city', 'like', '%'.$city.'%');
+                    }
+
+                    // If place ID is passed, resolve it to city name
+                    if (isset($placeId) && ! empty($placeId)) {
+                        $locationData = $this->resolvePlaceIdToLocation($placeId);
+                        if ($locationData) {
+                            if ($locationData['city']) {
+                                $propertiesQuery = $propertiesQuery->where('city', $locationData['city']);
+                            }
+                            if ($locationData['state']) {
+                                $propertiesQuery = $propertiesQuery->where('state', $locationData['state']);
+                            }
+                            if ($locationData['country']) {
+                                $propertiesQuery = $propertiesQuery->where('country', $locationData['country']);
+                            }
+                        }
+                    }
+
+                    // Location radius filter (lat/long + radius in km)
+                    if (! empty($latitude) && ! empty($longitude) && $latitude != 'null' && $longitude != 'null') {
+                        if (! empty($radius) && $radius != 'null') {
+                            $propertiesQuery = $propertiesQuery->where('latitude', '!=', 0)
+                                ->where('longitude', '!=', 0)
+                                ->whereRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?', [$latitude, $longitude, $latitude, $radius]);
+                        } else {
+                            $propertiesQuery = $propertiesQuery->where('latitude', $latitude)->where('longitude', $longitude);
+                        }
+                    }
+
+                    // If Max Price And Min Price passed
+                    if (isset($minPrice) && ! empty($minPrice)) {
+                        $propertiesQuery = $propertiesQuery->where('price', '>=', $minPrice);
+                    }
+
+                    if (isset($maxPrice) && ! empty($maxPrice)) {
+                        $propertiesQuery = $propertiesQuery->where('price', '<=', $maxPrice);
+                    }
+
+                    // If Posted Since is passed
+                    if (isset($postedSince) && $postedSince !== '') {
+                        if ($postedSince == 0) {
+                            // Last Week (last 7 days)
+                            $propertiesQuery = $propertiesQuery->where('created_at', '>=', Carbon::now()->subWeek());
+                        }
+                        if ($postedSince == 1) {
+                            $yesterdayDate = Carbon::yesterday();
+                            $propertiesQuery = $propertiesQuery->whereDate('created_at', $yesterdayDate);
+                        }
+                        if ($postedSince == 2) {
+                            $lastMonthDate = Carbon::now()->subMonth();
+                            $today = Carbon::now()->endOfDay();
+                            $propertiesQuery = $propertiesQuery->whereBetween('created_at', [$lastMonthDate, $today]);
+                        }
+                    }
+
+                    // Flag: promoted -> only properties with an active advertisement
+                    if (isset($promoted) && ! empty($promoted) && $promoted == 1) {
+                        $propertiesQuery = $propertiesQuery->whereHas('advertisement', function ($query) {
+                            $query->where(['status' => 0, 'is_enable' => 1]);
+                        });
+                    }
+
+                    // Flag: get_all_premium_properties -> only premium properties
+                    if (isset($getPremiumProperties) && ! empty($getPremiumProperties) && $getPremiumProperties == 1) {
+                        $propertiesQuery = $propertiesQuery->where('is_premium', 1);
+                    }
+
                     // Count premium properties without the condition
                     $premiumPropertiesCount = $propertiesQuery->clone()->where('is_premium', 1)->count();
 
@@ -1079,10 +1499,34 @@ class AgentApiController extends Controller
                     $totalProperties = $propertiesQuery->clone()->count();
 
                     // Get Propertis Data
-                    $propertiesData = $propertiesQuery->clone()
+                    $propertiesDataQuery = $propertiesQuery->clone()
                         ->with('category:id,slug_id,image,category', 'category.translations', 'translations')
                         ->select('id', 'slug_id', 'city', 'state', 'category_id', 'country', 'price', 'propery_type', 'title', 'title_image', 'is_premium', 'address', 'added_by', 'role_context')
-                        ->orderBy('is_premium', 'DESC')->skip($offset)->take($limit)->get()->map(function ($property) {
+                        ->withCount([
+                            'advertisement as promoted_count' => function ($query) {
+                                $query->where('status', 0)
+                                    ->where('is_enable', 1)
+                                    ->where('for', 'property')
+                                    ->groupBy('property_id');
+                            },
+                        ])
+                        ->withCount('favourite');
+
+                    if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
+                        // most_views: promoted first (randomized), then non-promoted by total_click DESC
+                        $propertiesDataQuery = $propertiesDataQuery
+                            ->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END')
+                            ->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - total_click) END');
+                    } elseif (isset($mostLiked) && ! empty($mostLiked) && $mostLiked == 1) {
+                        // most_liked: promoted first (randomized), then non-promoted by favourite_count DESC
+                        $propertiesDataQuery = $propertiesDataQuery
+                            ->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END')
+                            ->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - favourite_count) END');
+                    } else {
+                        $propertiesDataQuery = $propertiesDataQuery->orderBy('is_premium', 'DESC');
+                    }
+
+                    $propertiesData = $propertiesDataQuery->skip($offset)->take($limit)->get()->map(function ($property) {
                             $property->property_type = $property->propery_type;
                             $property->parameters = $property->parameters;
                             $property->promoted = $property->is_promoted;
@@ -1096,8 +1540,8 @@ class AgentApiController extends Controller
                             return $property;
                         });
                     $totalData = $totalProperties;
-                    $totalSoldProperties = $propertiesQuery->clone()->where('propery_type', 2)->count();
-                    $totalRentedProperties = $propertiesQuery->clone()->where('propery_type', 3)->count();
+                    $totalSoldProperties = $basePropertiesQuery->clone()->where('propery_type', 2)->count();
+                    $totalRentedProperties = $basePropertiesQuery->clone()->where('propery_type', 3)->count();
                 }
             }
             // Add Sold and Rented Count in Customer Data
@@ -1388,5 +1832,49 @@ class AgentApiController extends Controller
         }
 
         return $last12MonthsAppointmentCounts;
+    }
+
+    private function resolvePlaceIdToLocation($placeId)
+    {
+        $googleApiKey = env('PLACE_API_KEY');
+        $response = \Illuminate\Support\Facades\Http::get('https://maps.googleapis.com/maps/api/place/details/json', [
+            'place_id' => $placeId,
+            'fields' => 'address_components',
+            'key' => $googleApiKey,
+        ]);
+
+        if ($response->successful()) {
+            $data = $response->json();
+            $location = [
+                'city' => null,
+                'state' => null,
+                'country' => null,
+            ];
+
+            if (isset($data['result']) && ! empty($data['result'])) {
+                foreach ($data['result']['address_components'] as $component) {
+                    $types = $component['types'];
+
+                    // Extract city (locality)
+                    if (in_array('locality', $types)) {
+                        $location['city'] = $component['long_name'];
+                    }
+                    // Extract state (administrative_area_level_1)
+                    elseif (in_array('administrative_area_level_1', $types)) {
+                        $location['state'] = $component['long_name'];
+                    }
+                    // Extract country
+                    elseif (in_array('country', $types)) {
+                        $location['country'] = $component['long_name'];
+                    }
+                }
+            } else {
+                \Illuminate\Support\Facades\Log::error($data);
+            }
+
+            return $location;
+        }
+
+        return null;
     }
 }

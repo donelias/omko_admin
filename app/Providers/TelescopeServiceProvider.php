@@ -14,10 +14,16 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
      */
     public function register(): void
     {
+        $isLocal = $this->app->environment('local');
+
+        // In non-local environments Telescope must not collect/record request,
+        // exception or job data. Production data is sensitive and should never
+        // be persisted by a development tooling package.
+        if (! $isLocal) {
+            Telescope::stopRecording();
+        }
 
         $this->hideSensitiveRequestDetails();
-
-        $isLocal = $this->app->environment('local');
 
         Telescope::filter(function (IncomingEntry $entry) use ($isLocal) {
             return $isLocal ||
@@ -39,7 +45,11 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
     {
 
         Telescope::auth(function () {
-            return auth()->check(); // Allow access only if the user is authenticated
+            // Only administrators may access Telescope. Regular authenticated
+            // users (customers/agents) must never be able to view logged
+            // requests, exceptions or payloads.
+            $user = auth()->user();
+            return $user && intval($user->type) === 0;
         });
     }
 

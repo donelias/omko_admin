@@ -49,7 +49,7 @@ class OutdoorFacilityController extends Controller
                 'image.required' => 'The image field is required.',
                 'image.image' => 'The uploaded file must be an image.',
                 'image.mimes' => 'The image must be a SVG file.',
-                'image.max' => 'The image size should not exceed 2MB.', // Adjust as needed
+                'image.max' => 'File size exceeds the :max limit. Please upload a smaller image.',
             ]);
 
             $destinationPath = public_path('images').config('global.FACILITY_IMAGE_PATH');
@@ -131,7 +131,7 @@ class OutdoorFacilityController extends Controller
                 $operate = BootstrapTableService::editButton('', true, null, null, $row->id, null);
             }
             if (has_permissions('delete', 'near_by_places')) {
-                $operate .= BootstrapTableService::deleteButton(route('outdoor_facilities.destroy', $row->id));
+                $operate .= BootstrapTableService::deleteButton(route('outdoor_facilities.destroy.url', $row->id));
             }
             $tempRow['operate'] = $operate;
             $rows[] = $tempRow;
@@ -162,7 +162,7 @@ class OutdoorFacilityController extends Controller
                     'image.required' => 'The image field is required.',
                     'image.image' => 'The uploaded file must be an image.',
                     'image.mimes' => 'The image must be a SVG file.',
-                    'image.max' => 'The image size should not exceed 2MB.', // Adjust as needed
+                    'image.max' => 'File size exceeds the :max limit. Please upload a smaller image.',
                 ]);
 
                 $id = $request->edit_id;

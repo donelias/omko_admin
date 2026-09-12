@@ -17,6 +17,7 @@ use App\Models\RejectReason;
 use App\Models\Setting;
 use App\Models\Usertokens;
 use App\Rules\VideoUrlRule;
+use App\Services\AuditLogService;
 use App\Services\BootstrapTableService;
 use App\Services\FileService;
 use App\Services\HelperService;
@@ -119,7 +120,6 @@ class PropertController extends Controller
                 $saveProperty->client_address = $request->client_address;
                 $saveProperty->propery_type = $request->property_type;
                 $saveProperty->price = $request->price;
-                $saveProperty->currency = $request->currency ?? 'USD';
                 $saveProperty->request_status = 'approved';
                 $saveProperty->status = 1;
                 $saveProperty->package_id = 0;
@@ -289,6 +289,7 @@ class PropertController extends Controller
                 // END ::Add Translations
 
                 DB::commit();
+                AuditLogService::log('property', $saveProperty->id, $saveProperty->title, 'created', "Property '{$saveProperty->title}' created by admin");
                 ResponseService::successResponse('Data Created Successfully');
             } catch (Exception $e) {
                 DB::rollBack();
@@ -350,8 +351,11 @@ class PropertController extends Controller
             $par_id = [];
             $type_arr = [];
             foreach ($list->assignParameter as $par) {
+                if (! $par->parameter) {
+                    continue;
+                }
                 $par_arr = $par_arr + [$par->parameter->name => $par->value];
-                $par_id = $par_id + [$par->parameter->name => $par->value];
+                $par_id  = $par_id  + [$par->parameter->name => $par->value];
             }
             $currency_symbol = Setting::where('type', 'currency_symbol')->pluck('data')->first();
             $distanceValueDB = system_setting('distance_option');
@@ -401,6 +405,9 @@ class PropertController extends Controller
 
                 DB::beginTransaction();
                 $UpdateProperty = Property::with('assignparameter.parameter')->find($id);
+                $watermarkAgentId = ($UpdateProperty->added_by != 0 && Customer::where('id', $UpdateProperty->added_by)->where('is_agent', true)->exists())
+                    ? $UpdateProperty->added_by
+                    : null;
                 $destinationPath = public_path('images').config('global.PROPERTY_TITLE_IMG_PATH');
                 if (! is_dir($destinationPath)) {
                     mkdir($destinationPath, 0777, true);
@@ -413,7 +420,6 @@ class PropertController extends Controller
                 $UpdateProperty->client_address = $request->client_address;
                 $UpdateProperty->propery_type = $request->property_type;
                 $UpdateProperty->price = $request->price;
-                $UpdateProperty->currency = $request->currency ?? $UpdateProperty->currency ?? 'USD';
                 $UpdateProperty->propery_type = $request->property_type;
                 $UpdateProperty->price = $request->price;
                 $UpdateProperty->state = (isset($request->state)) ? $request->state : '';
@@ -449,12 +455,25 @@ class PropertController extends Controller
                 }
 
                 $UpdateProperty->rentduration = $request->price_duration;
+
+                // Auto-approve logic on edit (only for customer-uploaded listings)
+                if ($UpdateProperty->added_by != 0) {
+                    $autoApprove = HelperService::getAutoApproveStatus($UpdateProperty->added_by, 'user');
+                    if ($autoApprove) {
+                        $UpdateProperty->request_status = 'approved';
+                        $UpdateProperty->status         = 1;
+                    } else {
+                        $UpdateProperty->request_status = 'pending';
+                        $UpdateProperty->status         = 0;
+                    }
+                }
+
                 if ($request->hasFile('title_image')) {
                     $path = config('global.PROPERTY_TITLE_IMG_PATH');
                     $requestFile = $request->file('title_image');
                     $rawImage = $UpdateProperty->getRawOriginal('title_image');
                     FileService::clearCachedBlurImageUrl('blur_property_title_image_'.$UpdateProperty->id);
-                    $UpdateProperty->title_image = FileService::compressAndReplace($requestFile, $path, $rawImage, true);
+                    $UpdateProperty->title_image = FileService::compressAndReplace($requestFile, $path, $rawImage, true, $watermarkAgentId);
                 }
 
                 if ($request->hasFile('3d_image')) {
@@ -533,7 +552,7 @@ class PropertController extends Controller
                     foreach ($request->file('gallery_images') as $file) {
                         $path = config('global.PROPERTY_GALLERY_IMG_PATH').$UpdateProperty->id.'/';
                         $requestFile = $file;
-                        $imageName = FileService::compressAndUpload($requestFile, $path, true);
+                        $imageName = FileService::compressAndUpload($requestFile, $path, true, $watermarkAgentId);
                         $galleryImagesData[] = [
                             'propertys_id' => $UpdateProperty->id,
                             'image' => $imageName,
@@ -597,6 +616,45 @@ class PropertController extends Controller
                 }
 
                 DB::commit();
+
+                // Notify property owner when admin edits their property
+                if ($UpdateProperty->added_by != 0) {
+                    try {
+                        $UpdateProperty->load('customer:id,name,isActive,notification');
+                        $customer = $UpdateProperty->customer;
+                        if ($customer && $customer->isActive == 1 && $customer->notification == 1) {
+                            $tokens = Usertokens::where('customer_id', $customer->id)->pluck('fcm_id')->toArray();
+                            if (! empty($tokens)) {
+                                $fcmMsg = [
+                                    'title'        => 'Property updated :- :property_name',
+                                    'message'      => trans('Your property has been edited by administrator'),
+                                    'type'         => 'property_inquiry',
+                                    'body'         => trans('Your property has been edited by administrator'),
+                                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                                    'sound'        => 'default',
+                                    'id'           => (string) $UpdateProperty->id,
+                                    'role_context' => $UpdateProperty->role_context ?? 'user',
+                                    'replace'      => ['property_name' => $UpdateProperty->title],
+                                ];
+                                send_push_notification($tokens, $fcmMsg);
+                            }
+                        }
+                        Notifications::create([
+                            'title'        => 'Property Updated :- ' . $UpdateProperty->title,
+                            'message'      => trans('Your property has been edited by administrator'),
+                            'image'        => '',
+                            'type'         => '1',
+                            'send_type'    => '0',
+                            'customers_id' => $UpdateProperty->customer->id,
+                            'propertys_id' => $UpdateProperty->id,
+                            'role_context' => $UpdateProperty->role_context ?? 'user',
+                        ]);
+                    } catch (Exception $e) {
+                        Log::error('Admin edit property notification failed: ' . $e->getMessage());
+                    }
+                }
+
+                AuditLogService::log('property', $UpdateProperty->id, $UpdateProperty->title, 'updated', "Property '{$UpdateProperty->title}' updated by admin");
                 ResponseService::successResponse('Data Updated Successfully');
             } catch (Exception $e) {
                 DB::rollBack();
@@ -621,9 +679,11 @@ class PropertController extends Controller
         } else {
             DB::beginTransaction();
             $property = Property::find($id);
+            $propertyTitle = $property->title;
 
             if ($property->delete()) {
                 DB::commit();
+                AuditLogService::log('property', $id, $propertyTitle, 'deleted', "Property '{$propertyTitle}' deleted by admin");
                 ResponseService::successRedirectResponse('Data Deleted Successfully');
             } else {
                 DB::rollBack();
@@ -643,6 +703,7 @@ class PropertController extends Controller
 
         $sql = Property::with('category')
             ->with('customer:id,name,mobile')
+            ->with('customer.agent_profile:customer_id,agent_name')
             ->with('assignParameter.parameter')
             ->with('interested_users')
             ->with('advertisement')
@@ -734,7 +795,9 @@ class PropertController extends Controller
             if ($addedAsFilter === 'admin') {
                 $sql = $sql->where('added_by', 0);
             } elseif ($addedAsFilter === 'user') {
-                $sql = $sql->where('role_context', 'user')->where('added_by', '!=', 0);
+                $sql = $sql->where(function ($q) {
+                    $q->where('role_context', 'user')->orWhereNull('role_context');
+                })->where('added_by', '!=', 0);
             } elseif ($addedAsFilter === 'agent') {
                 $sql = $sql->where('role_context', 'agent')->where('added_by', '!=', 0);
             }
@@ -755,11 +818,18 @@ class PropertController extends Controller
 
         $operate = '';
         $currency_symbol = Setting::where('type', 'currency_symbol')->pluck('data')->first();
+        $adminName = \App\Models\User::where('type', 0)->value('name') ?? trans('Admin');
 
         foreach ($res as $row) {
             $tempRow = $row->toArray();
             $tempRow['property_type'] = $row->getRawOriginal('propery_type');
-            $tempRow['customer_name'] = $row->added_by == 0 ? trans('Admin') : $row->customer->name;
+            if ($row->added_by == 0) {
+                $tempRow['customer_name'] = $adminName;
+            } elseif ($row->role_context === 'agent') {
+                $tempRow['customer_name'] = $row->customer?->agent_profile?->agent_name ?? $row->customer?->name ?? '-';
+            } else {
+                $tempRow['customer_name'] = $row->customer?->name ?? '-';
+            }
             $tempRow['added_as_tag'] = $row->added_by == 0 ? 'admin' : ($row->role_context ?? 'user');
 
             if ($row->added_by != 0) {
@@ -777,7 +847,7 @@ class PropertController extends Controller
                 $operate .= BootstrapTableService::editButton(route('property.edit', $row->id), false);
             }
             if (has_permissions('delete', 'property')) {
-                $operate .= BootstrapTableService::deleteButton(route('property.destroy', $row->id));
+                $operate .= BootstrapTableService::deleteButton(route('property.destroy.url', $row->id));
             }
 
             $interested_users = [];
@@ -811,12 +881,12 @@ class PropertController extends Controller
             $tempRow['Property_name'] = '<div class="propetrty_name d-flex"><img class="property_image" alt="" src="'.$row->title_image.'"><div class="property_detail"><div class="property_title">'.$row->title.'</div>'.$featured.'</div></div></div>';
 
             if ($row->added_by != 0) {
-                $tempRow['added_by'] = $row->customer->name;
-                $tempRow['mobile'] = (env('DEMO_MODE') ? (env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? ($row->customer->mobile) : '****************************') : ($row->customer->mobile));
+                $tempRow['added_by'] = $row->customer?->name ?? '-';
+                $tempRow['mobile'] = (env('DEMO_MODE') ? (env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? ($row->customer?->mobile ?? '') : '****************************') : ($row->customer?->mobile ?? ''));
             }
             if ($row->added_by == 0) {
                 $mobile = Setting::where('type', 'company_tel1')->pluck('data');
-                $tempRow['added_by'] = trans('Admin');
+                $tempRow['added_by'] = $adminName;
                 $tempRow['mobile'] = $mobile[0];
             }
             $tempRow['customer_ids'] = $interested_users;
@@ -911,9 +981,12 @@ class PropertController extends Controller
                         'send_type' => '0',
                         'customers_id' => $Property->customer->id,
                         'propertys_id' => $Property->id,
+                        'role_context' => $Property->role_context ?? 'user',
                     ]);
                 }
             }
+            $statusLabel = $request->status ? 'Activated' : 'Deactivated';
+            AuditLogService::log('property', $request->id, $Property->title ?? null, 'status_changed', "Property status changed to {$statusLabel} by admin");
             ResponseService::successResponse($request->status ? 'Property Activated Successfully' : 'Property Deactivated Successfully');
         }
     }
@@ -973,7 +1046,7 @@ class PropertController extends Controller
             $order = $_GET['order'];
         }
 
-        $sql = Property::with('category')->with('customer')->whereHas('advertisement')->orderBy($sort, $order);
+        $sql = Property::with('category')->with('customer')->with('advertisement')->whereHas('advertisement')->orderBy($sort, $order);
 
         $sql->skip($offset)->take($limit);
 
@@ -1142,6 +1215,11 @@ class PropertController extends Controller
                     Property::where('id', $request->id)->update(['request_status' => $request->request_status, 'status' => $status]);
                 }
                 DB::commit();
+                $actionLabel = $request->request_status === 'approved' ? 'approved' : 'rejected';
+                $desc = $request->request_status === 'rejected'
+                    ? "Property request rejected. Reason: {$request->reject_reason}"
+                    : 'Property request approved by admin';
+                AuditLogService::log('property', $request->id, null, $actionLabel, $desc);
 
                 // Send mail for property status
                 try {
@@ -1152,7 +1230,7 @@ class PropertController extends Controller
 
                         // Email Template
                         $propertyStatusTemplateData = system_setting($emailTypeData['type']);
-                        $appName = env('APP_NAME') ?? 'eBroker';
+                        $appName = env('APP_NAME') ?? 'omko';
                         $variables = [
                             'app_name' => $appName,
                             'user_name' => $propertyData->customer->name,
@@ -1178,47 +1256,51 @@ class PropertController extends Controller
                 }
 
                 // Send Notification
-                $property = Property::with('customer:id,name,isActive,notification')->select('id', 'title', 'request_status', 'added_by')->find($request->id);
-                $fcm_ids = [];
-                if ($property->customer->isActive == 1 && $property->customer->notification == 1) {
-                    $user_token = Usertokens::where('customer_id', $property->customer->id)->pluck('fcm_id')->toArray();
-                }
+                $property = Property::with('customer:id,name,isActive,notification')->select('id', 'title', 'request_status', 'added_by', 'role_context')->find($request->id);
 
-                $fcm_ids[] = $user_token ?? [];
+                if ($property->customer) {
+                    $fcm_ids = [];
+                    if ($property->customer->isActive == 1 && $property->customer->notification == 1) {
+                        $user_token = Usertokens::where('customer_id', $property->customer->id)->pluck('fcm_id')->toArray();
+                    }
 
-                $msg = '';
-                if (! empty($fcm_ids)) {
-                    $title = 'Property updated :- :property_name';
-                    $msg = $property->request_status == 'approved' ? 'Your property post approved by administrator' : 'Your property post rejected by administrator';
-                    $registrationIDs = $fcm_ids[0];
+                    $fcm_ids[] = $user_token ?? [];
 
-                    $fcmMsg = [
-                        'title' => $title,
-                        'message' => $msg,
-                        'type' => 'property_inquiry',
-                        'body' => $msg,
-                        'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                        'sound' => 'default',
-                        'id' => (string) $property->id,
+                    $msg = '';
+                    if (! empty($fcm_ids)) {
+                        $title = 'Property updated :- :property_name';
+                        $msg = $property->request_status == 'approved' ? 'Your property post approved by administrator' : 'Your property post rejected by administrator';
+                        $registrationIDs = $fcm_ids[0];
+
+                        $fcmMsg = [
+                            'title' => $title,
+                            'message' => $msg,
+                            'type' => 'property_inquiry',
+                            'body' => $msg,
+                            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                            'sound' => 'default',
+                            'id' => (string) $property->id,
+                            'role_context' => $property->role_context ?? 'user',
+                            'replace' => [
+                                'property_name' => $property->title,
+                            ],
+                        ];
+                        send_push_notification($registrationIDs, $fcmMsg);
+                    }
+                    // END ::  Send Notification To Customer
+
+                    $notificationMsg = $property->request_status == 'approved' ? 'Your property post approved by administrator' : 'Your property post rejected by administrator';
+                    Notifications::create([
+                        'title' => 'Property Updated :- '.$property->title,
+                        'message' => $notificationMsg,
+                        'image' => '',
+                        'type' => '1',
+                        'send_type' => '0',
+                        'customers_id' => $property->customer->id,
+                        'propertys_id' => $property->id,
                         'role_context' => $property->role_context ?? 'user',
-                        'replace' => [
-                            'property_name' => $property->title,
-                        ],
-                    ];
-                    send_push_notification($registrationIDs, $fcmMsg);
+                    ]);
                 }
-                // END ::  Send Notification To Customer
-
-                $notificationMsg = $property->request_status == 'approved' ? 'Your property post approved by administrator' : 'Your property post rejected by administrator';
-                Notifications::create([
-                    'title' => 'Property Updated :- '.$property->title,
-                    'message' => $notificationMsg,
-                    'image' => '',
-                    'type' => '1',
-                    'send_type' => '0',
-                    'customers_id' => $property->customer->id,
-                    'propertys_id' => $property->id,
-                ]);
 
                 if ($notifyNewListing) {
                     HelperService::AlertUserForNewListing($request->id);

@@ -511,6 +511,7 @@ function get_property_details($result, $current_user = null, $skipLimitCheck = f
             $tempRow['is_agent_verified'] = $customer->is_agent_verified;
             $tempRow['is_user_verified'] = $customer->verifyCustomer?->status === 'approved';
             $tempRow['agent_profile'] = $customer->agent_profile;
+            $tempRow['has_active_story'] = $customer->is_agent ? (bool) ($customer->has_active_story ?? false) : false;
             $isAppointmentAvailable = $customer->is_appointment_available;
         } elseif ($row->added_by == 0) {
             $isBlockedByMe = false;
@@ -533,7 +534,7 @@ function get_property_details($result, $current_user = null, $skipLimitCheck = f
 
             $adminCompanyTel1 = system_setting('company_tel1');
             $adminEmail = system_setting('company_email');
-            $tempRow['customer_name'] = 'Admin';
+            $tempRow['customer_name'] = $adminData->name ?? 'Admin';
             $tempRow['customer_slug_id'] = $adminData->slug_id;
             $tempRow['mobile'] = ! empty($adminCompanyTel1) ? $adminCompanyTel1 : '';
             $tempRow['email'] = ! empty($adminEmail) ? $adminEmail : '';
@@ -551,7 +552,7 @@ function get_property_details($result, $current_user = null, $skipLimitCheck = f
         $tempRow['slug_id'] = $row->slug_id;
         $tempRow['title'] = $row->title;
         $tempRow['price'] = $row->price;
-        $tempRow['currency'] = strtoupper($row->currency ?? 'USD');
+        $tempRow['currency'] = $row->currency;
         $tempRow['category'] = $row->category;
         $tempRow['description'] = $row->description;
         $tempRow['address'] = $row->address;
@@ -697,6 +698,10 @@ function handleFileUpload($request, $key, $destinationPath, $filename, $database
             $filename = microtime(true).'.'.$extension;
         } else {
             $filename = $filename;
+        }
+
+        if (!file_exists($destinationPath)) {
+            mkdir($destinationPath, 0755, true);
         }
 
         $profile = $request->file($key);
@@ -875,6 +880,46 @@ if (! function_exists('getAccessToken')) {
         return $accessToken;
     }
 }
+if (! function_exists('format_price')) {
+    /**
+     * Format a price with the currency symbol from system settings.
+     *
+     * When "Number With Suffix" is enabled, uses Indian short-form:
+     *   >= 1 Crore  (1,00,00,000)  →  Cr
+     *   >= 1 Lakh   (1,00,000)     →  Lac
+     *   < 1 Lakh                   →  plain number
+     */
+    function format_price($price, int $decimals = 2): string
+    {
+        if ($price === null || $price === '') {
+            return '';
+        }
+
+        $price  = (float) $price;
+        $symbol = system_setting('currency_symbol') ?? '';
+        $suffix = (bool) (system_setting('number_with_suffix') ?? false);
+
+        if ($suffix) {
+            $crore = 10_000_000;
+            $lakh  = 100_000;
+
+            if ($price >= $crore) {
+                $value     = $price / $crore;
+                $formatted = rtrim(rtrim(number_format($value, 2), '0'), '.') . 'Cr';
+            } elseif ($price >= $lakh) {
+                $value     = $price / $lakh;
+                $formatted = rtrim(rtrim(number_format($value, 2), '0'), '.') . 'Lac';
+            } else {
+                $formatted = number_format($price, 0);
+            }
+        } else {
+            $formatted = number_format($price, $decimals);
+        }
+
+        return $symbol . $formatted;
+    }
+}
+
 if (! function_exists('updateEnv')) {
     function updateEnv($envUpdates)
     {

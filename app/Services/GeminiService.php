@@ -739,4 +739,114 @@ class GeminiService
     {
         return (int) ceil(strlen($text) / 4);
     }
+
+    /**
+     * FASE 7 (T1) — Calificación automática de un lead por IA (en español).
+     *
+     * Analiza el mensaje/notas del cliente, la propiedad de interés y su precio
+     * para devolver un score (0-100), un nivel de prioridad y una sugerencia de
+     * acción comercial. Se usa como fuente de verdad del campo `score` de
+     * `crm_leads` y se guarda en `metadata['ia']`.
+     *
+     * @param  array  $data  Datos del lead: nombre, notas/mensaje, propiedad,
+     *                       precio y tipo de propiedad.
+     * @return array ['success' => bool, 'data' => [score, nivel, resumen, sugerencia]|null, 'error' => string|null]
+     */
+    public function scoreLead(array $data): array
+    {
+        try {
+            $prompt = $this->buildLeadScorePrompt($data);
+            $cacheKey = 'gemini_lead_score_'.md5($prompt);
+
+            $cached = Cache::store('gemini')->get($cacheKey);
+            if ($cached) {
+                return [
+                    'success' => true,
+                    'data' => $cached,
+                    'cached' => true,
+                ];
+            }
+
+            $result = $this->generateContent($prompt);
+
+            if (! is_array($result) || empty($result['success'])) {
+                return $result;
+            }
+
+            $text = $this->getGeminiText($result['data'] ?? []);
+            $text = $this->cleanResponse($text);
+            $parsed = json_decode($text, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE || ! is_array($parsed)) {
+                if (preg_match('/\{[^}]+\}/s', $text, $matches)) {
+                    $parsed = json_decode($matches[0], true);
+                }
+            }
+
+            if (! is_array($parsed)) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to parse lead score from Gemini response',
+                ];
+            }
+
+            $score = (int) ($parsed['score'] ?? 0);
+            $score = max(0, min(100, $score));
+
+            $payload = [
+                'score' => $score,
+                'nivel' => (string) ($parsed['nivel'] ?? 'desconocido'),
+                'resumen' => (string) ($parsed['resumen'] ?? ''),
+                'sugerencia' => (string) ($parsed['sugerencia'] ?? ''),
+            ];
+
+            Cache::store('gemini')->put($cacheKey, $payload, 86400);
+
+            return [
+                'success' => true,
+                'data' => $payload,
+                'cached' => false,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Gemini Lead Scoring Error: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'error' => 'Failed to score lead: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Construye el prompt de calificación de leads en español.
+     */
+    public function buildLeadScorePrompt(array $data): string
+    {
+        $nombre = $data['nombre'] ?? 'Cliente';
+        $mensaje = $data['notas'] ?? $data['mensaje'] ?? '';
+        $propiedad = $data['property_title'] ?? 'N/A';
+        $precio = $data['price'] ?? 'N/A';
+        $tipo = $data['property_type'] ?? 'propiedad';
+        $ciudad = $data['city'] ?? '';
+
+        $prompt = "Eres un asistente inmobiliario experto. Califica la intención de compra/alquiler de un cliente potencial (lead) en español.\n\n";
+        $prompt .= "Nombre del cliente: {$nombre}\n";
+        $prompt .= "Propiedad de interés: {$propiedad} ({$tipo})".($ciudad ? " en {$ciudad}" : '')."\n";
+        $prompt .= "Precio de la propiedad: {$precio}\n";
+        $prompt .= "Mensaje del cliente: \"{$mensaje}\"\n\n";
+        $prompt .= "Analiza: urgencia, presupuesto implícito/explícito, intención de compra real vs curiosidad, y calidad de la información aportada.\n";
+        $prompt .= "Responde ÚNICAMENTE con JSON válido, sin markdown ni explicaciones, con esta estructura exacta:\n";
+        $prompt .= "{\n  \"score\": 0-100,\n  \"nivel\": \"alto\"|\"medio\"|\"bajo\",\n  \"resumen\": \"2 frases cortas en español\",\n  \"sugerencia\": \"1 acción de seguimiento concreta en español\"\n}\n";
+        $prompt .= "Reglas: score alto (80-100) si hay presupuesto claro/urgencia; medio (50-79) si hay interés real pero falta dato; bajo (0-49) si es curiosidad sin intención. Sé estricto y objetivo.";
+
+        return $prompt;
+    }
+
+    /**
+     * Extrae el texto del primer candidato de una respuesta de Gemini.
+     */
+    private function getGeminiText(array $data): string
+    {
+        return $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
+    }
 }

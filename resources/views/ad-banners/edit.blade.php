@@ -355,7 +355,7 @@ $(function(){
     var $changeDurationCheckbox = $('#change-duration');
     var $durationGroup = $('#group-duration');
 
-    function fillPlacements(){
+    function fillPlacements(preselect){
         $placementSel.empty().append($('<option/>',{value:'',text:"{{ __('Select Placement') }}"}));
         $sizeHint.text('');
         var platform = $platformSel.val();
@@ -366,11 +366,8 @@ $(function(){
             let size = value.size;
             $placementSel.append($('<option/>', { value: key, text: label }).attr('data-size', size));
         });
-
-        // Set the current placement value
-        var currentPlacement = '{{ $adBanner->placement }}';
-        if (currentPlacement) {
-            $placementSel.val(currentPlacement);
+        if(preselect) {
+            $placementSel.val(preselect);
         }
     }
 
@@ -578,8 +575,8 @@ $(function(){
         $('#submit-btn').prop('disabled', !valid);
     }
 
-    $platformSel.on('change', function(){ fillPlacements(); updatePreview(); validateStep1(); });
-    $pageSel.on('change', function(){ updatePlatformOptions(); fillPlacements(); updatePreview(); validateStep1(); });
+    $platformSel.on('change', function(){ fillPlacements(); updateSize(); updatePreview(); validateStep1(); });
+    $pageSel.on('change', function(){ updatePlatformOptions(); fillPlacements(); updateSize(); updatePreview(); validateStep1(); });
     $placementSel.on('change', function(){ updateSize(); updatePreview(); validateStep1(); });
     $adType.on('change', function(){ toggleAdTypeFields(); updatePreview(); validateStep3(); });
     $linkUrlInput.on('input', function(){ updatePreview(); validateStep3(); });
@@ -704,11 +701,10 @@ $(function(){
         theme: 'bootstrap-5',
         width: '100%'
     });
-    });
 
     // Initialize platform options based on current page selection
     updatePlatformOptions();
-    fillPlacements();
+    fillPlacements('{{ $adBanner->placement }}');
     updateSize();
     updatePreview();
 

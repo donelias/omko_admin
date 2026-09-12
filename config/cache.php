@@ -102,6 +102,11 @@
                 'path' => storage_path('framework/cache/gplaces'),
             ],
 
+            'osmmaps' => [
+                'driver' => 'file',
+                'path' => storage_path('framework/cache/osmmaps'),
+            ],
+
             'gemini' => [
                 'driver' => 'file',
                 'path' => storage_path('framework/cache/gemini'),

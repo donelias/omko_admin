@@ -304,11 +304,12 @@
             let mortgageCalculatorText = "{{ $featureMapData[config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.NAME')] ?? '' }}";
             let premiumPropertiesText = "{{ $featureMapData[config('constants.FEATURES.PREMIUM_PROPERTIES.NAME')] ?? '' }}";
             let premiumProjectsText = "{{ $featureMapData[config('constants.FEATURES.PREMIUM_PROJECTS.NAME')] ?? '' }}";
+            let agentWatermarkText = "{{ $featureMapData[config('constants.FEATURES.AGENT_WATERMARK.NAME')] ?? '' }}";
             let limitRadioElement = $(this).parent().parent().find('.package-types').find('.feature-type-limited');
             let limitRadioLabelElement = $(this).parent().parent().find('.package-types').find('.feature-type-limited-label');
             let unlimitedRadioElement = $(this).parent().parent().find('.package-types').find('.feature-type-unlimited');
             unlimitedRadioElement.click()
-            if (value == mortgageCalculatorText || value == premiumPropertiesText || value == premiumProjectsText) {
+            if (value == mortgageCalculatorText || value == premiumPropertiesText || value == premiumProjectsText || value == agentWatermarkText) {
                 limitRadioElement.removeAttr('required').hide()
                 limitRadioLabelElement.hide()
             } else {

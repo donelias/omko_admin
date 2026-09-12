@@ -1,9 +1,9 @@
 importScripts('https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js');
  importScripts('https://www.gstatic.com/firebasejs/8.10.0/firebase-messaging.js');
  const firebaseConfig = {apiKey:'AIzaSyAravivpxM8-uc_PTmb2reJ4bwGCc6J3Ik',
-authDomain:'ebroker-wrteam.firebaseapp.com',
-projectId:'ebroker-wrteam',
-storageBucket:'ebroker-wrteam.appspot.com',
+authDomain:'omko-wrteam.firebaseapp.com',
+projectId:'omko-wrteam',
+storageBucket:'omko-wrteam.appspot.com',
 messagingSenderId:'63168540332',
 appId:'1:63168540332:web:d183e9ca13866ec5623909',
 measurementId:'G-W05KYC2K8P',

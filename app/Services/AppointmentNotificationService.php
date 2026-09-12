@@ -64,7 +64,8 @@ class AppointmentNotificationService
             self::sendPushNotification($appointment, $notifyTarget, $newStatus, $reason);
 
             // Store notification in database
-            self::storeNotification($appointment, $notifyTarget, $newStatus, $reason, $property);
+            $targetRole = ($changedBy === 'user') ? 'agent' : 'user';
+            self::storeNotification($appointment, $notifyTarget, $newStatus, $reason, $property, $targetRole);
 
             return true;
 
@@ -91,7 +92,7 @@ class AppointmentNotificationService
 
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             // Get timezone for the target user
             $targetTimezone = $notifyTarget->getTimezone();
@@ -185,7 +186,7 @@ class AppointmentNotificationService
     /**
      * Store notification in database
      */
-    private static function storeNotification(Appointment $appointment, Customer $notifyTarget, string $status, ?string $reason = null, ?Property $property = null)
+    private static function storeNotification(Appointment $appointment, Customer $notifyTarget, string $status, ?string $reason = null, ?Property $property = null, string $roleContext = 'user')
     {
         try {
             $title = self::getNotificationTitle($status);
@@ -199,6 +200,7 @@ class AppointmentNotificationService
                 'send_type' => '0', // Push notification
                 'customers_id' => $notifyTarget->id,
                 'propertys_id' => $property?->id ?? 0,
+                'role_context' => $roleContext,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -338,7 +340,7 @@ class AppointmentNotificationService
             // Send email notification
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             $variables = [
                 'app_name' => $appName,
@@ -414,7 +416,7 @@ class AppointmentNotificationService
             // Send email to agent
             $emailTypeData = HelperService::getEmailTemplatesTypes('new_appointment_request');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             if ($admin) {
                 $agentTimezone = $admin->getTimezone();
@@ -486,6 +488,7 @@ class AppointmentNotificationService
                     'type' => '2',
                     'send_type' => '0',
                     'customers_id' => $agent->id,
+                    'role_context' => 'agent',
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -557,7 +560,8 @@ class AppointmentNotificationService
             self::sendMeetingTypeChangePush($appointment, $notifyTarget, $oldMeetingType, $newMeetingType);
 
             // Store notification in database
-            self::storeMeetingTypeChangeNotification($appointment, $notifyTarget, $oldMeetingType, $newMeetingType, $property);
+            $targetRole = ($updatedBy === 'user') ? 'agent' : 'user';
+            self::storeMeetingTypeChangeNotification($appointment, $notifyTarget, $oldMeetingType, $newMeetingType, $property, $targetRole);
 
             return true;
 
@@ -586,7 +590,7 @@ class AppointmentNotificationService
             self::sendMeetingTypeChangePush($appointment, $user, $oldMeetingType, $newMeetingType);
 
             // Store notification in database
-            self::storeMeetingTypeChangeNotification($appointment, $user, $oldMeetingType, $newMeetingType, $property);
+            self::storeMeetingTypeChangeNotification($appointment, $user, $oldMeetingType, $newMeetingType, $property, 'user');
 
             return true;
 
@@ -614,7 +618,7 @@ class AppointmentNotificationService
             self::sendMeetingTypeChangePush($appointment, $agent, $oldMeetingType, $newMeetingType);
 
             // Store notification in database
-            self::storeMeetingTypeChangeNotification($appointment, $agent, $oldMeetingType, $newMeetingType, $property);
+            self::storeMeetingTypeChangeNotification($appointment, $agent, $oldMeetingType, $newMeetingType, $property, 'agent');
 
             return true;
 
@@ -641,7 +645,7 @@ class AppointmentNotificationService
 
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_meeting_type_change');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             // Get timezone for the target user
             $targetTimezone = $notifyTarget->getTimezone();
@@ -739,7 +743,7 @@ class AppointmentNotificationService
     /**
      * Store meeting type change notification in database
      */
-    private static function storeMeetingTypeChangeNotification(Appointment $appointment, Customer $notifyTarget, string $oldMeetingType, string $newMeetingType, ?Property $property = null)
+    private static function storeMeetingTypeChangeNotification(Appointment $appointment, Customer $notifyTarget, string $oldMeetingType, string $newMeetingType, ?Property $property = null, string $roleContext = 'user')
     {
         try {
             $title = 'Meeting Type Updated';
@@ -753,6 +757,7 @@ class AppointmentNotificationService
                 'send_type' => '0', // Push notification
                 'customers_id' => $notifyTarget->id,
                 'propertys_id' => $property?->id ?? 0,
+                'role_context' => $roleContext,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -810,6 +815,7 @@ class AppointmentNotificationService
                 'type' => '2',
                 'send_type' => '0',
                 'customers_id' => $user->id,
+                'role_context' => 'user',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -817,7 +823,7 @@ class AppointmentNotificationService
             // Send confirmation email to user
             $emailTypeData = HelperService::getEmailTemplatesTypes('appointment_status');
             $templateRaw = HelperService::getSettingData($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
 
             $timezone = $user->getTimezone();
             if ($admin) {

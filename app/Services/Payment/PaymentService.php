@@ -23,6 +23,7 @@ class PaymentService
             'cashfree' => new CashfreePayment($paymentGateway),
             'phonepe' => new PhonePePayment($paymentGateway),
             'midtrans' => new MidtransPayment($paymentGateway),
+            'mock' => new MockPayment($paymentGateway),
             // any other payment processor implementations
             default => throw new InvalidArgumentException('Invalid Payment Gateway.'),
         };

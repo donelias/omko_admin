@@ -12,6 +12,7 @@ use App\Models\RejectReason;
 use App\Models\Setting;
 use App\Models\Usertokens;
 use App\Rules\VideoUrlRule;
+use App\Services\AuditLogService;
 use App\Services\BootstrapTableService;
 use App\Services\FileService;
 use App\Services\HelperService;
@@ -217,6 +218,7 @@ class ProjectController extends Controller
             // END ::Add Translations
 
             DB::commit();
+            AuditLogService::log('project', $project->id, $project->title, 'created', "Project '{$project->title}' created by admin");
             ResponseService::successResponse('Data Created Successfully');
         } catch (Exception $e) {
             return ResponseService::errorResponse($e->getMessage());
@@ -240,7 +242,7 @@ class ProjectController extends Controller
         $sort = $request->input('sort', 'sequence');
         $order = $request->input('order', 'ASC');
 
-        $sql = Projects::with('category')->with('gallary_images')->with('documents')->with('plans')->with('customer')->orderBy($sort, $order);
+        $sql = Projects::with('category')->with('gallary_images')->with('documents')->with('plans')->with('customer')->with('customer.agent_profile:customer_id,agent_name')->orderBy($sort, $order);
 
         if (isset($_GET['search']) && ! empty($_GET['search'])) {
             $search = $_GET['search'];
@@ -283,7 +285,9 @@ class ProjectController extends Controller
             if ($addedAsFilter === 'admin') {
                 $sql = $sql->where('is_admin_listing', 1);
             } elseif ($addedAsFilter === 'user') {
-                $sql = $sql->where('role_context', 'user')->where('is_admin_listing', 0);
+                $sql = $sql->where(function ($q) {
+                    $q->where('role_context', 'user')->orWhereNull('role_context');
+                })->where('is_admin_listing', 0);
             } elseif ($addedAsFilter === 'agent') {
                 $sql = $sql->where('role_context', 'agent')->where('is_admin_listing', 0);
             }
@@ -307,6 +311,7 @@ class ProjectController extends Controller
         $tempRow = [];
         $count = 1;
         $currency_symbol = Setting::where('type', 'currency_symbol')->pluck('data')->first();
+        $adminName = \App\Models\User::where('type', 0)->value('name') ?? trans('Admin');
 
         // dd($res);
 
@@ -333,7 +338,13 @@ class ProjectController extends Controller
             }
 
             $tempRow = $row->toArray();
-            $tempRow['owner_name'] = $row->is_admin_listing == true ? 'Admin' : $row->customer->name;
+            if ($row->is_admin_listing == true) {
+                $tempRow['owner_name'] = $adminName;
+            } elseif ($row->role_context === 'agent') {
+                $tempRow['owner_name'] = $row->customer?->agent_profile?->agent_name ?? $row->customer?->name ?? '-';
+            } else {
+                $tempRow['owner_name'] = $row->customer?->name ?? '-';
+            }
             $tempRow['added_as_tag'] = $row->is_admin_listing == true ? 'admin' : ($row->role_context ?? 'user');
             if ($row->is_admin_listing == true && $row->request_status == 'approved') {
                 $tempRow['edit_status'] = $row->status;
@@ -404,7 +415,7 @@ class ProjectController extends Controller
             'custom_video' => 'nullable|file|mimes:mp4,webm,ogg|max:20480', // Nullable on update
         ], [
             'custom_video.file' => __('The custom video field should be a valid mp4, webm, or ogg file.'),
-            'custom_video.max' => __('The custom video may not be greater than 20MB.'),
+            'custom_video.max' => __('File size exceeds the :max limit. Please upload a smaller video.'),
         ]);
         if ($validator->fails()) {
             ResponseService::errorResponse($validator->errors()->first());
@@ -414,6 +425,9 @@ class ProjectController extends Controller
             $slugData = (isset($request->slug_id) && ! empty($request->slug_id)) ? $request->slug_id : $request->title;
 
             $project = Projects::find($id);
+            $watermarkAgentId = (! $project->is_admin_listing && ! empty($project->added_by) && Customer::where('id', $project->added_by)->where('is_agent', true)->exists())
+                ? $project->added_by
+                : null;
             $project->title = $request->title;
             $project->slug_id = generateUniqueSlug($slugData, 4, null, $id);
             $project->category_id = $request->category_id;
@@ -465,11 +479,21 @@ class ProjectController extends Controller
                 } else {
                     ResponseService::validationError('Edit Reason is required');
                 }
+
+                // Auto-approve logic on edit (only for customer-uploaded projects)
+                $autoApprove = HelperService::getAutoApproveStatus($project->added_by, 'user');
+                if ($autoApprove) {
+                    $project->request_status = 'approved';
+                    $project->status         = 1;
+                } else {
+                    $project->request_status = 'pending';
+                    $project->status         = 0;
+                }
             }
             if ($request->hasFile('image')) {
                 $path = config('global.PROJECT_TITLE_IMG_PATH');
                 $rawImage = $project->getRawOriginal('image');
-                $project->image = FileService::compressAndReplace($request->file('image'), $path, $rawImage, true);
+                $project->image = FileService::compressAndReplace($request->file('image'), $path, $rawImage, true, $watermarkAgentId);
             }
             if ($request->hasFile('meta_image')) {
                 $path = config('global.PROJECT_SEO_IMG_PATH');
@@ -483,7 +507,7 @@ class ProjectController extends Controller
                 $galleryImages = [];
                 $path = config('global.PROJECT_DOCUMENT_PATH');
                 foreach ($request->file('gallery_images') as $file) {
-                    $image = FileService::compressAndUpload($file, $path, true);
+                    $image = FileService::compressAndUpload($file, $path, true, $watermarkAgentId);
                     $galleryImages[] = [
                         'project_id' => $project->id,
                         'name' => $image,
@@ -520,7 +544,7 @@ class ProjectController extends Controller
                 foreach ($request->floor_data as $key => $planArray) {
                     $plan = (object) $planArray;
                     if (! empty($plan->floor_image)) {
-                        $document = FileService::compressAndUpload($plan->floor_image, $path, true);
+                        $document = FileService::compressAndUpload($plan->floor_image, $path, true, $watermarkAgentId);
                         ProjectPlans::updateOrCreate(['id' => $plan->id], ['title' => $plan->title, 'project_id' => $project->id, 'document' => $document]);
                     } else {
                         ProjectPlans::updateOrCreate(['id' => $plan->id], ['title' => $plan->title, 'project_id' => $project->id]);
@@ -551,6 +575,44 @@ class ProjectController extends Controller
             // END ::Add Translations
 
             DB::commit();
+
+            // Notify project owner when admin edits their project
+            if ($project->is_admin_listing == false) {
+                try {
+                    $project->load('customer:id,name,isActive,notification');
+                    $customer = $project->customer;
+                    if ($customer && $customer->isActive == 1 && $customer->notification == 1) {
+                        $tokens = Usertokens::where('customer_id', $customer->id)->pluck('fcm_id')->toArray();
+                        if (! empty($tokens)) {
+                            $fcmMsg = [
+                                'title'        => 'Project updated :- :project_name',
+                                'message'      => trans('Your project has been edited by administrator'),
+                                'type'         => 'project_inquiry',
+                                'body'         => trans('Your project has been edited by administrator'),
+                                'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                                'sound'        => 'default',
+                                'id'           => (string) $project->id,
+                                'role_context' => $project->role_context ?? 'user',
+                                'replace'      => ['project_name' => $project->title],
+                            ];
+                            send_push_notification($tokens, $fcmMsg);
+                        }
+                    }
+                    Notifications::create([
+                        'title'        => 'Project Updated :- ' . $project->title,
+                        'message'      => trans('Your project has been edited by administrator'),
+                        'image'        => '',
+                        'type'         => '1',
+                        'send_type'    => '0',
+                        'customers_id' => $project->customer->id,
+                        'role_context' => $project->role_context ?? 'user',
+                    ]);
+                } catch (Exception $e) {
+                    Log::error('Admin edit project notification failed: ' . $e->getMessage());
+                }
+            }
+
+            AuditLogService::log('project', $project->id, $project->title, 'updated', "Project '{$project->title}' updated by admin");
             ResponseService::successResponse('Data Updated Successfully');
         } catch (Exception $e) {
             DB::rollback();
@@ -567,8 +629,10 @@ class ProjectController extends Controller
             DB::beginTransaction();
             $project = Projects::find($id);
 
+            $projectTitle = $project->title;
             DB::commit();
             if ($project->delete()) {
+                AuditLogService::log('project', $id, $projectTitle, 'deleted', "Project '{$projectTitle}' deleted by admin");
                 ResponseService::successResponse('Data Deleted Successfully');
             } else {
                 ResponseService::errorResponse('Something Went Wrong');
@@ -598,7 +662,7 @@ class ProjectController extends Controller
 
                         // Email Template
                         $projectStatusTemplateData = system_setting($emailTypeData['type']);
-                        $appName = env('APP_NAME') ?? 'eBroker';
+                        $appName = env('APP_NAME') ?? 'omko';
                         $variables = [
                             'app_name' => $appName,
                             'user_name' => $projectData->customer->name,
@@ -658,8 +722,11 @@ class ProjectController extends Controller
                 'send_type' => '0',
                 'customers_id' => $project->customer->id,
                 'projects_id' => $project->id,
+                'role_context' => $project->role_context ?? 'user',
             ]);
 
+            $statusLabel = $request->status ? 'Activated' : 'Deactivated';
+            AuditLogService::log('project', $request->id, $project->title ?? null, 'status_changed', "Project status changed to {$statusLabel} by admin");
             // $response['error'] = false;
             ResponseService::successResponse($request->status ? 'Project Activated Successfully' : 'Project Deactivated Successfully');
         }
@@ -777,6 +844,9 @@ class ProjectController extends Controller
                         'project_id' => $request->id,
                         'reason' => $request->reject_reason,
                     ]);
+                    $status = 0;
+                } else {
+                    $status = 1;
                 }
                 if ($request->request_status == 'approved') {
                     $projectData = Projects::find($request->id);
@@ -787,14 +857,19 @@ class ProjectController extends Controller
                         } else {
                             $expirationDate = HelperService::calculateExpirationDate($projectData->added_by);
                         }
-                        Projects::where('id', $request->id)->update(['request_status' => $request->request_status, 'status' => 0, 'expiry_date' => $expirationDate]);
+                        Projects::where('id', $request->id)->update(['request_status' => $request->request_status, 'status' => $status, 'expiry_date' => $expirationDate]);
                     } else {
-                        Projects::where('id', $request->id)->update(['request_status' => $request->request_status, 'status' => 0]);
+                        Projects::where('id', $request->id)->update(['request_status' => $request->request_status, 'status' => $status]);
                     }
                 } else {
-                    Projects::where('id', $request->id)->update(['request_status' => $request->request_status, 'status' => 0]);
+                    Projects::where('id', $request->id)->update(['request_status' => $request->request_status, 'status' => $status]);
                 }
                 DB::commit();
+                $actionLabel = $request->request_status === 'approved' ? 'approved' : 'rejected';
+                $desc = $request->request_status === 'rejected'
+                    ? "Project request rejected. Reason: {$request->reject_reason}"
+                    : 'Project request approved by admin';
+                AuditLogService::log('project', $request->id, null, $actionLabel, $desc);
 
                 // Send mail for project status
                 try {
@@ -805,7 +880,7 @@ class ProjectController extends Controller
 
                         // Email Template
                         $projectStatusTemplateData = system_setting($emailTypeData['type']);
-                        $appName = env('APP_NAME') ?? 'eBroker';
+                        $appName = env('APP_NAME') ?? 'omko';
                         $variables = [
                             'app_name' => $appName,
                             'user_name' => $projectData->customer->name,
@@ -831,7 +906,7 @@ class ProjectController extends Controller
                 }
 
                 // Send Notification
-                $project = Projects::with('customer:id,name,isActive,notification')->select('id', 'title', 'request_status', 'added_by')->find($request->id);
+                $project = Projects::with('customer:id,name,isActive,notification')->select('id', 'title', 'request_status', 'added_by', 'role_context')->find($request->id);
                 $fcm_ids = [];
                 if ($project->customer->isActive == 1 && $project->customer->notification == 1) {
                     $user_token = Usertokens::where('customer_id', $project->customer->id)->pluck('fcm_id')->toArray();
@@ -865,13 +940,14 @@ class ProjectController extends Controller
 
                 $notificationMsg = $project->request_status == 'approved' ? 'Your project post approved by administrator' : 'Your project post rejected by administrator';
                 Notifications::create([
-                    'title' => 'Project Updated :- '.$project->name,
+                    'title' => 'Project Updated :- '.$project->title,
                     'message' => $notificationMsg,
                     'image' => '',
                     'type' => '1',
                     'send_type' => '0',
                     'customers_id' => $project->customer->id,
                     'projects_id' => $project->id,
+                    'role_context' => $project->role_context ?? 'user',
                 ]);
                 ResponseService::successResponse('Data Updated Successfully');
             }

@@ -20,6 +20,7 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -39,7 +40,7 @@ class PackageController extends Controller
         $languages = HelperService::getActiveLanguages();
 
         $type = $request->input('user_type', 'user');
-        $featuresList = Feature::where('status', 1)->get();
+        $featuresList = $this->getFeaturesForPackageType($type);
         $featureMapData = [];
         foreach ($featuresList as $key => $feature) {
             $featureMapData[$feature->name] = $feature->id;
@@ -70,6 +71,16 @@ class PackageController extends Controller
         return view('packages.create', compact('currency_symbol', 'featuresList', 'featureMapData', 'languages', 'type'));
     }
 
+    private function getFeaturesForPackageType(string $type)
+    {
+        $featuresQuery = Feature::where('status', 1);
+        if (Schema::hasColumn('features', 'user_type')) {
+            $featuresQuery->whereIn('user_type', [$type, 'all']);
+        }
+
+        return $featuresQuery->get();
+    }
+
     /**
      * Store a newly created resource in storage.
      *
@@ -95,7 +106,7 @@ class PackageController extends Controller
                     'feature_data.*.limit' => 'nullable|required_if:feature_data.*.type,limited',
                     'list_duration_type' => 'nullable|in:Standard,Package,Custom', // Validating the new field
                     'custom_duration' => 'nullable|required_if:list_duration_type,Custom|integer|min:1', // Validating custom duration
-                    'user_type' => 'required|in:user,agent',
+                    'user_type' => 'required|in:user,agent,developer,agencia',
                 ],
                 [
                     'duration.max' => trans('The duration must not exceed more than 730 days that is 2 years.'),
@@ -300,9 +311,7 @@ class PackageController extends Controller
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         } else {
             Package::where('id', $request->id)->update(['status' => $request->status]);
-            $response['error'] = false;
-
-            return response()->json($response);
+            ResponseService::successResponse($request->status ? 'Package Activated Successfully' : 'Package Deactivated Successfully');
         }
     }
 
@@ -378,7 +387,14 @@ class PackageController extends Controller
 
     public function assignPackageToUser(Request $request)
     {
-        if (! has_permissions('update', 'assign_package')) {
+        $canAssign = has_permissions('update', 'assign_package')
+            || has_permissions('create', 'property')
+            || has_permissions('create', 'project');
+
+        if (! $canAssign) {
+            if ($request->expectsJson() || $request->wantsJson()) {
+                ResponseService::errorResponse(PERMISSION_ERROR_MSG);
+            }
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
         $validator = Validator::make($request->all(), [
@@ -397,9 +413,11 @@ class PackageController extends Controller
                 ResponseService::validationError('This package can only be purchased once');
             }
 
-            // If user already has an active package and force assign is not confirmed yet, ask for confirmation
+            // If user already has an active package (same role) and force assign is not confirmed yet, ask for confirmation
             if (! $request->boolean('force_assign')) {
-                $hasActivePackage = UserPackage::where('user_id', $customer->id)->onlyActive()->exists();
+                $hasActivePackage = UserPackage::where('user_id', $customer->id)
+                    ->where('role_context', $package->user_type)
+                    ->onlyActive()->exists();
                 if ($hasActivePackage) {
                     return ResponseService::warningResponse(
                         'Selected user already has an active package. Do you want to assign anyway?',
@@ -427,6 +445,7 @@ class PackageController extends Controller
                 'payment_status' => 'success',
                 'order_id' => Str::uuid(),
                 'transaction_id' => Str::uuid(),
+                'role_context' => $package->user_type,
             ]);
 
             $packageFeatures = PackageFeature::where(['package_id' => $package->id, 'limit_type' => 'limited'])->get();
@@ -478,6 +497,7 @@ class PackageController extends Controller
                     'type' => '2',
                     'send_type' => '0',
                     'customers_id' => $customer->id,
+                    'role_context' => $package->user_type ?? 'user',
                 ]);
             }
 

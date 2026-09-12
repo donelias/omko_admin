@@ -22,7 +22,6 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 class HomepageApiController extends Controller
@@ -132,7 +131,7 @@ class HomepageApiController extends Controller
                 $propertyMapper = function ($propertyData) {
                     $propertyData->promoted = $propertyData->is_promoted;
                     $propertyData->property_type = $propertyData->propery_type;
-                    $propertyData->is_premium = $propertyData->is_premium == 1;
+$propertyData->is_premium = $propertyData->is_premium == 1;
                     $propertyData->currency = strtoupper($propertyData->currency ?? 'USD');
                     $propertyData->parameters = $propertyData->parameters;
                     $propertyData->category->translated_name = $propertyData->category->translated_name;
@@ -214,12 +213,23 @@ class HomepageApiController extends Controller
                         'type' => $section->section_type,
                         'title' => $section->title,
                         'translated_title' => $section->translated_title,
+                        'app_title' => $section->app_title,
+                        'translated_app_title' => $section->translated_app_title,
                         'sort_order' => $section->sort_order,
                         'is_active' => $section->is_active,
                     ];
                 });
 
-            ApiResponseService::successResponse('Homepage Sections Data Fetched Successfully', $sections);
+            $toggles = \App\Models\Setting::whereIn('type', ['slider_section', 'search_section', 'all_properties_section'])->pluck('data', 'type')->toArray();
+            
+            $responseData = [
+                'slider_section' => isset($toggles['slider_section']) ? (bool)$toggles['slider_section'] : true,
+                'search_section' => isset($toggles['search_section']) ? (bool)$toggles['search_section'] : true,
+                'all_properties_section' => isset($toggles['all_properties_section']) ? (bool)$toggles['all_properties_section'] : true,
+                'section_data' => $sections,
+            ];
+
+            ApiResponseService::successResponse('Homepage Sections Data Fetched Successfully', $responseData);
         } catch (Exception $e) {
             ApiResponseService::errorResponse();
         }
@@ -405,10 +415,12 @@ class HomepageApiController extends Controller
 
             $projectsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.PROJECTS_SECTION.TYPE');
             $featuredProjectsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.FEATURED_PROJECTS_SECTION.TYPE');
+            $premiumProjectsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.PREMIUM_PROJECTS_SECTION.TYPE');
             $homepageData = HomepageSection::where('is_active', 1)
                 ->whereIn('section_type', [
                     $projectsHomepageSection,
                     $featuredProjectsHomepageSection,
+                    $premiumProjectsHomepageSection,
                 ])
                 ->get()
                 ->mapWithKeys(function ($item) {
@@ -433,6 +445,7 @@ class HomepageApiController extends Controller
                 'location',
                 'category_id',
                 'added_by',
+                'is_premium',
                 'role_context',
                 'latitude',
                 'longitude'
@@ -445,8 +458,8 @@ class HomepageApiController extends Controller
                     'category:id,slug_id,image,category',
                     'category.translations',
                     'gallary_images:id,project_id,name',
-                    'customer:id,name,profile,email,mobile',
                     'translations',
+                    'customer' => fn ($q) => $q->select('id', 'name', 'profile', 'email', 'mobile')->withStoryStatus(),
                 ]);
 
             // Apply location filter once
@@ -479,13 +492,20 @@ class HomepageApiController extends Controller
                     })->inRandomOrder()->limit(12)->get()->map($projectMapper),
             ];
 
+            // Premium Projects
+            $data['premium_projects'] = [
+                'section_id' => $homepageData[$premiumProjectsHomepageSection]['id'] ?? null,
+                'data' => $locationBasedProjectsQuery->clone()->where('is_premium', 1)->inRandomOrder()->limit(12)->get()->map($projectMapper),
+            ];
+
             // Compute location flag and fallback to global if all project sections are empty for given location
             $locationBasedDataProjects = false;
             if ($latitude && $longitude) {
                 $hasProjects = isset($data['projects']['data']) && $data['projects']['data']->count() > 0;
                 $hasFeaturedProjects = isset($data['featured_projects']['data']) && $data['featured_projects']['data']->count() > 0;
+                $hasPremiumProjects = isset($data['premium_projects']['data']) && $data['premium_projects']['data']->count() > 0;
 
-                if ($hasProjects || $hasFeaturedProjects) {
+                if ($hasProjects || $hasFeaturedProjects || $hasPremiumProjects) {
                     $locationBasedDataProjects = true;
                 } else {
                     // Rebuild projects sections from global (no location filter)
@@ -502,6 +522,11 @@ class HomepageApiController extends Controller
                             $query->where(['is_enable' => 1, 'status' => 0]);
                         })->inRandomOrder()->limit(12)->get()->map($projectMapper),
                     ];
+
+                    $data['premium_projects'] = [
+                        'section_id' => $homepageData[$premiumProjectsHomepageSection]['id'] ?? null,
+                        'data' => $globalProjectsQuery->clone()->where('is_premium', 1)->inRandomOrder()->limit(12)->get()->map($projectMapper),
+                    ];
                 }
             }
 
@@ -515,20 +540,17 @@ class HomepageApiController extends Controller
 
     public function getHomepageOtherSections(Request $request)
     {
-        $latitude = $request->latitude != 'null' ? $request->latitude : null;
-        $longitude = $request->longitude != 'null' ? $request->longitude : null;
-        $radius = $request->radius != 'null' ? $request->radius : null;
-        $locationBasedData = false;
-
-        $categoriesHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.CATEGORIES_SECTION.TYPE') ?? 'categories';
-        $agentsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.AGENTS_LIST_SECTION.TYPE') ?? 'agents';
-        $articlesHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.ARTICLES_SECTION.TYPE') ?? 'articles';
-        $userRecommendationsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.USER_RECOMMENDATIONS_SECTION.TYPE') ?? 'recommendations';
-        $faqsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.FAQS_SECTION.TYPE') ?? 'faqs';
-        $sliderHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.SLIDER_SECTION.TYPE') ?? 'slider';
-        
-        // Evitamos fallos si la tabla de secciones está vacía o no coincide
         try {
+            $latitude = $request->latitude != 'null' ? $request->latitude : null;
+            $longitude = $request->longitude != 'null' ? $request->longitude : null;
+            $radius = $request->radius != 'null' ? $request->radius : null;
+            $locationBasedData = false;
+
+            $categoriesHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.CATEGORIES_SECTION.TYPE');
+            $agentsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.AGENTS_LIST_SECTION.TYPE');
+            $articlesHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.ARTICLES_SECTION.TYPE');
+            $userRecommendationsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.USER_RECOMMENDATIONS_SECTION.TYPE');
+            $faqsHomepageSection = config('constants.HOMEPAGE_SECTION_TYPES.FAQS_SECTION.TYPE');
             $homepageData = HomepageSection::where('is_active', 1)
                 ->whereIn('section_type', [
                     $categoriesHomepageSection,
@@ -536,7 +558,6 @@ class HomepageApiController extends Controller
                     $articlesHomepageSection,
                     $userRecommendationsHomepageSection,
                     $faqsHomepageSection,
-                    $sliderHomepageSection,
                 ])
                 ->get()
                 ->mapWithKeys(function ($item) {
@@ -547,212 +568,490 @@ class HomepageApiController extends Controller
                         ],
                     ];
                 });
-        } catch (\Exception $e) {
-            $homepageData = collect([]);
-        }
 
-        $data = [];
+            $data = [];
 
-        // ==========================================
-        // 1. CATEGORÍAS (Super Blindadas)
-        // ==========================================
-        try {
+            // Categories Section
             $categoriesQuery = Category::select('id', 'category', 'image', 'slug_id')->where('status', 1);
 
+            // Add whereHas condition for location filtering
             if ($latitude && $longitude) {
-                $locationBasedData = true;
-                $validCategoryIds = DB::table('propertys')
-                    ->select('category_id')
-                    ->where(['status' => 1, 'request_status' => 'approved'])
-                    ->where(function ($q) {
-                        $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
-                    })
-                    ->where('latitude', '!=', 0)
-                    ->where('longitude', '!=', 0)
-                    ->when($radius, function ($q) use ($latitude, $longitude, $radius) {
-                        return $q->whereRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?', [$latitude, $longitude, $latitude, $radius]);
-                    }, function ($q) use ($latitude, $longitude) {
-                        return $q->where(['latitude' => $latitude, 'longitude' => $longitude]);
-                    })
-                    ->distinct()
-                    ->pluck('category_id')
-                    ->toArray();
+                if ($radius && ! empty($radius)) {
+                    $categoriesQuery->whereExists(function ($query) use ($latitude, $longitude, $radius) {
+                        $query->select(DB::raw(1))
+                            ->from('propertys')
+                            ->whereRaw('categories.id = propertys.category_id')
+                            ->where(['status' => 1, 'request_status' => 'approved'])
+                            ->where(function ($q) {
+                                $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
+                            })
+                            ->where('latitude', '!=', 0)
+                            ->where('longitude', '!=', 0)
+                            ->whereRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?', [$latitude, $longitude, $latitude, $radius]);
+                    });
+                } else {
+                    $categoriesQuery->whereHas('properties', function ($query) use ($latitude, $longitude, $radius) {
+                        $query->where(['status' => 1, 'request_status' => 'approved'])
+                            ->where(function ($q) {
+                                $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
+                            })
+                            ->where(['latitude' => $latitude, 'longitude' => $longitude]);
+                        $query->whereExists(function ($subQuery) use ($latitude, $longitude, $radius) {
+                            $subQuery->select(DB::raw(1))
+                                ->from('propertys')
+                                ->whereRaw('categories.id = propertys.category_id')
+                                ->where(['status' => 1, 'request_status' => 'approved'])
+                                ->where(function ($q) {
+                                    $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
+                                })
+                                ->where('latitude', '!=', 0)
+                                ->where('longitude', '!=', 0)
+                                ->whereRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?', [$latitude, $longitude, $latitude, $radius]);
+                        });
+                    });
+                }
+            } else {
+                $categoriesQuery->whereHas('properties', function ($query) {
+                    $query->onlyActive();
+                });
+            }
 
-                $categoriesQuery->whereIn('id', $validCategoryIds);
-
-                if ($radius) {
+            // Add properties count with location filtering
+            if ($latitude && $longitude) {
+                if ($radius && ! empty($radius)) {
                     $categoriesQuery->selectRaw('(SELECT COUNT(*) FROM propertys WHERE categories.id = propertys.category_id AND status = 1 AND request_status = "approved" AND latitude != 0 AND longitude != 0 AND (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?) as properties_count', [$latitude, $longitude, $latitude, $radius]);
                 } else {
                     $categoriesQuery->selectRaw('(SELECT COUNT(*) FROM propertys WHERE categories.id = propertys.category_id AND status = 1 AND request_status = "approved" AND latitude = ? AND longitude = ?) as properties_count', [$latitude, $longitude]);
                 }
             } else {
-                // Si 'onlyActive' falla por no estar definido en tu modelo Category, usamos un fallback directo
-                if (method_exists(Category::class, 'scopeOnlyActive')) {
-                    $categoriesQuery->whereHas('properties', function ($query) { $query->onlyActive(); });
-                }
-                
                 $categoriesQuery->withCount(['properties' => function ($query) {
                     $query->where(['status' => 1, 'request_status' => 'approved'])->where(function ($q) {
-                        $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                        $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                     });
                 }]);
             }
 
-            if (method_exists(Category::class, 'translations')) {
-                $categoriesQuery->with('translations');
-            }
+            $categoriesQuery->with('translations');
 
             $data['categories'] = [
                 'section_id' => $homepageData[$categoriesHomepageSection]['id'] ?? null,
-                'data' => $categoriesQuery->limit(12)->get()
-            ];
-        } catch (\Exception $e) {
-            $data['categories'] = ['section_id' => null, 'data' => []];
-        }
+                'data' => $categoriesQuery->limit(12)->get()->map(function ($item) {
+                    $item->translated_name = $item->translated_name;
 
-        // ==========================================
-        // 2. AGENTES
-        // ==========================================
-        try {
+                    return $item;
+                }),
+            ];
+
+            // Agents Section
             $agentsQuery = Customer::select('id', 'name', 'email', 'profile', 'slug_id', 'is_agent_verified')
+                ->with('agent_profile')
                 ->where('is_agent', 1)
                 ->where('isActive', 1);
 
-            if (method_exists(Customer::class, 'agent_profile')) {
-                $agentsQuery->with('agent_profile');
-            }
-
+            // Add counts with location filtering
             if ($latitude && $longitude) {
-                if ($radius) {
-                    $agentsQuery->selectRaw('(SELECT COUNT(*) FROM projects WHERE customers.id = projects.added_by AND status = 1 AND request_status = "approved" AND role_context = \'agent\' AND latitude != 0 AND longitude != 0 AND (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?) as projects_count', [$latitude, $longitude, $latitude, $radius])
-                        ->selectRaw('(SELECT COUNT(*) FROM propertys WHERE customers.id = propertys.added_by AND status = 1 AND request_status = "approved" AND role_context = \'agent\' AND latitude != 0 AND longitude != 0 AND (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?) as property_count', [$latitude, $longitude, $latitude, $radius]);
+                if ($radius && ! empty($radius)) {
+                    $agentsQuery->selectRaw('(SELECT COUNT(*) FROM projects WHERE customers.id = projects.added_by AND status = 1 AND request_status = "approved" AND role_context = "agent" AND (expiry_date >= CURDATE() OR expiry_date IS NULL) AND latitude != 0 AND longitude != 0 AND (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?) as projects_count', [$latitude, $longitude, $latitude, $radius])
+                        ->selectRaw('(SELECT COUNT(*) FROM propertys WHERE customers.id = propertys.added_by AND status = 1 AND request_status = "approved" AND role_context = "agent" AND (expiry_date >= CURDATE() OR expiry_date IS NULL) AND latitude != 0 AND longitude != 0 AND (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) < ?) as property_count', [$latitude, $longitude, $latitude, $radius]);
                 } else {
-                    $agentsQuery->selectRaw('(SELECT COUNT(*) FROM projects WHERE customers.id = projects.added_by AND status = 1 AND request_status = "approved" AND role_context = \'agent\' AND latitude = ? AND longitude = ?) as projects_count', [$latitude, $longitude])
-                        ->selectRaw('(SELECT COUNT(*) FROM propertys WHERE customers.id = propertys.added_by AND status = 1 AND request_status = "approved" AND role_context = \'agent\' AND latitude = ? AND longitude = ?) as property_count', [$latitude, $longitude]);
+                    $agentsQuery->selectRaw('(SELECT COUNT(*) FROM projects WHERE customers.id = projects.added_by AND status = 1 AND request_status = "approved" AND role_context = "agent" AND (expiry_date >= CURDATE() OR expiry_date IS NULL) AND latitude = ? AND longitude = ?) as projects_count', [$latitude, $longitude])
+                        ->selectRaw('(SELECT COUNT(*) FROM propertys WHERE customers.id = propertys.added_by AND status = 1 AND request_status = "approved" AND role_context = "agent" AND (expiry_date >= CURDATE() OR expiry_date IS NULL) AND latitude = ? AND longitude = ?) as property_count', [$latitude, $longitude]);
                 }
             } else {
                 $agentsQuery->withCount([
-                    'property' => function ($query) { $query->where(['status' => 1, 'request_status' => 'approved', 'role_context' => 'agent']); },
-                    'projects' => function ($query) { $query->where(['status' => 1, 'request_status' => 'approved', 'role_context' => 'agent']); }
+                    'projects' => function ($query) {
+                        $query->onlyActive()->where('role_context', 'agent');
+                    },
+                    'property' => function ($query) {
+                        $query->onlyActive()->where('role_context', 'agent');
+                    },
                 ]);
             }
 
-            $data['agents'] = [
-                'section_id' => $homepageData[$agentsHomepageSection]['id'] ?? null,
-                'data' => $agentsQuery->limit(12)->get()
-            ];
-        } catch (\Exception $e) {
-            $data['agents'] = ['section_id' => null, 'data' => []];
-        }
+            $agents = $agentsQuery->get()
+                ->map(function ($customer) {
+                    $resolved = $customer->applyResolvedAgentProfile();
+                    $customer->name = $resolved['agent_name'];
+                    $customer->email = $resolved['agent_email'];
+                    $customer->profile = $resolved['agent_profile_photo'];
+                    $customer->is_agent_verified = $customer->is_agent_verified ?? false;
+                    $customer->total_count = $customer->projects_count + $customer->property_count;
+                    $customer->is_admin = false;
 
-        // ==========================================
-        // 3. ARTÍCULOS Y FAQS
-        // ==========================================
-        try {
-            $articlesQuery = Article::where('status', 1)->orderBy('id', 'DESC')->limit(12);
-            if (method_exists(Article::class, 'translations')) { $articlesQuery->with('translations'); }
+                    return $customer;
+                })
+                ->filter(function ($customer) {
+                    return $customer->projects_count > 0 || $customer->property_count > 0;
+                })
+                ->sortByDesc(function ($customer) {
+                    return [$customer->is_verified, $customer->total_count];
+                })
+                ->values()
+                ->take(12);
+
+            // Add admin user if they have properties or projects
+            $adminEmail = system_setting('company_email');
+            $adminPropertyQuery = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])
+                ->when($latitude && $longitude, function ($query) use ($latitude, $longitude, $radius) {
+                    if ($radius && ! empty($radius)) {
+                        $query->selectRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) AS distance', [$latitude, $longitude, $latitude])
+                            ->where('latitude', '!=', 0)
+                            ->where('longitude', '!=', 0)
+                            ->having('distance', '<', $radius);
+                    } else {
+                        $query->where(['latitude' => $latitude, 'longitude' => $longitude]);
+                    }
+                });
+            $adminProjectQuery = Projects::where(['is_admin_listing' => 1, 'status' => 1])
+                ->when($latitude && $longitude, function ($query) use ($latitude, $longitude, $radius) {
+                    if ($radius && ! empty($radius)) {
+                        $query->selectRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) AS distance', [$latitude, $longitude, $latitude])
+                            ->where('latitude', '!=', 0)
+                            ->where('longitude', '!=', 0)
+                            ->having('distance', '<', $radius);
+                    } else {
+                        $query->where(['latitude' => $latitude, 'longitude' => $longitude]);
+                    }
+                });
+
+            $adminPropertiesCount = $adminPropertyQuery->count();
+            $adminProjectsCount = $adminProjectQuery->count();
+
+            if ($adminPropertiesCount > 0 || $adminProjectsCount > 0) {
+                $adminQuery = User::where('type', 0)->select('id', 'slug_id', 'name', 'profile')->first();
+                if ($adminQuery) {
+                    $adminData = [
+                        'id' => $adminQuery->id,
+                        'name' => $adminQuery->name,
+                        'slug_id' => $adminQuery->slug_id,
+                        'email' => ! empty($adminEmail) ? $adminEmail : '',
+                        'property_count' => $adminPropertiesCount,
+                        'projects_count' => $adminProjectsCount,
+                        'total_count' => $adminPropertiesCount + $adminProjectsCount,
+                        // 'is_verified' => true,
+                        // 'is_verified_user' => true,
+                        'is_agent_verified' => true,
+                        'profile' => ! empty($adminQuery->getRawOriginal('profile')) ? $adminQuery->profile : url('assets/images/faces/2.jpg'),
+                        'is_admin' => true,
+                    ];
+                    $agents->prepend((object) $adminData);
+                }
+            }
+
+            $data['agents'] =
+                [
+                    'section_id' => $homepageData[$agentsHomepageSection]['id'] ?? null,
+                    'data' => $agents,
+                ];
+
+            // Decide location based data availability and apply fallback to global data if none
+            if ($latitude && $longitude) {
+                $categoriesHasData = isset($data['categories']['data']) && $data['categories']['data']->count() > 0;
+                $agentsHasData = isset($data['agents']['data']) && $data['agents']['data']->count() > 0;
+
+                if ($categoriesHasData || $agentsHasData) {
+                    $locationBasedData = true;
+                } else {
+                    // Fallback: rebuild categories without location filters
+                    $fallbackCategoriesQuery = Category::select('id', 'category', 'image', 'slug_id')
+                        ->where('status', 1)
+                        ->whereHas('properties', function ($query) {
+                            $query->onlyActive();
+                        })
+                        ->withCount(['properties' => function ($query) {
+                            $query->onlyActive();
+                        }])
+                        ->with('translations');
+
+                    $data['categories'] = [
+                        'section_id' => $homepageData[$categoriesHomepageSection]['id'] ?? null,
+                        'data' => $fallbackCategoriesQuery->limit(12)->get()->map(function ($item) {
+                            $item->translated_name = $item->translated_name;
+
+                            return $item;
+                        }),
+                    ];
+
+                    // Fallback: rebuild agents without location filters
+                    $fallbackAgentsQuery = Customer::select('id', 'name', 'email', 'profile', 'slug_id')
+                        ->with('agent_profile')
+                        ->where('is_agent', 1)
+                        ->where('isActive', 1)
+                        ->withCount([
+                            'projects' => function ($query) {
+                                $query->onlyActive()->where('role_context', 'agent');
+                            },
+                            'property' => function ($query) {
+                                $query->onlyActive()->where('role_context', 'agent');
+                            },
+                        ]);
+
+                    $fallbackAgents = $fallbackAgentsQuery->get()
+                        ->map(function ($customer) {
+                            $resolved = $customer->applyResolvedAgentProfile();
+                            $customer->name = $resolved['agent_name'];
+                            $customer->email = $resolved['agent_email'];
+                            $customer->profile = $resolved['agent_profile_photo'];
+                            $customer->is_agent_verified = $customer->is_agent_verified ?? false;
+                            $customer->total_count = $customer->projects_count + $customer->property_count;
+                            $customer->is_admin = false;
+
+                            return $customer;
+                        })
+                        ->filter(function ($customer) {
+                            return $customer->projects_count > 0 || $customer->property_count > 0;
+                        })
+                        ->sortByDesc(function ($customer) {
+                            return [$customer->is_verified, $customer->total_count];
+                        })
+                        ->values()
+                        ->take(12);
+
+                    // Add admin user if they have properties or projects (global, no location filter)
+                    $adminEmailGlobal = system_setting('company_email');
+                    $adminPropertiesCountGlobal = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->count();
+                    $adminProjectsCountGlobal = Projects::where(['is_admin_listing' => 1, 'status' => 1])->count();
+
+                    if ($adminPropertiesCountGlobal > 0 || $adminProjectsCountGlobal > 0) {
+                        $adminQueryGlobal = User::where('type', 0)->select('id', 'slug_id', 'name', 'profile')->first();
+                        if ($adminQueryGlobal) {
+                            $adminDataGlobal = [
+                                'id' => $adminQueryGlobal->id,
+                                'name' => $adminQueryGlobal->name,
+                                'slug_id' => $adminQueryGlobal->slug_id,
+                                'email' => ! empty($adminEmailGlobal) ? $adminEmailGlobal : '',
+                                'property_count' => $adminPropertiesCountGlobal,
+                                'projects_count' => $adminProjectsCountGlobal,
+                                'total_count' => $adminPropertiesCountGlobal + $adminProjectsCountGlobal,
+                                // 'is_verified' => true,
+                                // 'is_verified_user' => true,
+                                'is_agent_verified' => true,
+                                'profile' => ! empty($adminQueryGlobal->getRawOriginal('profile')) ? $adminQueryGlobal->profile : url('assets/images/faces/2.jpg'),
+                                'is_admin' => true,
+                            ];
+                            $fallbackAgents->prepend((object) $adminDataGlobal);
+                        }
+                    }
+
+                    $data['agents'] = [
+                        'section_id' => $homepageData[$agentsHomepageSection]['id'] ?? null,
+                        'data' => $fallbackAgents,
+                    ];
+                }
+            }
+
+            // Articles Section
             $data['articles'] = [
                 'section_id' => $homepageData[$articlesHomepageSection]['id'] ?? null,
-                'data' => $articlesQuery->get()
-            ];
-        } catch (\Exception $e) {
-            $data['articles'] = ['section_id' => null, 'data' => []];
-        }
+                'data' => Article::select('id', 'slug_id', 'category_id', 'title', 'description', 'image', 'view_count', 'created_at')
+                    ->with('category:id,slug_id,image,category', 'category.translations', 'translations')
+                    ->limit(5)
+                    ->get()
+                    ->map(function ($item) {
+                        if ($item->category) {
+                            $item->category->translated_name = $item->category->translated_name;
+                        }
+                        $item->translated_title = $item->translated_title;
+                        $item->translated_description = $item->translated_description;
 
-        try {
-            $data['faqs'] = [
-                'section_id' => $homepageData[$faqsHomepageSection]['id'] ?? null,
-                'data' => Faq::where('status', 1)->orderBy('id', 'DESC')->get()
+                        return $item;
+                    }),
             ];
-        } catch (\Exception $e) {
-            $data['faqs'] = ['section_id' => null, 'data' => []];
-        }
 
-        // ==========================================
-        // 4. SLIDERS Y BANNERS
-        // ==========================================
-        try {
-            $sliderQuery = Slider::select('id', 'type', 'image', 'web_image', 'category_id', 'propertys_id', 'show_property_details', 'link')
-                ->with([
-                    'category:id,category,image,slug_id',
-                    'category.translations',
-                    'property:id,slug_id,title,title_image,price,propery_type,city,state,country,rentduration,is_premium,category_id',
-                ]);
-            if (Schema::hasColumn('sliders', 'status')) {
-                $sliderQuery->where('status', 1);
+            // User Recommendations Section
+            if (Auth::guard('sanctum')->check()) {
+                $loggedInUser = Auth::guard('sanctum')->user();
+                $userInterestData = UserInterest::where('user_id', $loggedInUser->id)->first();
+
+                if ($userInterestData) {
+                    $userRecommendationQuery = Property::select(
+                        'id',
+                        'slug_id',
+                        'category_id',
+                        'city',
+                        'state',
+                        'country',
+                        'price',
+                        'propery_type',
+                        'title',
+                        'title_image',
+                        'is_premium',
+                        'address',
+                        'rentduration',
+                        'latitude',
+                        'longitude',
+                        'added_by',
+                        'description'
+                    )
+                        ->with(['category:id,slug_id,image,category', 'category.translations', 'translations'])
+                        ->onlyActive()
+                        ->whereIn('propery_type', [0, 1]);
+
+                    // Apply user interest filters
+                    if (! empty($userInterestData->category_ids)) {
+                        $categoryIds = explode(',', $userInterestData->category_ids);
+                        $userRecommendationQuery->whereIn('category_id', $categoryIds);
+                    }
+
+                    if (! empty($userInterestData->price_range)) {
+                        $priceRange = explode(',', $userInterestData->price_range);
+                        if (count($priceRange) >= 2) {
+                            $minPrice = floatval($priceRange[0]);
+                            $maxPrice = floatval($priceRange[1]);
+                            $userRecommendationQuery->whereRaw('CAST(price AS DECIMAL(10, 2)) BETWEEN ? AND ?', [$minPrice, $maxPrice]);
+                        }
+                    }
+
+                    if (! empty($userInterestData->city)) {
+                        $userRecommendationQuery->where('city', $userInterestData->city);
+                    }
+
+                    if (! empty($userInterestData->property_type) || $userInterestData->property_type == '0') {
+                        $propertyType = explode(',', $userInterestData->property_type);
+                        $userRecommendationQuery->whereIn('propery_type', $propertyType);
+                    }
+
+                    if (! empty($userInterestData->outdoor_facilitiy_ids)) {
+                        $outdoorFacilityIds = explode(',', $userInterestData->outdoor_facilitiy_ids);
+                        $userRecommendationQuery->whereHas('assignfacilities.outdoorfacilities', function ($q) use ($outdoorFacilityIds) {
+                            $q->whereIn('id', $outdoorFacilityIds);
+                        });
+                    }
+
+                    $data['user_recommendations'] = [
+                        'section_id' => $homepageData[$userRecommendationsHomepageSection]['id'] ?? null,
+                        'data' => $userRecommendationQuery
+                            ->inRandomOrder()
+                            ->limit(12)
+                            ->get()
+                            ->map(function ($property) {
+                                $property->promoted = $property->is_promoted;
+                                $property->property_type = $property->propery_type;
+                                $property->is_premium = $property->is_premium == 1;
+                                $property->parameters = $property->parameters;
+                                if ($property->category) {
+                                    $property->category->translated_name = $property->category->translated_name;
+                                }
+                                $property->translated_title = $property->translated_title;
+                                $property->translated_description = $property->translated_description;
+
+                                return $property;
+                            }),
+                    ];
+                } else {
+                    $data['user_recommendations'] = [
+                        'section_id' => $homepageData[$userRecommendationsHomepageSection]['id'] ?? null,
+                        'data' => [],
+                    ];
+                }
+            } else {
+                $data['user_recommendations'] = [
+                    'section_id' => $homepageData[$userRecommendationsHomepageSection]['id'] ?? null,
+                    'data' => [],
+                ];
             }
 
-            $sliderData = $sliderQuery->orderBy('id', 'DESC')->get()->map(function ($slider) {
-                // Keep numeric type for frontend checks (2 = category, 4 = external link).
-                $slider->slider_type = (string) $slider->getRawOriginal('type');
+            // FAQ Section
+            $data['faqs'] = [
+                'section_id' => $homepageData[$faqsHomepageSection]['id'] ?? null,
+                'data' => Faq::select('id', 'question', 'answer')
+                    ->where('status', 1)
+                    ->with('translations')
+                    ->orderBy('id', 'DESC')
+                    ->limit(5)
+                    ->get()
+                    ->map(function ($faq) {
+                        $faq->translated_question = $faq->translated_question;
+                        $faq->translated_answer = $faq->translated_answer;
 
-                if (collect($slider->property)->isNotEmpty()) {
-                    $slider->property->property_type = $slider->property->propery_type;
-                    $slider->property->parameters = $slider->property->parameters;
-                }
-
-                if ($slider->category) {
-                    $slider->category->translated_name = $slider->category->translated_name;
-                }
-
-                // Fallback so slider is still visible when no dedicated slider image exists.
-                if (empty($slider->web_image) && !empty($slider->property?->title_image)) {
-                    $slider->web_image = $slider->property->title_image;
-                }
-                if (empty($slider->image) && !empty($slider->property?->title_image)) {
-                    $slider->image = $slider->property->title_image;
-                }
-
-                return $slider;
-            });
-
-            $data['slider'] = [
-                'section_id' => $homepageData[$sliderHomepageSection]['id'] ?? null,
-                'data' => $sliderData,
+                        return $faq;
+                    }),
             ];
-        } catch (\Exception $e) {
-            $data['slider'] = ['section_id' => null, 'data' => []];
-        }
-        
-        try {
-            $now = now();
-            $adBannersQuery = AdBanner::where('is_active', 1)->where('starts_at', '<=', $now)->where('ends_at', '>=', $now);
-            if (method_exists(AdBanner::class, 'property')) { $adBannersQuery->with('property:id,title,slug_id'); }
-            $data['ad_banners'] = $adBannersQuery->get();
-        } catch (\Exception $e) {
-            $data['ad_banners'] = [];
-        }
 
-        $data['location_based_data'] = $locationBasedData;
+            // Slider Section
+            $lat = $request->latitude;
+            $lng = $request->longitude;
+            $rad = $request->radius;
 
-        return ApiResponseService::successResponse('Other Sections Fetched Successfully', $data);
+            $slider = Slider::select(
+                'id',
+                'type',
+                'image',
+                'web_image',
+                'category_id',
+                'propertys_id',
+                'show_property_details',
+                'link'
+            )
+                ->with([
+                    'category:id,slug_id,image,category',
+                    'category.translations',
+                    'property' => fn ($p) => $p->select('id', 'slug_id', 'propery_type', 'title_image', 'title', 'price', 'city', 'state', 'country', 'rentduration', 'added_by', 'is_premium', 'latitude', 'longitude', 'total_click')
+                        ->when(
+                            $lat && $lng && $rad && $lat != 'null' && $lng != 'null' && $rad != 'null',
+                            fn ($q) => $p->whereNotNull('latitude')->whereNotNull('longitude')
+                                ->selectRaw('(6371 * acos(cos(radians(?)) * cos(radians(latitude))
+                            * cos(radians(longitude) - radians(?)) + sin(radians(?))
+                            * sin(radians(latitude)))) AS distance', [$lat, $lng, $lat])
+                                ->havingRaw('distance < ?', [$rad])
+                        )
+                        ->with('translations'),
+                ])
+                ->when(
+                    $lat && $lng && $rad && $lat != 'null' && $lng != 'null' && $rad != 'null',
+                    fn ($q) => $q->where(
+                        fn ($sliderQuery) => $sliderQuery->where(function ($query) {
+                            $query->where('type', 3)->has('property');
+                        })->orWhere('type', '!=', 3)
+                    )
+                )
+                ->get()
+                ->map(function ($slider) {
+                    $type = $slider->getRawOriginal('type');
+                    $slider->slider_type = $type;
+                    if ($slider->category) {
+                        $slider->category->translated_name = $slider->category->translated_name;
+                    }
+                    if ($slider->getRawOriginal('type') == 3) {
+                        if ($slider->property) {
+                            $slider->property->parameters = $slider->property->parameters;
+                            $slider->property->translated_title = $slider->property->translated_title;
+                            $slider->property->translated_description = $slider->property->translated_description;
+                            $slider->property->property_type = $slider->property->propery_type;
+                            $slider->property->is_premium = $slider->property->is_premium == 1 ? true : false;
+
+                            return $slider;
+                        }
+                    } else {
+                        return $slider;
+                    }
+                })->filter()->values();
+            $data['slider'] = [
+                'section_id' => null,
+                'data' => $slider,
+            ];
+
+            // Expose location flag in response
+            $data['location_based_data'] = $locationBasedData;
+
+            ApiResponseService::successResponse('Other Sections Fetched Successfully', $data);
+        } catch (Exception $e) {
+            ApiResponseService::errorResponse($e->getMessage());
+        }
     }
 
     private function getUnsplashData($cityData)
     {
         $apiKey = env('UNSPLASH_API_KEY');
-        if (empty($apiKey)) {
-            return ['City' => $cityData->city, 'Count' => $cityData->property_count, 'image' => ''];
-        }
-
         $query = $cityData->city;
-        $apiUrl = 'https://api.unsplash.com/search/photos/?query='.urlencode($query);
+        $apiUrl = "https://api.unsplash.com/search/photos/?query=$query";
         $ch = curl_init($apiUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_FAILONERROR, false);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Client-ID '.$apiKey,
         ]);
         $unsplashResponse = curl_exec($ch);
-        $curlError = curl_errno($ch);
-        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-
-        if ($curlError !== 0 || $httpStatus < 200 || $httpStatus >= 300 || empty($unsplashResponse)) {
-            return ['City' => $cityData->city, 'Count' => $cityData->property_count, 'image' => ''];
-        }
 
         $unsplashData = json_decode($unsplashResponse, true);
         if (isset($unsplashData['results'])) {

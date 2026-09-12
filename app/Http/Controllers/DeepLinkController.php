@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\HelperService;
 
-class DeepLinkController extends Controller
+class DeeplinkController extends Controller
 {
     public function handle($slug)
     {

@@ -32,7 +32,18 @@ return [
     ],
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY', null),
-        'api_url' => env('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite'),
+        'api_url' => env('GEMINI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite'),
+    ],
+
+    // WhatsApp Business API (FASE 8 T4) — en local se usa modo mock
+    'whatsapp' => [
+        'mode' => env('WHATSAPP_MODE', 'mock'),
+        'token' => env('WHATSAPP_TOKEN', ''),
+        'phone_id' => env('WHATSAPP_PHONE_ID', ''),
+        'sender_number' => env('WHATSAPP_SENDER_NUMBER', ''),
+        'language' => env('WHATSAPP_LANGUAGE', 'es'),
     ],
 
 ];
+
+

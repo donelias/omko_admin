@@ -25,4 +25,7 @@ Homestead.json
 .vscode/
 .sftp/
 storage
-composer.lock
+
+# macOS
+.DS_Store
+**/.DS_Store

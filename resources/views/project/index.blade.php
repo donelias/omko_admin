@@ -25,8 +25,11 @@
             @if (has_permissions('create', 'project'))
                 <div class="card-header">
                     <div class="row ">
-                        {{-- Add Property Button --}}
-                        <div class="col-12 col-xs-12 d-flex justify-content-end">
+                        {{-- Add Project & Bulk Import Buttons --}}
+                        <div class="col-12 col-xs-12 d-flex justify-content-end gap-2">
+                            <a href="{{ route('bulk-import.project') }}" class="btn btn-success">
+                                <i class="bi bi-file-earmark-arrow-up me-1"></i>{{ __('Bulk Upload') }}
+                            </a>
                             <a href="{{ route('project.create') }}" class="btn btn-primary">{{ __('Add Project') }}</a>
                         </div>
 
@@ -45,25 +48,27 @@
                     </div>
                 </div>
 
-                <div id="toolbar" class="d-flex align-items-center mb-3 flex-wrap gap-2">
-
+                <div class="row" id="toolbar">
                     {{-- Filter Category --}}
-                    <select class="form-select form-control-sm w-auto" id="filter_category">
-                        <option value="">{{ __('Select Category') }}</option>
-                        @if (isset($category))
-                            @foreach ($category as $row)
-                                <option value="{{ $row->id }}">{{ $row->category }} </option>
-                            @endforeach
-                        @endif
-                    </select>
+                    <div class="col-xl-3 mt-2">
+                        <select class="form-select form-control-sm" id="filter_category">
+                            <option value="">{{ __('Select Category') }}</option>
+                            @if (isset($category))
+                                @foreach ($category as $row)
+                                    <option value="{{ $row->id }}">{{ $row->category }} </option>
+                                @endforeach
+                            @endif
+                        </select>
+                    </div>
 
                     {{-- Filter Status --}}
-                    <select id="status" class="form-select form-control-sm w-auto">
-                        <option value="">{{ __('Select Status') }} </option>
-                        <option value="0">{{ __('Inactive') }}</option>
-                        <option value="1">{{ __('Active') }}</option>
-                    </select>
-
+                    <div class="col-xl-3 mt-2">
+                        <select id="status" class="form-select form-control-sm">
+                            <option value="">{{ __('Select Status') }} </option>
+                            <option value="0">{{ __('Inactive') }}</option>
+                            <option value="1">{{ __('Active') }}</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="row">
@@ -81,7 +86,8 @@
                                         {{ __('Client Name') }}</th>
                                     <th scope="col" data-field="customer.mobile" data-align="center"
                                         data-sortable="false"> {{ __('Mobile') }} </th>
-                                    <th scope="col" data-field="title" data-align="center" data-sortable="true">
+                                    <th scope="col" data-field="title" data-align="center" data-sortable="true"
+                                        data-width="220" data-formatter="titleFormatter">
                                         {{ __('Title') }} </th>
                                     <th scope="col" data-field="category.category" data-align="center">
                                         {{ __('Category') }}</th>

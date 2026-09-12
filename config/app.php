@@ -3,7 +3,6 @@
 use App\Providers\AppServiceProvider;
 use App\Providers\EventServiceProvider;
 use App\Providers\RouteServiceProvider;
-use App\Providers\TelescopeServiceProvider;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Barryvdh\DomPDF\ServiceProvider;
 use Collective\Html\HtmlServiceProvider;
@@ -229,9 +228,6 @@ return [
         // App\Providers\BroadcastServiceProvider::class,
         EventServiceProvider::class,
         RouteServiceProvider::class,
-        TelescopeServiceProvider::class,
-        'Barryvdh\Debugbar\ServiceProvider',
-        RouteServiceProvider::class,
         HtmlServiceProvider::class,
         App\Providers\ViewServiceProvider::class,
         ImageServiceProvider::class,
@@ -250,7 +246,6 @@ return [
 
     'aliases' => Facade::defaultAliases()->merge([
         // 'ExampleClass' => App\Example\ExampleClass::class,
-        'Debugbar' => 'Barryvdh\Debugbar\Facade',
         'Paystack' => Paystack::class,
         'PDF' => Pdf::class,
         'Image' => Image::class,

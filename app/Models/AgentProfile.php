@@ -19,14 +19,27 @@ class AgentProfile extends Model
         'agent_mobile',
         'agent_country_code',
         'about_me',
+        'agent_banner',   
         'facebook_id',
         'twitter_id',
         'youtube_id',
         'instagram_id',
+        'linkedin_id',
+        'watermark_enabled',
+        'watermark_image',
+        'watermark_opacity',
+        'watermark_size',
+        'watermark_style',
+        'watermark_position',
+        'watermark_rotation',
     ];
 
     protected $casts = [
         'customer_id' => 'integer',
+        'watermark_enabled' => 'boolean',
+        'watermark_opacity' => 'integer',
+        'watermark_size' => 'integer',
+        'watermark_rotation' => 'integer',
     ];
 
     protected $hidden = [
@@ -46,6 +59,28 @@ class AgentProfile extends Model
         }
 
         $path = $image ? config('global.AGENT_PROFILE_IMG_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
+    }
+
+    public function getAgentBannerAttribute($image)
+    {
+        if (filter_var($image, FILTER_VALIDATE_URL)) {
+            return $image;
+        }
+
+        $path = $image ? config('global.AGENT_PROFILE_BANNER_PATH').$image : null;
+
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
+    }
+
+    public function getWatermarkImageAttribute($image)
+    {
+        if (filter_var($image, FILTER_VALIDATE_URL)) {
+            return $image;
+        }
+
+        $path = $image ? config('global.AGENT_WATERMARK_IMG_PATH').$image : null;
 
         return ! empty($path) ? FileService::getFileUrl($path) : null;
     }

@@ -6,6 +6,7 @@ use App\Services\FileService;
 use App\Services\HelperService;
 use App\Traits\HasAppTimezone;
 use App\Traits\HasRoleContext;
+use App\Traits\HasTenantFilter;
 use App\Traits\ManageTranslations;
 use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Log;
 
 class Projects extends Model
 {
-    use HasAppTimezone, HasFactory, HasRoleContext, ManageTranslations;
+    use HasAppTimezone, HasFactory, HasRoleContext, HasTenantFilter, ManageTranslations;
 
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
@@ -144,16 +145,6 @@ class Projects extends Model
         return $this->hasMany(ProjectPlans::class, 'project_id');
     }
 
-    public function projectUnits()
-    {
-        return $this->hasMany(Property::class, 'project_id', 'id')->where('is_project_unit', true);
-    }
-
-    public function activeProjectUnits()
-    {
-        return $this->projectUnits()->whereNot('unit_status', 'inactive');
-    }
-
     public function reject_reason()
     {
         return $this->hasMany(RejectReason::class, 'project_id');
@@ -167,23 +158,6 @@ class Projects extends Model
     public function translations()
     {
         return $this->morphMany(Translation::class, 'translatable');
-    }
-
-    public function assignParameter()
-    {
-        return $this->morphMany(AssignParameters::class, 'modal');
-    }
-
-    public function parameters()
-    {
-        return $this->belongsToMany(parameter::class, 'assign_parameters', 'modal_id', 'parameter_id')
-            ->withPivot('value')
-            ->wherePivot('modal_type', static::class);
-    }
-
-    public function assignfacilities()
-    {
-        return $this->hasMany(AssignedOutdoorFacilities::class, 'project_id');
     }
 
     public function getImageAttribute($image, $fullUrl = true)
@@ -242,13 +216,13 @@ class Projects extends Model
 
     public function getIsExpiredAttribute()
     {
-        return ($this->expiry_date !== null && $this->expiry_date < now()) ? 1 : 0;
+        return ($this->expiry_date !== null && $this->expiry_date < now()->startOfDay()) ? 1 : 0;
     }
 
     public function scopeOnlyActive($query)
     {
         return $query->where(['status' => 1, 'request_status' => 'approved'])->where(function ($q) {
-            $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+            $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
         });
     }
 

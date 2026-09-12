@@ -49,6 +49,7 @@ class SeoSettingsController extends Controller
         __('all-agents'),
         __('agent-details'),
         __('faqs'),
+        __('become-agent')
     ];
 
     // Custom pages (optimized with eager loading)
@@ -164,7 +165,7 @@ class SeoSettingsController extends Controller
                 $operate .= BootstrapTableService::editButton('', true, null, null, $row->id);
             }
             if (has_permissions('delete', 'seo_settings')) {
-                $operate .= BootstrapTableService::deleteButton(route('seo_settings.destroy', $row->id), $row->id);
+                $operate .= BootstrapTableService::deleteButton(route('seo_settings.destroy.url', $row->id), $row->id);
             }
 
             $tempRow['operate'] = $operate;

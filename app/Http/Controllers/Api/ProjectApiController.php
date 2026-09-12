@@ -3,17 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\AssignParameters;
-use App\Models\AssignedOutdoorFacilities;
-use App\Models\parameter;
 use App\Models\PaymentTransaction;
 use App\Models\ProjectDocuments;
 use App\Models\ProjectPlans;
+use App\Models\Notifications;
 use App\Models\Projects;
 use App\Models\Property;
 use App\Models\User;
+use App\Models\Usertokens;
 use App\Rules\VideoUrlRule;
 use App\Services\ApiResponseService;
+use App\Services\AuditLogService;
 use App\Services\BulkProjectUnitImportService;
 use App\Services\FileService;
 use App\Services\HelperService;
@@ -45,39 +45,11 @@ class ProjectApiController extends Controller
             'custom_video' => 'nullable|file|mimes:mp4,webm,ogg|max:20480|required_if:video_type,0',
         ];
 
-        $planRules = [
-            'plans' => 'nullable|array',
-            'plans.*.id' => 'nullable|integer|exists:project_plans,id',
-            'plans.*.title' => 'nullable|string|max:255',
-            'plans.*.unit_code' => 'nullable|string|max:100',
-            'plans.*.price' => 'nullable|numeric|min:0',
-            'plans.*.currency' => 'nullable|string|size:3',
-            'plans.*.total_units' => 'nullable|integer|min:0',
-            'plans.*.available_units' => 'nullable|integer|min:0',
-            'plans.*.unit_status' => 'nullable|in:available,low_stock,sold_out,inactive',
-            'plans.*.category_id' => 'nullable',
-            'plans.*.country' => 'nullable|string|max:255',
-            'plans.*.state' => 'nullable|string|max:255',
-            'plans.*.city' => 'nullable|string|max:255',
-            'plans.*.location' => 'nullable|string|max:1000',
-            'plans.*.latitude' => 'nullable',
-            'plans.*.longitude' => 'nullable',
-            'plans.*.bedrooms' => 'nullable|integer|min:0',
-            'plans.*.bathrooms' => 'nullable|integer|min:0',
-            'plans.*.kitchen' => 'nullable|integer|min:0',
-            'plans.*.dining_room' => 'nullable|integer|min:0',
-            'plans.*.living_room' => 'nullable|integer|min:0',
-            'plans.*.build_area' => 'nullable|numeric|min:0',
-            'plans.*.closet' => 'nullable|integer|min:0',
-            'plans.*.features' => 'nullable|json',
-            'remove_plans' => 'nullable|string',
-        ];
-
         if ($request->has('id')) {
             $validator = Validator::make($request->all(), array_merge([
                 'title' => 'required',
-            ], $videoRules, $planRules), [], [
-                'custom_video.max' => 'The custom video must not be greater than 20MB.',
+            ], $videoRules), [], [
+                'custom_video.max' => 'File size exceeds the :max limit. Please upload a smaller video.',
             ]);
         } else {
             $validator = Validator::make($request->all(), array_merge([
@@ -94,9 +66,10 @@ class ProjectApiController extends Controller
                 'translations.*.description.translation_id' => 'nullable|exists:translations,id',
                 'translations.*.description.language_id' => 'nullable|exists:languages,id',
                 'translations.*.description.value' => 'nullable',
-            ], $videoRules, $planRules),[
-                'custom_video.max' => 'The custom video must not be greater than 20MB.',
-                'custom_video.*.max' => 'The custom video must not be greater than 20MB.',
+                'is_draft' => 'nullable|in:true,false',
+            ], $videoRules),[
+                'custom_video.max' => 'File size exceeds the :max limit. Please upload a smaller video.',
+                'custom_video.*.max' => 'File size exceeds the :max limit. Please upload a smaller video.',
             ]);
         }
         if ($validator->fails()) {
@@ -110,6 +83,10 @@ class ProjectApiController extends Controller
             DB::beginTransaction();
             $isPayAsYouGo = false;
             $isDraft = false;
+
+            if ($request->boolean('is_draft')) {
+                $isDraft = true;   
+            }
 
             if (! $request->id) {
                 // Check if limit is available without failing automatically
@@ -126,6 +103,7 @@ class ProjectApiController extends Controller
             $slugData = (isset($request->slug_id) && ! empty($request->slug_id)) ? $request->slug_id : $request->title;
 
             $currentUserId = Auth::user()->id;
+            $watermarkAgentId = $request->user_active_role === 'agent' ? $currentUserId : null;
             if (! (isset($request->id))) {
                 $project = new Projects;
 
@@ -271,7 +249,7 @@ class ProjectApiController extends Controller
                 if ($request->hasFile('image')) {
                     $path = config('global.PROJECT_TITLE_IMG_PATH');
                     $rawImage = $project->getRawOriginal('image');
-                    $project->image = FileService::compressAndReplace($request->file('image'), $path, $rawImage, true);
+                    $project->image = FileService::compressAndReplace($request->file('image'), $path, $rawImage, true, $watermarkAgentId);
                 }
 
                 if ($request->has('remove_meta_image') && $request->remove_meta_image == 1) {
@@ -291,7 +269,7 @@ class ProjectApiController extends Controller
                 $project->title = $request->title;
                 if ($request->hasFile('image')) {
                     $path = config('global.PROJECT_TITLE_IMG_PATH');
-                    $project->image = FileService::compressAndUpload($request->file('image'), $path, true);
+                    $project->image = FileService::compressAndUpload($request->file('image'), $path, true, $watermarkAgentId);
                 }
                 if ($request->hasFile('meta_image')) {
                     $path = config('global.PROJECT_SEO_IMG_PATH');
@@ -342,7 +320,7 @@ class ProjectApiController extends Controller
                 foreach ($request->file('gallery_images') as $file) {
                     $galleryImagesData[] = [
                         'project_id' => $project->id,
-                        'name' => FileService::compressAndUpload($file, config('global.PROJECT_DOCUMENT_PATH'), true),
+                        'name' => FileService::compressAndUpload($file, config('global.PROJECT_DOCUMENT_PATH'), true, $watermarkAgentId),
                         'type' => 'image',
                         'created_at' => now(),
                         'updated_at' => now(),
@@ -353,11 +331,10 @@ class ProjectApiController extends Controller
                 }
             }
 
-            $documentEntries = [];
-
             if ($request->hasfile('documents')) {
+                $documentsData = [];
                 foreach ($request->file('documents') as $file) {
-                    $documentEntries[] = [
+                    $documentsData[] = [
                         'project_id' => $project->id,
                         'name' => FileService::compressAndUpload($file, config('global.PROJECT_DOCUMENT_PATH')),
                         'type' => 'doc',
@@ -365,65 +342,10 @@ class ProjectApiController extends Controller
                         'updated_at' => now(),
                     ];
                 }
-            }
-
-            $documentNames = $request->input('document_names', []);
-            if (is_array($documentNames)) {
-                foreach ($documentNames as $name) {
-                    if (!empty($name)) {
-                        $documentEntries[] = [
-                            'project_id' => $project->id,
-                            'name' => $name,
-                            'type' => 'doc',
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ];
-                    }
+                if (collect($documentsData)->isNotEmpty()) {
+                    ProjectDocuments::insert($documentsData);
                 }
             }
-
-            if (!empty($documentEntries)) {
-                ProjectDocuments::insert($documentEntries);
-            }
-
-            // Handle Parameters (Features & Amenities)
-            if ($request->has('parameters')) {
-                AssignParameters::where('modal_id', $project->id)
-                    ->where('modal_type', Projects::class)
-                    ->delete();
-                $parameters = $request->input('parameters');
-                if (is_array($parameters)) {
-                    foreach ($parameters as $param) {
-                        if (!empty($param['parameter_id'])) {
-                            $assignParam = new AssignParameters;
-                            $assignParam->parameter_id = $param['parameter_id'];
-                            $assignParam->value = $param['value'] ?? '';
-                            $assignParam->property_id = $project->id;
-                            $assignParam->modal()->associate($project);
-                            $assignParam->save();
-                        }
-                    }
-                }
-            }
-
-            // Handle Outdoor Facilities
-            if ($request->has('facilities')) {
-                AssignedOutdoorFacilities::where('project_id', $project->id)->delete();
-                $facilities = $request->input('facilities');
-                if (is_array($facilities)) {
-                    foreach ($facilities as $facility) {
-                        if (!empty($facility['facility_id']) && isset($facility['distance']) && $facility['distance'] !== '') {
-                            $assignFacility = new AssignedOutdoorFacilities;
-                            $assignFacility->facility_id = $facility['facility_id'];
-                            $assignFacility->distance = (float) $facility['distance'];
-                            $assignFacility->project_id = $project->id;
-                            $assignFacility->save();
-                        }
-                    }
-                }
-            }
-
-            $normalizedPlansForUnitSync = [];
 
             if (! empty($request->plans)) {
 
@@ -441,51 +363,16 @@ class ProjectApiController extends Controller
                     // Handle document upload if present
                     if (! empty($planData['document'])) {
                         $oldFile = $projectPlan->getRawOriginal('document');
-                        $projectPlan->document = FileService::compressAndReplace($planData['document'], $path, $oldFile, true);
+                        $projectPlan->document = FileService::compressAndReplace($planData['document'], $path, $oldFile, true, $watermarkAgentId);
                     }
 
                     // Fill common fields
                     $projectPlan->fill([
                         'title' => $planData['title'] ?? '',
                         'project_id' => $project->id,
-                        'bedrooms' => $planData['bedrooms'] ?? null,
-                        'bathrooms' => $planData['bathrooms'] ?? null,
-                        'kitchen' => $planData['kitchen'] ?? null,
-                        'dining_room' => $planData['dining_room'] ?? null,
-                        'living_room' => $planData['living_room'] ?? null,
-                        'build_area' => $planData['build_area'] ?? null,
-                        'closet' => $planData['closet'] ?? null,
-                        'features' => isset($planData['features']) ? (is_string($planData['features']) ? json_decode($planData['features'], true) : $planData['features']) : null,
                     ]);
 
                     $projectPlan->save();
-
-                    $normalizedPlansForUnitSync[] = [
-                        'id' => $projectPlan->id,
-                        'title' => $projectPlan->title,
-                        'unit_code' => $planData['unit_code'] ?? null,
-                        'price' => $planData['price'] ?? null,
-                        'currency' => $planData['currency'] ?? null,
-                        'total_units' => $planData['total_units'] ?? null,
-                        'available_units' => $planData['available_units'] ?? null,
-                        'unit_status' => $planData['unit_status'] ?? null,
-                        'category_id' => $planData['category_id'] ?? null,
-                        'country' => $planData['country'] ?? null,
-                        'state' => $planData['state'] ?? null,
-                        'city' => $planData['city'] ?? null,
-                        'location' => $planData['location'] ?? null,
-                        'latitude' => $planData['latitude'] ?? null,
-                        'longitude' => $planData['longitude'] ?? null,
-                    ];
-                }
-
-                try {
-                    $this->projectUnitSyncService->syncProjectUnitsFromPlans($project, $normalizedPlansForUnitSync);
-                } catch (Exception $e) {
-                    Log::error('Project unit sync failed (non-blocking): '.$e->getMessage(), [
-                        'project_id' => $project->id,
-                        'trace' => $e->getTraceAsString(),
-                    ]);
                 }
             }
 
@@ -504,16 +391,6 @@ class ProjectApiController extends Controller
                     }
                     // Delete all plans from DB in a single query
                     ProjectPlans::whereIn('id', $removePlanIds)->delete();
-
-                    // Keep inventory and listing history by inactivating corresponding unit properties
-                    try {
-                        $this->projectUnitSyncService->deactivateUnitsByPlanIds($project, $removePlanIds);
-                    } catch (Exception $e) {
-                        Log::error('Project unit deactivation failed (non-blocking): '.$e->getMessage(), [
-                            'project_id' => $project->id,
-                            'trace' => $e->getTraceAsString(),
-                        ]);
-                    }
                 }
             }
 
@@ -536,25 +413,14 @@ class ProjectApiController extends Controller
                     HelperService::storeTranslations($translationData);
                 }
             }
-            $result = Projects::with('customer')->with('gallary_images')->with('documents')->with('plans')->with('category:id,category,image,parameter_types')->with('assignParameter.parameter')->with('assignfacilities.outdoorfacilities')->where('id', $project->id)->first();
-            $result = $this->appendProjectUnitDataToPlans($result);
-
-            if ($result->category) {
-                $parameterData = $result->category->parameters;
-                if (collect($parameterData)->isNotEmpty()) {
-                    $parameterData = $parameterData->map(function ($item) {
-                        $item->translated_name = $item->translated_name;
-                        $item->translated_option_value = $item->translated_option_value;
-                        unset($item->assigned_parameter);
-                        return $item;
-                    });
-                }
-                $result->category->parameter_types = collect($parameterData)->values()->toArray();
-            }
+            $result = Projects::with('customer')->with('gallary_images')->with('documents')->with('plans')->with('category:id,category,image')->where('id', $project->id)->first();
 
             // $projectData = new CustomerResource($result, ['is_agent','is_user_verified', 'is_agent_verified', 'become_agent_status', 'agent_verification_status', 'user_verification_status']);
 
             DB::commit();
+            $action = isset($request->id) ? 'updated' : 'created';
+            $actionDesc = isset($request->id) ? 'updated' : 'created';
+            AuditLogService::log('project', $project->id, $project->title, $action, "Project '{$project->title}' {$actionDesc} via app/web", 'api');
             $response['error'] = false;
             $response['message'] = isset($request->id) ? trans('Project Updated Successfully') : trans('Project Posted Successfully');
             // $response['data'] = $result;
@@ -570,6 +436,37 @@ class ProjectApiController extends Controller
             }
 
             $response['data'] = $result;
+
+            // Notify owner when edited project goes back to pending review
+            if (isset($request->id) && $result->getRawOriginal('request_status') === 'pending') {
+                $notifyCustomer = $result->customer;
+                if ($notifyCustomer && $notifyCustomer->isActive == 1 && $notifyCustomer->notification == 1) {
+                    $tokens = Usertokens::where('customer_id', $notifyCustomer->id)->pluck('fcm_id')->toArray();
+                    if (! empty($tokens)) {
+                        $fcmMsg = [
+                            'title' => 'Project updated :- :project_name',
+                            'message' => trans('Your project edit is pending review by administrator'),
+                            'type' => 'project_inquiry',
+                            'body' => trans('Your project edit is pending review by administrator'),
+                            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                            'sound' => 'default',
+                            'id' => (string) $result->id,
+                            'role_context' => $result->role_context ?? 'user',
+                            'replace' => ['project_name' => $result->title],
+                        ];
+                        send_push_notification($tokens, $fcmMsg);
+                    }
+                }
+                Notifications::create([
+                    'title' => 'Project Updated :- '.$result->title,
+                    'message' => trans('Your project edit is pending review by administrator'),
+                    'image' => '',
+                    'type' => '1',
+                    'send_type' => '0',
+                    'customers_id' => $currentUserId,
+                    'role_context' => $result->role_context ?? 'user',
+                ]);
+            }
 
             return response()->json($response);
         } catch (Exception $e) {
@@ -616,9 +513,9 @@ class ProjectApiController extends Controller
                     'location.country' => 'nullable',
                     'location.state' => 'nullable',
                     'location.city' => 'nullable',
-                    'location.latitude' => 'nullable',
-                    'location.longitude' => 'nullable',
-                    'location.range' => 'nullable',
+                    'location.latitude' => 'nullable|numeric|between:-90,90',
+                    'location.longitude' => 'nullable|numeric|between:-180,180',
+                    'location.radius' => 'nullable|numeric|min:0',
                     'posted_since' => 'nullable|in:0,1,2,3,4',
                     'flags.promoted' => 'nullable',
                     'flags.most_views' => 'nullable',
@@ -626,6 +523,7 @@ class ProjectApiController extends Controller
                     'flags.get_all_premium_properties' => 'nullable',
                     'project_type' => 'nullable|in:0,1',
                     'role_context' => 'nullable|in:user,agent',
+                    'search'       => 'nullable|string',
                 ]
             );
             if ($filterValidator->fails()) {
@@ -643,7 +541,8 @@ class ProjectApiController extends Controller
             $city = isset($filters['location']['city']) ? $filters['location']['city'] : null;
             $latitude = isset($filters['location']['latitude']) ? $filters['location']['latitude'] : null;
             $longitude = isset($filters['location']['longitude']) ? $filters['location']['longitude'] : null;
-            $range = isset($filters['location']['range']) ? $filters['location']['range'] : null;
+            // API filter key renamed to `radius`; internal $range kept to avoid touching the query
+            $range = isset($filters['location']['radius']) ? $filters['location']['radius'] : null;
             $postedSince = isset($filters['posted_since']) ? $filters['posted_since'] : null;
             $promoted = isset($filters['flags']['promoted']) ? $filters['flags']['promoted'] : null;
             $getPremiumProjects = isset($filters['flags']['get_all_premium_properties']) ? $filters['flags']['get_all_premium_properties'] : null;
@@ -651,6 +550,7 @@ class ProjectApiController extends Controller
             $mostLiked = isset($filters['flags']['most_liked']) ? $filters['flags']['most_liked'] : null;
             $projectType = isset($filters['project_type']) ? $filters['project_type'] : null;
             $addedAs = isset($filters['role_context']) ? $filters['role_context'] : null;
+            $search = isset($filters['search']) && $filters['search'] !== '' ? $filters['search'] : null;
 
             // Also support legacy top-level slug_id / id params
             $projectSlugId = $request->has('slug_id') ? $request->slug_id : null;
@@ -659,13 +559,14 @@ class ProjectApiController extends Controller
             // Base query
             $projectsQuery = Projects::where(['request_status' => 'approved', 'status' => 1])
                 ->where(function ($q) {
-                    $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                    $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                 })
                 ->when($addedAs, function ($query) use ($addedAs) {
                     return $query->where('role_context', $addedAs);
                 })
-                ->with('category:id,slug_id,image,category', 'gallary_images', 'customer:id,name,profile,email,mobile,slug_id,is_agent,is_agent_verified', 'category.translations', 'translations')
-                ->select('id', 'slug_id', 'city', 'state', 'country', 'title', 'type', 'image', 'status', 'location', 'category_id', 'added_by', 'role_context', 'is_admin_listing', 'is_premium', 'request_status', 'meta_title', 'meta_description', 'meta_keywords', 'meta_image', 'total_click', 'expiry_date');
+                ->with('category:id,slug_id,image,category', 'gallary_images', 'category.translations', 'translations')
+                ->with(['customer' => fn ($q) => $q->select('id', 'name', 'profile', 'email', 'mobile', 'slug_id', 'is_agent', 'is_agent_verified')->withStoryStatus()])
+                ->select('id', 'slug_id', 'city', 'state', 'country', 'title', 'type', 'image', 'status', 'location', 'category_id', 'added_by', 'role_context', 'is_admin_listing', 'is_premium', 'request_status', 'meta_title', 'meta_description', 'meta_keywords', 'meta_image', 'total_click', 'expiry_date', 'created_at');
 
             // If Project Type is passed (0 = upcoming, 1 = under_construction)
             if (isset($projectType) && $projectType !== null) {
@@ -697,11 +598,11 @@ class ProjectApiController extends Controller
             if (isset($latitude) && ! empty($latitude) && isset($longitude) && ! empty($longitude) && $latitude != 'null' && $longitude != 'null') {
                 if (isset($range) && ! empty($range) && $range != 'null') {
                     $projectsQuery = $projectsQuery->selectRaw("
-                            (6371 * acos(cos(radians($latitude))
+                            (6371 * acos(cos(radians(?))
                             * cos(radians(latitude))
-                            * cos(radians(longitude) - radians($longitude))
-                            + sin(radians($latitude))
-                            * sin(radians(latitude)))) AS distance")
+                            * cos(radians(longitude) - radians(?))
+                            + sin(radians(?))
+                            * sin(radians(latitude)))) AS distance", [$latitude, $longitude, $latitude])
                         ->where('latitude', '!=', 0)
                         ->where('longitude', '!=', 0)
                         ->having('distance', '<', $range);
@@ -713,9 +614,9 @@ class ProjectApiController extends Controller
             // If Posted Since is passed
             if (isset($postedSince)) {
                 if ($postedSince == 0) {
-                    $projectsQuery = $projectsQuery->whereBetween(
-                        'created_at',
-                        [Carbon::now()->subWeek()->startOfWeek(), Carbon::now()->subWeek()->endOfWeek()]
+                    $projectsQuery = $projectsQuery->where(
+                        'created_at', '>=',
+                        Carbon::now()->subweek()
                     );
                 }
                 if ($postedSince == 1) {
@@ -740,12 +641,26 @@ class ProjectApiController extends Controller
                 $projectsQuery = $projectsQuery->where('id', $projectId);
             }
 
-            // Existing get_featured support
-            if ($request->filled('get_featured') && $request->get_featured == 1) {
-                $projectsQuery = $projectsQuery->whereHas('advertisement', function ($query) {
-                    $query->where('for', 'project')->where('status', 0)->where('is_enable', 1);
+            // Search filter
+            if ($search) {
+                $projectsQuery = $projectsQuery->where(function ($q) use ($search) {
+                    $q->where('title', 'like', '%'.$search.'%')
+                        ->orWhere('location', 'like', '%'.$search.'%')
+                        ->orWhereHas('category', function ($q2) use ($search) {
+                            $q2->where('category', 'like', '%'.$search.'%');
+                        })
+                        ->orWhere(function ($q3) use ($search) {
+                            $q3->searchInAnyTranslation($search);
+                        });
                 });
             }
+
+            // Existing get_featured support
+            // if ($request->filled('get_featured') && $request->get_featured == 1) {
+            //     $projectsQuery = $projectsQuery->whereHas('advertisement', function ($query) {
+            //         $query->where('for', 'project')->where('status', 0)->where('is_enable', 1);
+            //     });
+            // }
 
             // If promoted is passed then show only projects that have active advertisements
             if (isset($promoted) && ! empty($promoted) && $promoted == 1) {
@@ -759,84 +674,127 @@ class ProjectApiController extends Controller
                 $projectsQuery = $projectsQuery->where('is_premium', 1);
             }
 
-            // Add promoted_count for ordering
-            $projectsQuery = $projectsQuery->withCount([
-                'advertisement as promoted_count' => function ($query) {
-                    $query->where('status', 0)
-                        ->where('is_enable', 1)
-                        ->where('for', 'project')
-                        ->groupBy('project_id');
-                },
-            ]);
-
-            // Always group promoted projects first
-            $projectsQuery = $projectsQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END');
-
-            // Randomize promoted, order non-promoted by chosen sort key
-            if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
-                // For most viewed: order non-promoted by total_click DESC
-                $projectsQuery = $projectsQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - total_click) END');
-            } elseif (isset($mostLiked) && ! empty($mostLiked) && $mostLiked == 1) {
-                // For most liked: order non-promoted by id DESC (projects have no favourites table)
-                $projectsQuery = $projectsQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - id) END');
-            } else {
-                // Default: order non-promoted by id DESC
-                $projectsQuery = $projectsQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - id) END');
-            }
-
-            // Get Total
-            $total = $projectsQuery->clone()->count();
-
             // Get Admin Company Details
             $adminCompanyTel1 = system_setting('company_tel1');
             $adminEmail = system_setting('company_email');
-            $adminUser = User::where('id', 1)->select('id', 'slug_id')->first();
+            $adminUser = User::where('id', 1)->select('id', 'slug_id', 'name')->first();
 
-            // Get Data
-            $data = $projectsQuery->clone()
-                ->take($limit)
-                ->skip($offset)
-                ->get()
-                ->map(function ($project) use ($adminCompanyTel1, $adminEmail, $adminUser) {
-                    // Check if listing is by admin then add admin details in customer
-                    if ($project->is_admin_listing == true) {
-                        unset($project->customer);
-                        $project->customer = [
-                            'name' => 'Admin',
-                            'email' => $adminEmail,
-                            'mobile' => $adminCompanyTel1,
-                            'slug_id' => $adminUser->slug_id,
-                            'is_agent' => false,
-                            'is_agent_verified' => false,
-                            'is_admin' => true,
-                        ];
-                    }
-                    if ($project->category) {
-                        $project->category->translated_name = $project->category->translated_name;
-                    }
-                    $project->translated_title = $project->translated_title;
-                    $project->promoted = $project->is_promoted;
-                    $project->is_premium = $project->is_premium == 1 ? true : false;
-                    // $project->is_agent =
-                    // dd($project->customer);
-                    // return new CustomerResource($project, ['is_agent', 'is_user_verified', 'is_agent_verified', 'become_agent_status', 'agent_verification_status', 'user_verification_status']);
-                    $customerId = $project->added_by ?? null;
+            // Shared mapper for the response shape
+            $mapProject = function ($project) use ($adminCompanyTel1, $adminEmail, $adminUser) {
+                // Check if listing is by admin then add admin details in customer
+                if ($project->is_admin_listing == true) {
+                    unset($project->customer);
+                    $project->customer = [
+                        'name' => $adminUser->name,
+                        'email' => $adminEmail,
+                        'mobile' => $adminCompanyTel1,
+                        'slug_id' => $adminUser->slug_id,
+                        'is_agent' => false,
+                        'is_agent_verified' => false,
+                        'is_admin' => true,
+                    ];
+                }
+                if ($project->category) {
+                    $project->category->translated_name = $project->category->translated_name;
+                }
+                $project->translated_title = $project->translated_title;
+                $project->promoted = $project->is_promoted;
+                $project->is_premium = $project->is_premium == 1 ? true : false;
 
-                    $customerMeta = HelperService::getCustomerMeta($customerId);
+                $customerId = $project->added_by ?? null;
+                $customerMeta = HelperService::getCustomerMeta($customerId);
 
-                    if ($customerMeta) {
-                        $project->is_agent = $customerMeta['is_agent'] ?? false;
-                        $project->is_agent_verified = $customerMeta['is_agent_verified'] ?? false;
-                        $project->is_user_verified = $customerMeta['is_user_verified'] ?? false;
-                        $project->agent_verification_status = $customerMeta['agent_varification_status'] ?? 'not_applied';
-                        $project->become_agent_status = $customerMeta['become_agent_status'] ?? 'not_applied';
-                        $project->user_verification_status = $customerMeta['user_verification_status'] ?? 'not_applied';
-                    }
+                if ($customerMeta) {
+                    $project->is_agent = $customerMeta['is_agent'] ?? false;
+                    $project->is_agent_verified = $customerMeta['is_agent_verified'] ?? false;
+                    $project->is_user_verified = $customerMeta['is_user_verified'] ?? false;
+                    $project->agent_verification_status = $customerMeta['agent_varification_status'] ?? 'not_applied';
+                    $project->become_agent_status = $customerMeta['become_agent_status'] ?? 'not_applied';
+                    $project->user_verification_status = $customerMeta['user_verification_status'] ?? 'not_applied';
+                }
 
-                    return $project;
-                });
+                return $project;
+            };
 
-            ApiResponseService::successResponse('Data Fetched Successfully', $data, ['total' => $total]);
+            // Active-advertisement constraint that marks a project as "featured/promoted"
+            $promotedConstraint = function ($query) {
+                $query->where(['status' => 0, 'is_enable' => 1, 'for' => 'project']);
+            };
+
+            // The featured-fill distribution only applies to the plain listing.
+            // When the client explicitly asks for promoted-only or premium-only,
+            // keep the original promoted-first ordering instead.
+            $applyFeaturedFill = ! ($promoted == 1) && ! ($getPremiumProjects == 1);
+
+            if ($applyFeaturedFill) {
+                // Featured pool: promoted projects, stable order by id DESC
+                $featuredQuery = $projectsQuery->clone()
+                    ->whereHas('advertisement', $promotedConstraint)
+                    ->orderByDesc('id');
+
+                // Normal pool: non-promoted projects, ordered by the chosen sort key
+                $normalQuery = $projectsQuery->clone()
+                    ->whereDoesntHave('advertisement', $promotedConstraint);
+
+                if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
+                    $normalQuery = $normalQuery->orderByDesc('total_click');
+                } else {
+                    // most_liked falls back to id DESC (projects have no favourites table)
+                    $normalQuery = $normalQuery->orderByDesc('id');
+                }
+
+                $featuredTotal = $featuredQuery->clone()->count();
+                $normalTotal = $normalQuery->clone()->count();
+                $total = $featuredTotal + $normalTotal;
+
+                // Guarantee minimum 3 featured per page, backfill the rest with normal
+                $slice = HelperService::featuredFillSlice($offset, $limit, $featuredTotal, 3);
+
+                $featuredItems = $slice['featured_take'] > 0
+                    ? $featuredQuery->skip($slice['featured_offset'])->take($slice['featured_take'])->get()
+                    : collect();
+
+                $normalItems = $slice['normal_take'] > 0
+                    ? $normalQuery->skip($slice['normal_offset'])->take($slice['normal_take'])->get()
+                    : collect();
+
+                // Featured always on top of each page
+                $data = $featuredItems->concat($normalItems)->map($mapProject)->values();
+            } else {
+                // Promoted-first ordering (original behaviour) for promoted/premium-only requests
+                $projectsQuery = $projectsQuery->withCount([
+                    'advertisement as promoted_count' => function ($query) {
+                        $query->where('status', 0)
+                            ->where('is_enable', 1)
+                            ->where('for', 'project')
+                            ->groupBy('project_id');
+                    },
+                ]);
+
+                $projectsQuery = $projectsQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END');
+
+                if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
+                    $projectsQuery = $projectsQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - total_click) END');
+                } else {
+                    $projectsQuery = $projectsQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - id) END');
+                }
+
+                $total = $projectsQuery->clone()->count();
+                $featuredTotal = $projectsQuery->clone()->whereHas('advertisement', $promotedConstraint)->count();
+                $normalTotal = $total - $featuredTotal;
+
+                $data = $projectsQuery->clone()
+                    ->take($limit)
+                    ->skip($offset)
+                    ->get()
+                    ->map($mapProject);
+            }
+
+            ApiResponseService::successResponse('Data Fetched Successfully', $data, [
+                'total' => $total,
+                'featured_total' => $featuredTotal,
+                'normal_total' => $normalTotal,
+            ]);
         } catch (Exception $e) {
             ApiResponseService::errorResponse($e->getMessage());
         }
@@ -870,15 +828,14 @@ class ProjectApiController extends Controller
 
             $getSimilarProjects = [];
             $project = Projects::with(['customer' => function ($query) {
-                $query->select('id', 'name', 'profile', 'email', 'mobile', 'address', 'slug_id');
+                $query->select('id', 'name', 'profile', 'email', 'mobile', 'address', 'slug_id', 'is_agent', 'is_agent_verified')
+                    ->withStoryStatus();
             }])
                 ->with('gallary_images')
                 ->with('documents')
                 ->with('plans')
-                ->with('category:id,category,image,parameter_types')
+                ->with('category:id,category,image')
                 ->with('category.translations', 'translations')
-                ->with('assignParameter.parameter')
-                ->with('assignfacilities.outdoorfacilities')
                 ->where(function ($query) {
                     $query->where(['request_status' => 'approved', 'status' => 1]);
                 });
@@ -915,7 +872,6 @@ class ProjectApiController extends Controller
 
             $total = $project->clone()->count();
             $data = $project->first();
-            $data = $this->appendProjectUnitDataToPlans($data);
 
             if (! empty($data)) {
                 if ($data->is_admin_listing != 1 && $data->customer) {
@@ -932,22 +888,9 @@ class ProjectApiController extends Controller
 
                 if ($data->category) {
                     $data->category->translated_name = $data->category->translated_name;
-                    // Resolve parameter_types for the category
-                    $parameterData = $data->category->parameters;
-                    if (collect($parameterData)->isNotEmpty()) {
-                        $parameterData = $parameterData->map(function ($item) {
-                            $item->translated_name = $item->translated_name;
-                            $item->translated_option_value = $item->translated_option_value;
-                            unset($item->assigned_parameter);
-                            return $item;
-                        });
-                    }
-                    $data->category->parameter_types = collect($parameterData)->values()->toArray();
                 }
                 $data->translated_title = $data->translated_title;
                 $data->translated_description = $data->translated_description;
-
-                $data = $this->appendProjectParametersAndFacilities($data);
 
                 if ($data->is_admin_listing == 1) {
                     $adminCompanyTel1 = system_setting('company_tel1');
@@ -955,10 +898,10 @@ class ProjectApiController extends Controller
                     $adminAddress = system_setting('company_address');
                     $adminData = User::where('type', 0)->select('id', 'name', 'profile', 'slug_id')->first();
                     $totalPropertiesOfAdmin = Property::where(['added_by' => 0, 'status' => 1, 'request_status' => 'approved'])->where(function ($q) {
-                        $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                        $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                     })->count();
                     $totalProjectsOfAdmin = Projects::where(['is_admin_listing' => 1, 'status' => 1, 'request_status' => 'approved'])->where(function ($q) {
-                        $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
+                        $q->where('expiry_date', '>=', now()->startOfDay())->orWhereNull('expiry_date');
                     })->count();
 
                     // Create modified customer data
@@ -973,6 +916,8 @@ class ProjectApiController extends Controller
                         'total_properties' => $totalPropertiesOfAdmin,
                         'total_projects' => $totalProjectsOfAdmin,
                         'is_admin' => true,
+                        'is_agent' => true,
+                        'is_agent_verified' => true,
                     ];
 
                     // Force Laravel to include the modified customer data
@@ -983,7 +928,7 @@ class ProjectApiController extends Controller
                     $data->total_properties = $data->customer->property_count;
                     $data->total_projects = $data->customer->projects_count;
 
-                    $data->customer->agent_profile = $data->customer?->resolved_agent_profile;
+                    $data->customer?->applyResolvedAgentProfile();
                 }
                 $data->role_context = $data->role_context ?? 'user';
             }
@@ -998,7 +943,7 @@ class ProjectApiController extends Controller
                     $data->is_agent = $meta['is_agent'] ?? false;
                     $data->is_agent_verified = $meta['is_agent_verified'] ?? false;
                     $data->is_user_verified = $meta['is_user_verified'] ?? false;
-                    $data->agent_verification_status = $meta['agent_varification_status'] ?? 'not_applied';
+                    $data->agent_verification_status = $meta['agent_verification_status'] ?? 'not_applied';
                     $data->become_agent_status = $meta['become_agent_status'] ?? 'not_applied';
                     $data->user_verification_status = $meta['user_verification_status'] ?? 'not_applied';
                 }
@@ -1071,11 +1016,10 @@ class ProjectApiController extends Controller
                 }
                 $project->plans()->delete();
             }
-
-            // Keep historical reservations and audit references while preventing further bookings.
-            $this->projectUnitSyncService->deactivateAllProjectUnits($project);
-
+            $projectTitle = $project->title;
+            $projectId = $project->id;
             $project->delete();
+            AuditLogService::log('project', $projectId, $projectTitle, 'deleted', "Project '{$projectTitle}' deleted via app/web", 'api');
             $response['error'] = false;
             $response['message'] = trans('Project Deleted Successfully');
         } else {
@@ -1114,6 +1058,8 @@ class ProjectApiController extends Controller
             }
             // update user status
             $projectQuery->update(['status' => $request->status == 1 ? 1 : 0]);
+            $statusLabel = $request->status == 1 ? 'Active' : 'Inactive';
+            AuditLogService::log('project', $projectQueryData->id, $projectQueryData->title, 'status_changed', "Project status changed to {$statusLabel} via app/web", 'api');
             ApiResponseService::successResponse('Data Updated Successfully');
         } catch (Exception $e) {
             ApiResponseService::errorResponse();
@@ -1125,17 +1071,31 @@ class ProjectApiController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'type' => 'nullable|in:under_construction,upcoming',
-                'request_status' => 'nullable|in:pending,approved,rejected,expired',
+                'request_status' => 'nullable|in:pending,approved,rejected,expired,draft',
+                'status' => 'nullable',
             ]);
 
             if ($validator->fails()) {
                 return ApiResponseService::validationError($validator->errors()->first());
             }
 
+            // ✅ SEO requests skip auth & role validation
+            $withSeo = $request->has('with_seo') && $request->with_seo == 1;
+
             $user = Auth::user();
 
-            // 🔐 Role validation
-            if ($request->has('id') || $request->has('slug_id')) {
+            // 🔐 Authentication is required for normal (non-SEO) requests
+            if (! $withSeo && ! $user) {
+                return ApiResponseService::errorResponse(
+                    'Unauthenticated.',
+                    null,
+                    null,
+                    401
+                );
+            }
+
+            // 🔐 Role validation (skipped for SEO requests)
+            if (! $withSeo && ($request->has('id') || $request->has('slug_id'))) {
                 $isAgentProject = Projects::where('added_by', $user->id)
                     ->when($request->filled('id'), fn ($q) => $q->where('id', $request->id))
                     ->when($request->filled('slug_id'), fn ($q) => $q->where('slug_id', $request->slug_id))
@@ -1155,21 +1115,21 @@ class ProjectApiController extends Controller
                 }
             }
 
-            // 📦 Base query
-            $projectsQuery = Projects::where([
-                'added_by' => $user->id,
-                'role_context' => $request->user_active_role,
-            ])->with([
-                'category:id,slug_id,image,category,parameter_types',
-                'gallary_images',
-                'customer:id,name,profile,email,mobile,is_agent,is_agent_verified',
-                'category.translations',
-                'translations',
-                'plans',
-                'documents',
-                'assignParameter.parameter',
-                'assignfacilities.outdoorfacilities',
-            ]);
+            // 📦 Base query — SEO requests are not scoped to the authenticated user/role
+            $projectsQuery = Projects::query()
+                ->when(! $withSeo, fn ($q) => $q->where([
+                    'added_by' => $user->id,
+                    'role_context' => $request->user_active_role,
+                ]))
+                ->with([
+                    'category:id,slug_id,image,category',
+                    'gallary_images',
+                    'category.translations',
+                    'translations',
+                    'plans',
+                    'documents',
+                    'customer' => fn ($q) => $q->select('id', 'name', 'profile', 'email', 'mobile', 'is_agent', 'is_agent_verified')->withStoryStatus(),
+                ]);
 
             // =========================================================
             // 📌 SINGLE PROJECT (id / slug_id)
@@ -1184,28 +1144,15 @@ class ProjectApiController extends Controller
                     ->first();
 
                 if (! empty($data)) {
-                    $data = $this->appendProjectUnitDataToPlans($data);
                     $data->posted_since = $data->created_at->diffForHumans();
 
                     if ($data->category) {
                         $data->category->translated_name = $data->category->translated_name;
-                        // Resolve parameter_types for the category
-                        $parameterData = $data->category->parameters;
-                        if (collect($parameterData)->isNotEmpty()) {
-                            $parameterData = $parameterData->map(function ($item) {
-                                $item->translated_name = $item->translated_name;
-                                $item->translated_option_value = $item->translated_option_value;
-                                unset($item->assigned_parameter);
-                                return $item;
-                            });
-                        }
-                        $data->category->parameter_types = collect($parameterData)->values()->toArray();
                     }
 
                     $data->translated_title = $data->translated_title;
                     $data->translated_description = $data->translated_description;
 
-                    $data = $this->appendProjectParametersAndFacilities($data);
                     $data = $this->attachCustomerMeta($data);
                 }
 
@@ -1251,9 +1198,13 @@ class ProjectApiController extends Controller
 
             $projectsQuery = $projectsQuery->clone()
                 ->when($request->filled('type'), fn ($q) => $q->where('type', $request->type))
+                ->when($request->filled('status'), function ($q) use ($request) {
+                    $statusData = explode(',', $request->status);
+                    return $q->whereIn('status', $statusData)->where('request_status', 'approved');
+                })
                 ->when($request->filled('request_status'), function ($q) use ($request) {
                     if ($request->request_status == 'expired') {
-                        return $q->whereNotNull('expiry_date')->where('expiry_date', '<', now());
+                        return $q->whereNotNull('expiry_date')->where('expiry_date', '<', now()->startOfDay());
                     }
 
                     return $q->where('request_status', $request->request_status);
@@ -1377,7 +1328,6 @@ class ProjectApiController extends Controller
 
         if ($project->category) {
             $project->category->translated_name = $project->category->translated_name;
-            // Resolve parameter_types for the category
             $parameterData = $project->category->parameters;
             if (collect($parameterData)->isNotEmpty()) {
                 $parameterData = $parameterData->map(function ($item) {
@@ -1398,9 +1348,24 @@ class ProjectApiController extends Controller
         return $this->attachCustomerMeta($project);
     }
 
+    private function attachCustomerMeta($project)
+    {
+        if (! empty($project->customer)) {
+            $meta = HelperService::getCustomerMeta($project->customer->id);
+
+            $project->is_agent = $meta['is_agent'] ?? false;
+            $project->is_agent_verified = $meta['is_agent_verified'] ?? false;
+            $project->is_user_verified = $meta['is_user_verified'] ?? false;
+            $project->agent_verification_status = $meta['agent_verification_status'] ?? 'not_applied';
+            $project->become_agent_status = $meta['become_agent_status'] ?? 'not_applied';
+            $project->user_verification_status = $meta['user_verification_status'] ?? 'not_applied';
+        }
+
+        return $project;
+    }
+
     private function appendProjectParametersAndFacilities($project)
     {
-        // Transform assignParameter → parameters for FeatureAmenities component
         if ($project->relationLoaded('assignParameter')) {
             $project->parameters = $project->assignParameter->map(function ($item) {
                 return [
@@ -1415,7 +1380,6 @@ class ProjectApiController extends Controller
             $project->parameters = [];
         }
 
-        // Transform assignfacilities → assign_facilities for FeatureAmenities component
         if ($project->relationLoaded('assignfacilities')) {
             $project->assign_facilities = $project->assignfacilities->map(function ($item) {
                 return [
@@ -1428,22 +1392,6 @@ class ProjectApiController extends Controller
             });
         } else {
             $project->assign_facilities = [];
-        }
-
-        return $project;
-    }
-
-    private function attachCustomerMeta($project)
-    {
-        if (! empty($project->customer)) {
-            $meta = HelperService::getCustomerMeta($project->customer->id);
-
-            $project->is_agent = $meta['is_agent'] ?? false;
-            $project->is_agent_verified = $meta['is_agent_verified'] ?? false;
-            $project->is_user_verified = $meta['is_user_verified'] ?? false;
-            $project->agent_verification_status = $meta['agent_verification_status'] ?? 'not_applied';
-            $project->become_agent_status = $meta['become_agent_status'] ?? 'not_applied';
-            $project->user_verification_status = $meta['user_verification_status'] ?? 'not_applied';
         }
 
         return $project;
@@ -1491,7 +1439,6 @@ class ProjectApiController extends Controller
 
             $unit = $unitsByCode->get('PLAN_'.$plan->id);
 
-            // Fallback: match by title (custom unit_code was entered instead of PLAN_{id})
             if (! $unit && $plan->title) {
                 $unit = $unitsByTitle->get($plan->title);
             }
@@ -1648,7 +1595,7 @@ class ProjectApiController extends Controller
             config('global.PROJECT_DOCUMENT_PATH')
         );
 
-        if (!$filename) {
+        if (! $filename) {
             return response()->json([
                 'error' => true,
                 'message' => 'Failed to upload document',
@@ -1658,7 +1605,7 @@ class ProjectApiController extends Controller
         return response()->json([
             'error' => false,
             'filename' => $filename,
-            'url' => FileService::getFileUrl(config('global.PROJECT_DOCUMENT_PATH') . $filename),
+            'url' => FileService::getFileUrl(config('global.PROJECT_DOCUMENT_PATH').$filename),
         ]);
     }
 
@@ -1719,6 +1666,7 @@ class ProjectApiController extends Controller
             ]);
         } catch (Exception $e) {
             Log::error('Error updating plan status: '.$e->getMessage());
+
             return ApiResponseService::errorResponse('Failed to update plan status');
         }
     }

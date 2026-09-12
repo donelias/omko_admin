@@ -1,4 +1,4 @@
-# eBroker
+# omko
 
 [//]: # (## Screenshots)
 
@@ -9,13 +9,13 @@
 Clone the project
 
 ```bash
-  git clone https://github.com/wrteamshakir/ebroker.git
+  git clone https://github.com/wrteamshakir/omko.git
 ```
 
 Go to the project directory
 
 ```bash
-  cd ebroker
+  cd omko
 ```
 
 Only Install packages

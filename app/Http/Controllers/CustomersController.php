@@ -63,7 +63,7 @@ class CustomersController extends Controller
 
                     // Email Template
                     $propertyFeatureStatusTemplateData = system_setting($emailTypeData['type']);
-                    $appName = env('APP_NAME') ?? 'eBroker';
+                    $appName = env('APP_NAME') ?? 'omko';
                     $variables = [
                         'app_name' => $appName,
                         'user_name' => $customerData->name,
@@ -319,7 +319,7 @@ class CustomersController extends Controller
                 'mobile.max' => trans('Mobile must be less than 20 characters'),
                 'profile.image' => trans('Profile must be an image'),
                 'profile.mimes' => trans('Profile must be a jpg, jpeg, png, or webp image'),
-                'profile.max' => trans('Profile must be less than 5MB'),
+                'profile.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
             ],
         ]);
 
@@ -374,7 +374,7 @@ class CustomersController extends Controller
             // Welcome Mail
             $emailTypeData = HelperService::getEmailTemplatesTypes('welcome_mail');
             $welcomeEmailTemplateData = system_setting($emailTypeData['type']);
-            $appName = env('APP_NAME') ?? 'eBroker';
+            $appName = env('APP_NAME') ?? 'omko';
             $variables = [
                 'app_name' => $appName,
                 'user_name' => $request->name,

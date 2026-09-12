@@ -37,8 +37,8 @@ class PackageApiController extends Controller
                 ->orderBy('price', 'ASC')
                 ->get();
         } else {
-            if (! $request->has('user_type') || ! in_array($request->user_type, ['user', 'agent'])) {
-                ApiResponseService::validationError('user_type is required. Must be user or agent.');
+            if (! $request->has('user_type') || ! in_array($request->user_type, ['user', 'agent', 'developer', 'agencia'])) {
+                ApiResponseService::validationError('user_type is required. Must be user, agent, developer or agencia.');
             }
             $packages = Package::where('status', 1)
                 ->where('user_type', $request->user_type)
@@ -131,7 +131,7 @@ class PackageApiController extends Controller
         $packages = $packages->sortByDesc('is_active');
 
         // Get all features (shared across user and agent)
-        $userType = $request->user_active_role;
+        $userType = $request->user_active_role ?? $request->user_type;
         $allFeatures = Feature::where('status', 1)
             ->whereIn('user_type', [$userType, 'all'])
             ->with('translations')
@@ -224,7 +224,7 @@ class PackageApiController extends Controller
                 $paymentTransaction = PaymentTransaction::create([
                     'user_id' => $loggedInUserId,
                     'pay_as_you_go_id' => $payAsYouGo->id,
-                    'amount' => 0, // Assigned directly or via in app
+                    'amount' => ($request->in_app == 'true' || $request->in_app === true) ? $payAsYouGo->price : 0, // In app purchase uses the package price, free assignment is 0
                     'payment_gateway' => ($request->in_app == 'true' || $request->in_app === true) ? 'in_app' : null,
                     'payment_type' => ($request->in_app == 'true' || $request->in_app === true) ? 'in app purchase' : 'free',
                     'payment_status' => 'success',
@@ -257,7 +257,7 @@ class PackageApiController extends Controller
                 PaymentTransaction::create([
                     'user_id' => $loggedInUserId,
                     'package_id' => $package->id,
-                    'amount' => 0,
+                    'amount' => ($request->in_app == 'true' || $request->in_app === true) ? $package->price : 0, // In app purchase uses the package price, free assignment is 0
                     'payment_gateway' => ($request->in_app == 'true' || $request->in_app === true) ? 'in_app' : null,
                     'payment_type' => ($request->in_app == 'true' || $request->in_app === true) ? 'in app purchase' : 'free',
                     'payment_status' => 'success',
@@ -459,11 +459,11 @@ class PackageApiController extends Controller
         try {
             $auth = Auth::guard('sanctum');
             // user_type from param is used for ACTIVE (purchased) packages
-            $activeRoleForPurchased = $request->user_active_role;
+            $activeRoleForPurchased = $request->user_active_role ?? $request->user_type ?? 'user';
             // dd($activeRoleForPurchased);
 
             // X-Active-Role from header is used for AVAILABLE packages list
-            $activeRoleForList = $request->user_active_role;
+            $activeRoleForList = $request->user_active_role ?? $request->user_type ?? 'user';
 
             $packageQuery = Package::where('user_type', $activeRoleForList);
             $filteredPackageQuery = $packageQuery->clone()->when($request->has('platform_type') && $request->platform_type == 'ios', function ($query) {
@@ -606,7 +606,7 @@ class PackageApiController extends Controller
     public function getAgentPackages(Request $request)
     {
         try {
-            $packages = Package::where('status', 1)->where('user_type', ['agent', 'all'])->with(['package_features' => function ($query) {
+            $packages = Package::where('status', 1)->whereIn('user_type', ['agent', 'all'])->with(['package_features' => function ($query) {
                 $query->with(['feature' => function ($query) {
                     $query->where('status', 1)->with('translations');
                 }]);

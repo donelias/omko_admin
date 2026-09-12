@@ -41,6 +41,8 @@ class GeminiAIController extends Controller
     {
         // Check if Gemini AI is enabled
         if (! $this->isGeminiEnabled()) {
+            Log::warning('Gemini AI: generateDescription called but gemini_ai_enabled is not set to 1 in settings.');
+
             return ResponseService::validationError('Content Generation currently not available please try again later.');
         }
 
@@ -167,6 +169,8 @@ class GeminiAIController extends Controller
     {
         // Check if Gemini AI is enabled
         if (! $this->isGeminiEnabled()) {
+            Log::warning('Gemini AI: generateMetaDetails called but gemini_ai_enabled is not set to 1 in settings.');
+
             return ResponseService::validationError('Content Generation currently not available please try again later.');
         }
 

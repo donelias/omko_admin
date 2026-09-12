@@ -49,12 +49,6 @@
                                 <small class="text-danger text-sm">{{ __('Only Small English Characters, Numbers And Hypens Allowed') }}</small>
                             </div>
 
-                            {{-- Icon --}}
-                            <div class="col-md-12 col-sm-12 form-group">
-                                {{ Form::label('icon', __('Icon'), ['class' => 'col-12 form-label']) }}
-                                <input accept="image/jpg,image/png,image/jpeg,image/webp" name="icon" type="file" class="form-control filepond" id="icon" />
-                            </div>
-
                             {{-- Status --}}
                             <div class="col-sm-12 col-md-6 form-group">
                                 {{ Form::label('status', __('Status'), ['class' => 'form-label col-12']) }}

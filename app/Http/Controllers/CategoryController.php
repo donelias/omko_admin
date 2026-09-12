@@ -81,7 +81,7 @@ class CategoryController extends Controller
                     'image.required' => trans('The image field is required.'),
                     'image.image' => trans('The uploaded file must be an image.'),
                     'image.mimes' => trans('The image must be a SVG file.'),
-                    'image.max' => trans('The image size should not exceed 2MB.'),
+                    'image.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
                     'parameter_type.required' => trans('The parameter field is required.'),
                 ]);
                 if ($validator->fails()) {

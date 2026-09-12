@@ -484,6 +484,7 @@ class PropertiesDataSeeder extends Seeder
             }
         } catch (Exception $e) {
             Log::error('Error in property data seeder: '.$e->getMessage());
+            throw $e;
         }
     }
 

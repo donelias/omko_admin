@@ -154,7 +154,7 @@ class AuthApiController extends Controller
 
                     // Email Template
                     $welcomeEmailTemplateData = system_setting($emailTypeData['type']);
-                    $appName = env('APP_NAME') ?? 'eBroker';
+                    $appName = env('APP_NAME') ?? 'omko';
                     $variables = [
                         'app_name' => $appName,
                         'user_name' => ! empty($request->name) ? $request->name : "$appName User",
@@ -311,7 +311,7 @@ class AuthApiController extends Controller
 
                 // Email Template
                 $welcomeEmailTemplateData = system_setting($emailTypeData['type']);
-                $appName = env('APP_NAME') ?? 'eBroker';
+                $appName = env('APP_NAME') ?? 'omko';
                 $variables = [
                     'app_name' => $appName,
                     'user_name' => ! empty($request->name) ? $request->name : "$appName User",
@@ -335,7 +335,7 @@ class AuthApiController extends Controller
 
                 // Email Template
                 $propertyFeatureStatusTemplateData = system_setting($emailTypeData['type']);
-                $appName = env('APP_NAME') ?? 'eBroker';
+                $appName = env('APP_NAME') ?? 'omko';
                 $variables = [
                     'app_name' => $appName,
                     'otp' => $otp,
@@ -359,7 +359,7 @@ class AuthApiController extends Controller
                     $emailTypeData = HelperService::getEmailTemplatesTypes('welcome_mail');
                     // Email Template
                     $welcomeEmailTemplateData = system_setting($emailTypeData['type']);
-                    $appName = env('APP_NAME') ?? 'eBroker';
+                    $appName = env('APP_NAME') ?? 'omko';
                     $variables = [
                         'app_name' => $appName,
                         'user_name' => ! empty($request->name) ? $request->name : "$appName User",
@@ -405,6 +405,7 @@ class AuthApiController extends Controller
             ApiResponseService::validationError($validator->errors()->first());
         }
         try {
+            // i want also check that user is disable/enable the send all params with user enabled and disable in response.
             $user = Customer::where(['mobile' => $request->mobile, 'country_code' => $request->country_code, 'logintype' => 1])->first();
             if ($user) {
                 if ($user->isActive == 0) {
@@ -414,12 +415,14 @@ class AuthApiController extends Controller
                     $data = [
                         'user_exists' => true,
                         'password_exists' => true,
+                        'is_active' => $user->isActive,
                     ];
                     ApiResponseService::successResponse(('Password Exists'), $data);
                 } else {
                     $data = [
                         'user_exists' => true,
                         'password_exists' => false,
+                        'is_active' => $user->isActive,
                     ];
                     ApiResponseService::validationError(('Password Does Not Exist'), $data);
                 }
@@ -427,6 +430,7 @@ class AuthApiController extends Controller
                 $data = [
                     'user_exists' => false,
                     'password_exists' => false,
+                    'is_active' => null,
                 ];
                 ApiResponseService::validationError(('User Does Not Exist'), $data);
             }
@@ -494,68 +498,6 @@ class AuthApiController extends Controller
             }
         } catch (Exception $e) {
             ApiResponseService::errorResponse();
-        }
-    }
-
-    public function forgotPassword(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required',
-        ]);
-
-        if ($validator->fails()) {
-            ApiResponseService::validationError($validator->errors()->first());
-        }
-        try {
-            $isUserExists = Customer::where(['email' => $request->email, 'logintype' => 3])->count();
-            if ($isUserExists) {
-                $token = HelperService::generateToken();
-                HelperService::storeToken($request->email, $token);
-
-                $rootAdminUrl = env('APP_URL') ?? FacadesRequest::root();
-                $trimmedEmail = ltrim($rootAdminUrl, '/'); // remove / from starting if exists
-                $link = $trimmedEmail.'/reset-password?token='.$token;
-                $data = [
-                    'email' => $request->email,
-                    'link' => $link,
-                ];
-
-                // Get Data of email type
-                $emailTypeData = HelperService::getEmailTemplatesTypes('reset_password');
-
-                // Email Template
-                $verifyEmailTemplateData = system_setting('password_reset_mail_template');
-                $variables = [
-                    'app_name' => env('APP_NAME') ?? 'eBroker',
-                    'email' => $request->email,
-                    'link' => $link,
-                ];
-                if (empty($verifyEmailTemplateData)) {
-                    $verifyEmailTemplateData = "Your reset password link is :- $link";
-                }
-                $verifyEmailTemplate = HelperService::replaceEmailVariables($verifyEmailTemplateData, $variables);
-
-                $data = [
-                    'email_template' => $verifyEmailTemplate,
-                    'email' => $request->email,
-                    'title' => $emailTypeData['title'],
-                ];
-                HelperService::sendMail($data, false, true);
-                ApiResponseService::successResponse('Reset Link Sent Successfully');
-            } else {
-                ApiResponseService::validationError('No User Found');
-            }
-        } catch (Exception $e) {
-            if (Str::contains($e->getMessage(), [
-                'Failed',
-                'Mail',
-                'Mailer',
-                'Connection could not be established',
-            ])) {
-                ApiResponseService::validationError('There is issue with mail configuration, kindly contact admin regarding this');
-            } else {
-                ApiResponseService::errorResponse();
-            }
         }
     }
 
@@ -693,7 +635,7 @@ class AuthApiController extends Controller
                     // Email Template
                     $verifyEmailTemplateData = system_setting('verify_mail_template');
                     $variables = [
-                        'app_name' => env('APP_NAME') ?? 'eBroker',
+                        'app_name' => env('APP_NAME') ?? 'omko',
                         'otp' => $otp,
                     ];
                     if (empty($verifyEmailTemplateData)) {

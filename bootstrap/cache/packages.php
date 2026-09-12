@@ -1,15 +1,4 @@
 <?php return array (
-  'barryvdh/laravel-debugbar' => 
-  array (
-    'aliases' => 
-    array (
-      'Debugbar' => 'Barryvdh\\Debugbar\\Facades\\Debugbar',
-    ),
-    'providers' => 
-    array (
-      0 => 'Barryvdh\\Debugbar\\ServiceProvider',
-    ),
-  ),
   'barryvdh/laravel-dompdf' => 
   array (
     'aliases' => 
@@ -20,6 +9,24 @@
     'providers' => 
     array (
       0 => 'Barryvdh\\DomPDF\\ServiceProvider',
+    ),
+  ),
+  'dacoto/laravel-env-set' => 
+  array (
+    'aliases' => 
+    array (
+      'EnvSet' => 'dacoto\\EnvSet\\Facades\\EnvSet',
+    ),
+    'providers' => 
+    array (
+      0 => 'dacoto\\EnvSet\\EnvSetServiceProvider',
+    ),
+  ),
+  'dacoto/laravel-wizard-installer' => 
+  array (
+    'providers' => 
+    array (
+      0 => 'dacoto\\LaravelWizardInstaller\\LaravelWizardInstallerServiceProvider',
     ),
   ),
   'intervention/image' => 
@@ -49,20 +56,6 @@
     'providers' => 
     array (
       0 => 'Laravel\\Sanctum\\SanctumServiceProvider',
-    ),
-  ),
-  'laravel/sentinel' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Laravel\\Sentinel\\SentinelServiceProvider',
-    ),
-  ),
-  'laravel/telescope' => 
-  array (
-    'providers' => 
-    array (
-      0 => 'Laravel\\Telescope\\TelescopeServiceProvider',
     ),
   ),
   'laravel/tinker' => 

@@ -5,13 +5,14 @@ namespace App\Models;
 use App\Services\FileService;
 use App\Services\HelperService;
 use App\Traits\HasAppTimezone;
+use App\Traits\HasTenantFilter;
 use App\Traits\ManageTranslations;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Article extends Model
 {
-    use HasAppTimezone, HasFactory, ManageTranslations;
+    use HasAppTimezone, HasFactory, HasTenantFilter, ManageTranslations;
 
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 

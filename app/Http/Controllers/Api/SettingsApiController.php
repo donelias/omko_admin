@@ -51,7 +51,7 @@ class SettingsApiController extends Controller
 
             if ($row->type == 'app_home_screen' || $row->type == 'placeholder_logo') {
 
-                $tempRow[$row->type] = url('/assets/images/logo/').'/'.$row->data;
+                $tempRow[$row->type] = url('assets/images/logo/'.$row->data);
             }
         }
 
@@ -149,7 +149,7 @@ class SettingsApiController extends Controller
     {
         try {
             // Types for web requirement only
-            $types = ['company_name', 'currency_symbol', 'default_language', 'number_with_suffix', 'web_maintenance_mode', 'company_tel', 'company_tel2', 'system_version', 'web_favicon', 'web_logo', 'web_footer_logo', 'web_placeholder_logo', 'company_email', 'latitude', 'longitude', 'company_address', 'system_color', 'iframe_link', 'facebook_id', 'instagram_id', 'twitter_id', 'youtube_id', 'playstore_id', 'sell_background', 'appstore_id', 'category_background', 'web_maintenance_mod', 'seo_settings', 'company_tel1', 'place_api_key', 'stripe_publishable_key', 'paystack_public_key', 'sell_web_color', 'sell_web_background_color', 'rent_web_color', 'rent_web_background_color', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'allow_cookies', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'homepage_location_alert_status', 'email_password_login', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_premium_toggle', 'show_exact_location'];
+            $types = ['company_name', 'currency_symbol', 'default_language', 'number_with_suffix', 'web_maintenance_mode', 'company_tel', 'company_tel2', 'system_version', 'web_favicon', 'web_logo', 'web_footer_logo', 'web_placeholder_logo', 'company_email', 'latitude', 'longitude', 'company_address', 'system_color', 'iframe_link', 'facebook_id', 'instagram_id', 'twitter_id', 'youtube_id', 'linkedin_id', 'playstore_id', 'sell_background', 'appstore_id', 'category_background', 'web_maintenance_mod', 'seo_settings', 'company_tel1', 'place_api_key', 'stripe_publishable_key', 'paystack_public_key', 'sell_web_color', 'sell_web_background_color', 'rent_web_color', 'rent_web_background_color', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'allow_cookies', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'homepage_location_alert_status', 'email_password_login', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_whatsapp_button', 'show_premium_toggle', 'show_exact_location', 'map_service_provider', 'story_max_duration', 'story_video_max_size'];
 
             // Query the Types to Settings Table to get its data
             $result = Setting::whereIn('type', $types)->with('translations')->select('id', 'type', 'data')->get();
@@ -183,6 +183,8 @@ class SettingsApiController extends Controller
                     } elseif ($row->type == 'verification_required_for_user') {
                         // Change Value to Bool
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
+                    } elseif ($row->type == 'show_whatsapp_button') {
+                        $settingsData[$row->type] = $row->data == 1 ? true : false;
                     } elseif ($row->type == 'verification_required_for_agent') {
                         // Change Value to Bool
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
@@ -194,7 +196,7 @@ class SettingsApiController extends Controller
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
                     } elseif ($row->type == 'web_favicon' || $row->type == 'web_logo' || $row->type == 'web_placeholder_logo' || $row->type == 'web_footer_logo') {
                         // Add Full URL to the specified type
-                        $settingsData[$row->type] = url('/assets/images/logo/').'/'.$row->data;
+                        $settingsData[$row->type] = url('assets/images/logo/'.$row->data);
                     } elseif ($row->type == 'currency_code') {
                         // Change Value to Bool
                         $settingsData['selected_currency_data'] = HelperService::getCurrencyData($row->data);
@@ -202,6 +204,12 @@ class SettingsApiController extends Controller
                         // Change Value to Bool
                         $bankDetails = json_decode($row->data, true);
                         $settingsData['bank_details'] = $this->processBankDetails($bankDetails);
+                    } elseif ($row->type == 'min_radius_range') {
+                        // DB type stays min_radius_range; expose it as min_radius
+                        $settingsData['min_radius'] = $row->translated_data;
+                    } elseif ($row->type == 'max_radius_range') {
+                        // DB type stays max_radius_range; expose it as max_radius
+                        $settingsData['max_radius'] = $row->translated_data;
                     } elseif ($row->type == 'default_language') {
                         // Add Code in Data
                         $rowData = $row->data;
@@ -223,6 +231,8 @@ class SettingsApiController extends Controller
                     } elseif ($row->type == 'gemini_ai_enabled') {
                         // Change Value to Bool
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
+                    } elseif ($row->type == 'story_max_duration' || $row->type == 'story_video_max_size') {
+                        $settingsData[$row->type] = (int) $row->data;
                     } else {
                         // add the data as it is in array
                         $settingsData[$row->type] = $row->translated_data;
@@ -316,17 +326,19 @@ class SettingsApiController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return response()->json([
+            $response = [
                 'error' => true,
                 'message' => trans('Something Went Wrong'),
-            ], 500);
+            ];
+
+            return response()->json($response, 500);
         }
     }
 
     public function getAppSettings(Request $request)
     {
         try {
-            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address', 'place_api_key', 'playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_premium_toggle', 'show_exact_location', 'agent_auto_approve', 'verification_required_for_agent'];
+            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address', 'place_api_key', 'playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_whatsapp_button', 'show_premium_toggle', 'show_exact_location', 'agent_auto_approve', 'verification_required_for_agent', 'map_service_provider', 'story_max_duration', 'story_video_max_size'];
 
             // Query the Types to Settings Table to get its data
             $result = Setting::whereIn('type', $types)->with('translations')->select('id', 'type', 'data')->get();
@@ -366,7 +378,7 @@ class SettingsApiController extends Controller
                             $settingsData['default_language_rtl'] = 0;
                         }
                     } elseif ($row->type == 'app_home_screen' || $row->type == 'placeholder_logo' || $row->type == 'dark_mode_logo' || $row->type == 'app_login_background') {
-                        $settingsData[$row->type] = url('/assets/images/logo/').'/'.$row->data;
+                        $settingsData[$row->type] = url('assets/images/logo/'.$row->data);
                     } elseif ($row->type == 'verification_required_for_user') {
                         // Change Value to Bool
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
@@ -391,12 +403,22 @@ class SettingsApiController extends Controller
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
                     } elseif ($row->type == 'show_direct_video_upload') {
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
+                    } elseif ($row->type == 'show_whatsapp_button') {
+                        $settingsData[$row->type] = $row->data == 1 ? true : false;
                     } elseif ($row->type == 'show_premium_toggle') {
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
                     } elseif ($row->type == 'homepage_location_alert_status') {
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
                     } elseif ($row->type == 'show_exact_location') {
                         $settingsData[$row->type] = $row->data == 1 ? true : false;
+                    } elseif ($row->type == 'story_max_duration' || $row->type == 'story_video_max_size') {
+                        $settingsData[$row->type] = (int) $row->data;
+                    } elseif ($row->type == 'min_radius_range') {
+                        // DB type stays min_radius_range; expose it as min_radius
+                        $settingsData['min_radius'] = $row->translated_data;
+                    } elseif ($row->type == 'max_radius_range') {
+                        // DB type stays max_radius_range; expose it as max_radius
+                        $settingsData['max_radius'] = $row->translated_data;
                     } else {
                         // add the data as it is in array
                         $settingsData[$row->type] = $row->translated_data;
@@ -479,6 +501,12 @@ class SettingsApiController extends Controller
 
             return response()->json($response);
         } catch (Exception $e) {
+            Log::error('getAppSettings error: '.$e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             $response = [
                 'error' => true,
                 'message' => trans('Something Went Wrong'),
@@ -491,7 +519,7 @@ class SettingsApiController extends Controller
     public function getSystemSettings(Request $request)
     {
         try {
-            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address', 'place_api_key', 'playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_premium_toggle', 'show_exact_location'];
+            $types = ['company_name', 'currency_symbol', 'ios_version', 'default_language', 'force_update', 'android_version', 'number_with_suffix', 'maintenance_mode', 'company_tel1', 'company_tel2', 'company_email', 'company_address', 'place_api_key', 'map_service_provider', 'playstore_id', 'sell_background', 'appstore_id', 'show_admob_ads', 'android_banner_ad_id', 'ios_banner_ad_id', 'android_interstitial_ad_id', 'ios_interstitial_ad_id', 'android_native_ad_id', 'ios_native_ad_id', 'demo_mode', 'min_price', 'max_price', 'number_with_otp_login', 'social_login', 'distance_option', 'otp_service_provider', 'app_home_screen', 'placeholder_logo', 'dark_mode_logo', 'light_tertiary', 'light_secondary', 'light_primary', 'dark_tertiary', 'dark_secondary', 'dark_primary', 'text_property_submission', 'auto_approve', 'verification_required_for_user', 'agent_auto_approve', 'verification_required_for_agent', 'currency_code', 'bank_details', 'schema_for_deeplink', 'min_radius_range', 'max_radius_range', 'latitude', 'longitude', 'homepage_location_alert_status', 'email_password_login', 'app_login_background', 'gemini_ai_enabled', 'show_direct_video_upload', 'show_premium_toggle', 'show_exact_location', 'story_max_duration', 'story_video_max_size'];
 
             $data = Setting::whereIn('type', $types)->get();
 
@@ -562,6 +590,12 @@ class SettingsApiController extends Controller
                     } else {
                         $json_data[$row->type] = '';
                     }
+                } elseif ($row->type == 'show_whatsapp_button') {
+                    if ($row->data != '') {
+                        $json_data[$row->type] = filter_var($row->data, FILTER_VALIDATE_BOOLEAN);
+                    } else {
+                        $json_data[$row->type] = '';
+                    }
                 } elseif ($row->type == 'show_premium_toggle') {
                     if ($row->data != '') {
                         $json_data[$row->type] = filter_var($row->data, FILTER_VALIDATE_BOOLEAN);
@@ -580,6 +614,8 @@ class SettingsApiController extends Controller
                     } else {
                         $json_data[$row->type] = '';
                     }
+                } elseif ($row->type == 'story_max_duration' || $row->type == 'story_video_max_size') {
+                    $json_data[$row->type] = (int) $row->data;
                 } else {
                     $json_data[$row->type] = $row->data;
                 }
@@ -675,8 +711,8 @@ class SettingsApiController extends Controller
     {
         try {
             $data = HelperService::getMultipleSettingData(['company_name', 'playstore_id', 'appstore_id']);
-            $appName = $data['company_name'] ?? 'ebroker';
-            $customerPlayStoreUrl = $data['playstore_id'] ?? 'https://play.google.com/store/apps/details?id=com.ebroker.ebroker';
+            $appName = $data['company_name'] ?? 'omko';
+            $customerPlayStoreUrl = $data['playstore_id'] ?? 'https://play.google.com/store/apps/details?id=com.omko.omko';
             $customerAppStoreUrl = $data['appstore_id'] ?? 'https://apps.apple.com/app/id1564818806';
 
             return view('settings.deep-link', compact('appName', 'customerPlayStoreUrl', 'customerAppStoreUrl'));

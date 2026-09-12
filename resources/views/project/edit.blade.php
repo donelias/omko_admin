@@ -546,17 +546,26 @@
     {!! Form::close() !!}
 @endsection
 @section('script')
-    <script type="text/javascript"
-        src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap"
-        async defer></script>
-    <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @if (system_setting('map_service_provider') === 'open_street_maps')
+        <script>window.MAP_SERVICE_PROVIDER = 'open_street_maps';</script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="{{ asset('assets/js/osm-maps-helper.js') }}"></script>
+        <script>jQuery(document).ready(function () { if (typeof initMap === 'function') initMap(); });</script>
+    @else
+        <script>window.MAP_SERVICE_PROVIDER = 'google_maps';</script>
+        <script type="text/javascript"
+            src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap"
+            async defer></script>
+        <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @endif
     <script>
         document.getElementById('is_premium_switch').addEventListener('change', function() {
             document.getElementById('is_premium').value = this.checked ? 1 : 0;
         });
 
         function initMap() {
-            window.initBackendPlacesMap({
+            var mapOptions = {
                 defaultLatitudeSelector: '#latitude',
                 defaultLongitudeSelector: '#longitude',
                 mapElementId: 'map',
@@ -567,7 +576,12 @@
                 addressSelector: '#address',
                 latitudeSelector: '#latitude',
                 longitudeSelector: '#longitude'
-            });
+            };
+            if (window.MAP_SERVICE_PROVIDER === 'open_street_maps') {
+                window.initOsmPlacesMap(mapOptions);
+            } else {
+                window.initBackendPlacesMap(mapOptions);
+            }
         }
 
         $(document).ready(function() {

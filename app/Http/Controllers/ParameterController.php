@@ -96,7 +96,6 @@ class ParameterController extends Controller
             $parameter->type_of_parameter = $request->options;
             $parameter->is_required = $request->is_required ?? 0;
             $parameter->type_values = $jsonOptionValue;
-            $parameter->type = $request->parameter_type ?? 'amenity';
 
             // Add Image if exists
             if ($request->hasFile('image')) {
@@ -258,7 +257,6 @@ class ParameterController extends Controller
                 $parameter = parameter::find($id);
                 $parameter->name = ($request->edit_name) ? $request->edit_name : '';
                 $parameter->is_required = (isset($request->edit_is_required) && ! empty($request->edit_is_required)) ? 1 : 0;
-                $parameter->type = $request->edit_parameter_type ?? $parameter->type;
 
                 // Handle option translations update
                 if (isset($request->edit_option_values) && ! empty($request->edit_option_values) &&

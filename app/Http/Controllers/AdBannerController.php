@@ -110,7 +110,7 @@ class AdBannerController extends Controller
         $offset = (int) $request->input('offset', 0);
         $limit = (int) $request->input('limit', 10);
         $sort = $request->input('sort', 'id');
-        $order = $request->input('order', 'DESC');
+        $order = strtoupper($request->input('order', 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
 
         // Use $_GET consistently like property controller
         $search = isset($_GET['search']) ? trim($_GET['search']) : '';
@@ -170,7 +170,11 @@ class AdBannerController extends Controller
             }
         }
 
-        $sql = $sql->orderBy($sort, $order);
+        if ($sort === 'ends_at_raw') {
+            $sql = $sql->orderByRaw('ISNULL(ends_at) ASC, ends_at ' . $order);
+        } else {
+            $sql = $sql->orderBy($sort, $order);
+        }
 
         $total = $sql->count();
 

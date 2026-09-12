@@ -18,7 +18,19 @@
 
 @section('content')
     <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css" rel="stylesheet">
+    @php
+        $hasChats = !$user_list->isEmpty() || !empty($otherUsers);
+    @endphp
     <div class="container-fluid">
+        @if(!$hasChats)
+            <div class="panel messages-panel">
+                <div class="chat-empty-state">
+                    <i class="bi bi-chat-square-text chat-empty-state-icon"></i>
+                    <h4 class="chat-empty-state-title">{{ __('No conversations yet') }}</h4>
+                    <p class="chat-empty-state-text">{{ __('You have no messages at the moment. New conversations will appear here.') }}</p>
+                </div>
+            </div>
+        @else
         <div class="panel messages-panel">
             <div class="contacts-list">
                 <div class="tab-content">
@@ -169,6 +181,7 @@
                 </div>
             </div>
         </div>
+        @endif
     @endsection
     @section('script')
         <script>

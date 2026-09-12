@@ -49,7 +49,7 @@ class AdvertisementController extends Controller
         $offset = $request->input('offset', 0);
         $limit = $request->input('limit', 10);
         $sort = $request->input('sort', 'id');
-        $order = $request->input('order', 'DESC');
+        $order = strtoupper($request->input('order', 'DESC')) === 'ASC' ? 'ASC' : 'DESC';
         $status = $request->input('status', null);
         $for = $request->input('for', null);
         $visibility = $request->input('visibility', null);
@@ -72,16 +72,20 @@ class AdvertisementController extends Controller
                 });
             });
 
-        // Filter by user/agent role
+        // Filter by user/agent role. Use the advertisement's own role_context
+        // (the role it was created in) so the filter matches the "Created By"
+        // column shown in the table, which also reads role_context.
         if (isset($_GET['role_context_filter']) && $_GET['role_context_filter'] !== '') {
             $addedAsFilter = $_GET['role_context_filter'];
-            $sql = $sql->whereHas('customer', function ($q) use ($addedAsFilter) {
-                if ($addedAsFilter === 'agent') {
-                    $q->where('is_agent', 1);
-                } else {
-                    $q->where('is_agent', 0);
-                }
-            });
+            if ($addedAsFilter === 'agent') {
+                $sql = $sql->where('role_context', 'agent');
+            } else {
+                // Treat missing role_context as 'user' to match the column's
+                // `role_context ?? 'user'` fallback used when building rows.
+                $sql = $sql->where(function ($q) {
+                    $q->where('role_context', 'user')->orWhereNull('role_context');
+                });
+            }
         }
 
         if (isset($_GET['search']) && ! empty($_GET['search'])) {
@@ -107,7 +111,11 @@ class AdvertisementController extends Controller
         if (isset($_GET['limit'])) {
             $sql->skip($offset)->take($limit);
         }
-        $res = $sql->orderBy($sort, $order)->get();
+        if ($sort === 'end_date') {
+            $res = $sql->orderByRaw('ISNULL(end_date) ASC, end_date ' . $order)->get();
+        } else {
+            $res = $sql->orderBy($sort, $order)->get();
+        }
 
         $bulkData = [];
         $bulkData['total'] = $total;
@@ -196,7 +204,7 @@ class AdvertisementController extends Controller
 
                     // Email Template
                     $userStatusTemplateData = system_setting($emailTypeData['type']);
-                    $appName = env('APP_NAME') ?? 'eBroker';
+                    $appName = env('APP_NAME') ?? 'omko';
                     $variables = [
                         'app_name' => $appName,
                         'user_name' => $advertisementData->customer->name,
@@ -261,6 +269,7 @@ class AdvertisementController extends Controller
                     'send_type' => '0',
                     'customers_id' => $adv->customer->id,
                     'propertys_id' => $adv->id,
+                    'role_context' => $advRoleContext,
                 ]);
             }
 

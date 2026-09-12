@@ -33,9 +33,9 @@ class ActiveRoleMiddleware
         $role = strtolower(trim($rawRole));
 
         // Reject invalid values
-        if (! in_array($role, ['user', 'agent'])) {
+        if (! in_array($role, ['user', 'agent', 'developer', 'agencia'])) {
             return ApiResponseService::errorResponse(
-                'Invalid X-Active-Role value. Must be user or agent.',
+                'Invalid X-Active-Role value. Must be user, agent, developer or agencia.',
                 null,
                 400
             );
@@ -51,6 +51,17 @@ class ActiveRoleMiddleware
                     'Unauthorized. You must be an agent to use agent mode.',
                     null,
                     403
+                );
+            }
+        } elseif (in_array($role, ['developer', 'agencia'])) {
+            // Roles de empresa (plan Developer/Agencia): requieren usuario autenticado.
+            if (Auth::guard('sanctum')->check()) {
+                $request->merge(['user_active_role' => $role]);
+            } else {
+                return ApiResponseService::errorResponse(
+                    'Unauthorized. You must be logged in to use '.$role.' mode.',
+                    null,
+                    401
                 );
             }
         } else {

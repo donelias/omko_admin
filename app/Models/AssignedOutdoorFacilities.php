@@ -17,7 +17,6 @@ class AssignedOutdoorFacilities extends Model
     protected $fillable = [
         'facility_id',
         'property_id',
-        'project_id',
         'distance',
     ];
 
@@ -29,10 +28,5 @@ class AssignedOutdoorFacilities extends Model
     public function property()
     {
         return $this->belongsTo(Property::class, 'property_id');
-    }
-
-    public function project()
-    {
-        return $this->belongsTo(Projects::class, 'project_id');
     }
 }

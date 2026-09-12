@@ -5,10 +5,10 @@ namespace App\Http\Middleware;
 use App\Models\Advertisement;
 use Carbon\Carbon;
 use Closure;
+use dacoto\EnvSet\Facades\EnvSet;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
@@ -32,9 +32,10 @@ class CheckAdvertisementsExpiration
                     return $next($request);
                 }
 
-                // Force file cache at runtime for this request cycle without mutating .env.
-                if (Config::get('cache.default') !== 'file') {
-                    Config::set('cache.default', 'file');
+                // Change Cache Driver to file
+                if (EnvSet::keyExists('CACHE_DRIVER') && env('CACHE_DRIVER') != 'file') {
+                    EnvSet::setKey('CACHE_DRIVER', 'file');
+                    EnvSet::save();
                 }
 
                 // Check DB connection

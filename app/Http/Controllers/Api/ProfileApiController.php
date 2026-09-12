@@ -47,7 +47,7 @@ class ProfileApiController extends Controller
             $data['user_verification_reject_reason'] = VerifyCustomer::with('rejectReason')->where('user_id', $userData->id)->first()?->rejectReason?->reason ?? '';
 
             $userData->load('agent_profile');
-            $userData->agent_profile = $userData->resolved_agent_profile;
+            $userData->applyResolvedAgentProfile();
             // Check the User Data is not Empty
             if (collect($userData)->isNotEmpty()) {
                 $response['error'] = false;
@@ -107,11 +107,6 @@ class ProfileApiController extends Controller
                     'fcm_id',
                     'address',
                     'notification',
-                    'about_me',
-                    'facebook_id',
-                    'twiiter_id',
-                    'instagram_id',
-                    'youtube_id',
                     'latitude',
                     'longitude',
                     'city',

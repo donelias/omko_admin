@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\GenericMailTemplate;
 use App\Models\AgentAvailability;
+use App\Models\AgentProfile;
 use App\Models\AgentVerification;
 use App\Models\Appointment;
 use App\Models\Customer;
@@ -20,6 +21,8 @@ use App\Models\Setting;
 use App\Models\Translation;
 use App\Models\User;
 use App\Models\UserInterest;
+use App\Models\SavedSearch;
+use App\Models\PropertyAlert;
 use App\Models\UserPackage;
 use App\Models\UserPackageLimit;
 use App\Models\UserPayAsYouGoCredit;
@@ -628,6 +631,22 @@ class HelperService
     {
         try {
 
+            // Guard against a missing/empty recipient. Without this, Mail::to('')
+            // dispatches a job that fails in the queue worker with
+            // "An email must have a 'To', 'Cc', or 'Bcc' header." and is then
+            // retried repeatedly, flooding the logs.
+            $recipient = $data['email'] ?? null;
+            if (empty($recipient) || ! filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                Log::error('Skipped sending mail: missing or invalid recipient email.'.(isset($data['subject']) ? ' Subject: '.$data['subject'] : ''));
+
+                if ($requiredEmailException === true) {
+                    DB::rollback();
+                    throw new Exception('Missing or invalid recipient email.');
+                }
+
+                return;
+            }
+
             $adminMail = env('MAIL_FROM_ADDRESS');
             $companyName = HelperService::getSettingData('company_name');
 
@@ -791,6 +810,9 @@ class HelperService
 
                     return array_merge($data, self::getMultipleSettingData($types));
 
+                case 'mock':
+                    return ['payment_method' => 'mock', 'mock_currency' => 'USD'];
+
                 default:
                     return false;
             }
@@ -859,37 +881,14 @@ class HelperService
     public static function getFeatureId($type)
     {
         try {
-            $featureQuery = Feature::query();
-            switch ($type) {
-                case config('constants.FEATURES.PROPERTY_LIST.TYPE'):
-                    $featureQuery = $featureQuery->clone()->where('type', config('constants.FEATURES.PROPERTY_LIST.TYPE'));
-                    break;
-                case config('constants.FEATURES.PROJECT_LIST.TYPE'):
-                    $featureQuery = $featureQuery->clone()->where('type', config('constants.FEATURES.PROJECT_LIST.TYPE'));
-                    break;
-                case config('constants.FEATURES.PROPERTY_FEATURE.TYPE'):
-                    $featureQuery = $featureQuery->clone()->where('type', config('constants.FEATURES.PROPERTY_FEATURE.TYPE'));
-                    break;
-                case config('constants.FEATURES.PROJECT_FEATURE.TYPE'):
-                    $featureQuery = $featureQuery->clone()->where('type', config('constants.FEATURES.PROJECT_FEATURE.TYPE'));
-                    break;
-                case config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.TYPE'):
-                    $featureQuery = $featureQuery->clone()->where('type', config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.TYPE'));
-                    break;
-                case config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'):
-                    $featureQuery = $featureQuery->clone()->where('type', config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'));
-                    break;
-                case config('constants.FEATURES.PREMIUM_PROJECTS.TYPE'):
-                    $featureQuery = $featureQuery->clone()->where('type', config('constants.FEATURES.PREMIUM_PROJECTS.TYPE'));
-                    break;
-                default:
-                    Log::error('Type not allowed in getFeatureId function of HelperService');
+            $featureTypes = array_column(config('constants.FEATURES'), 'TYPE');
+            if (! in_array($type, $featureTypes)) {
+                Log::error('Type not allowed in getFeatureId function of HelperService');
 
-                    return false;
-                    break;
+                return false;
             }
 
-            return $featureQuery->pluck('id')->first();
+            return Feature::where('type', $type)->pluck('id')->first();
         } catch (Exception $e) {
             Log::error('Issue in Get Feature ID HelperService Function => '.$e->getMessage());
 
@@ -926,7 +925,7 @@ class HelperService
     public static function updatePackageLimit($type, $getPackageDataReturn = false, $fallbackToPayAsYouGo = false, $userActiveRole = null)
     {
         try {
-            $featureTypes = [config('constants.FEATURES.PROPERTY_LIST.TYPE'), config('constants.FEATURES.PROPERTY_FEATURE.TYPE'), config('constants.FEATURES.PROJECT_LIST.TYPE'), config('constants.FEATURES.PROJECT_FEATURE.TYPE'), config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.TYPE'), config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'), config('constants.FEATURES.PREMIUM_PROJECTS.TYPE')];
+            $featureTypes = array_column(config('constants.FEATURES'), 'TYPE');
             if (! in_array($type, $featureTypes)) {
                 ApiResponseService::validationError('Invalid Feature Type');
             }
@@ -1111,6 +1110,100 @@ class HelperService
         }
     }
 
+    /**
+     * FASE 8 (T6 restante) — Acceso pagado a leads (crm_leads_access).
+     * Revisa los planes activos del usuario (roles agent/agencia) que incluyan
+     * la feature crm_leads_access y devuelve estado + créditos restantes.
+     */
+    public static function checkLeadAccessLimit($userId)
+    {
+        $roles = ['agent', 'agencia'];
+        $featureId = Feature::where('type', config('constants.FEATURES.CRM_LEADS_ACCESS.TYPE'))->value('id');
+
+        if (! $featureId) {
+            return ['available' => false, 'unlimited' => false, 'remaining' => null];
+        }
+
+        $packageIds = UserPackage::where('user_id', $userId)
+            ->whereIn('role_context', $roles)
+            ->onlyActive()
+            ->pluck('package_id');
+
+        if ($packageIds->isEmpty()) {
+            return ['available' => false, 'unlimited' => false, 'remaining' => 0];
+        }
+
+        $packageFeatures = PackageFeature::where('feature_id', $featureId)
+            ->whereIn('package_id', $packageIds)
+            ->get();
+
+        if ($packageFeatures->isEmpty()) {
+            return ['available' => false, 'unlimited' => false, 'remaining' => 0];
+        }
+
+        $userPackageIds = UserPackage::where('user_id', $userId)
+            ->whereIn('role_context', $roles)
+            ->onlyActive()
+            ->whereIn('package_id', $packageIds)
+            ->pluck('id');
+
+        foreach ($packageFeatures as $packageFeature) {
+            if ($packageFeature->limit_type === 'unlimited') {
+                return ['available' => true, 'unlimited' => true, 'remaining' => null];
+            }
+
+            $userPackageLimit = UserPackageLimit::where('package_feature_id', $packageFeature->id)
+                ->whereIn('user_package_id', $userPackageIds)
+                ->orderByDesc('total_limit')
+                ->first();
+
+            if ($userPackageLimit && $userPackageLimit->total_limit > $userPackageLimit->used_limit) {
+                return [
+                    'available' => true,
+                    'unlimited' => false,
+                    'remaining' => $userPackageLimit->total_limit - $userPackageLimit->used_limit,
+                    'user_package_limit_id' => $userPackageLimit->id,
+                ];
+            }
+        }
+
+        return ['available' => false, 'unlimited' => false, 'remaining' => 0];
+    }
+
+    /**
+     * Consume un crédito de acceso a contacto de leads. Devuelve los créditos
+     * restantes (null si el plan es unlimited). Si no hay crédito disponible
+     * devuelve 0 sin cambiar nada.
+     */
+    public static function consumeLeadAccess($userId)
+    {
+        $access = self::checkLeadAccessLimit($userId);
+        if (! $access['available']) {
+            return (int) ($access['remaining'] ?? 0);
+        }
+        if ($access['unlimited']) {
+            return null;
+        }
+        if (empty($access['user_package_limit_id'])) {
+            return 0;
+        }
+
+        return DB::transaction(function () use ($access) {
+            $userPackageLimit = UserPackageLimit::where('id', $access['user_package_limit_id'])
+                ->lockForUpdate()
+                ->first();
+
+            if (! $userPackageLimit || $userPackageLimit->total_limit <= $userPackageLimit->used_limit) {
+                return 0;
+            }
+
+            $userPackageLimit->used_limit += 1;
+            $userPackageLimit->save();
+
+            return $userPackageLimit->total_limit - $userPackageLimit->used_limit;
+        });
+    }
+
     public static function incrementTotalClick($type, $id = null, $slugId = null)
     {
         if (Auth::guard('sanctum')->check()) {
@@ -1217,6 +1310,7 @@ class HelperService
             config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL'),
             config('constants.FEATURES.PREMIUM_PROPERTIES'),
             config('constants.FEATURES.PREMIUM_PROJECTS'),
+            config('constants.FEATURES.AGENT_WATERMARK'),
         ];
 
         return $featureNames;
@@ -1240,6 +1334,7 @@ class HelperService
             config('constants.HOMEPAGE_SECTION_TYPES.MOST_VIEWED_PROPERTIES_SECTION.TYPE') => trans(config('constants.HOMEPAGE_SECTION_TYPES.MOST_VIEWED_PROPERTIES_SECTION.TITLE')),
             config('constants.HOMEPAGE_SECTION_TYPES.NEARBY_PROPERTIES_SECTION.TYPE') => trans(config('constants.HOMEPAGE_SECTION_TYPES.NEARBY_PROPERTIES_SECTION.TITLE')),
             config('constants.HOMEPAGE_SECTION_TYPES.PROJECTS_SECTION.TYPE') => trans(config('constants.HOMEPAGE_SECTION_TYPES.PROJECTS_SECTION.TITLE')),
+            config('constants.HOMEPAGE_SECTION_TYPES.PREMIUM_PROJECTS_SECTION.TYPE') => trans(config('constants.HOMEPAGE_SECTION_TYPES.PREMIUM_PROJECTS_SECTION.TITLE')),
             config('constants.HOMEPAGE_SECTION_TYPES.PREMIUM_PROPERTIES_SECTION.TYPE') => trans(config('constants.HOMEPAGE_SECTION_TYPES.PREMIUM_PROPERTIES_SECTION.TITLE')),
             config('constants.HOMEPAGE_SECTION_TYPES.USER_RECOMMENDATIONS_SECTION.TYPE') => trans(config('constants.HOMEPAGE_SECTION_TYPES.USER_RECOMMENDATIONS_SECTION.TITLE')),
             config('constants.HOMEPAGE_SECTION_TYPES.PROPERTIES_BY_CITIES_SECTION.TYPE') => trans(config('constants.HOMEPAGE_SECTION_TYPES.PROPERTIES_BY_CITIES_SECTION.TITLE')),
@@ -1262,7 +1357,7 @@ class HelperService
             }
 
             $variables = [
-                'app_name' => env('APP_NAME', 'eBroker'),
+                'app_name' => env('APP_NAME', 'omko'),
                 'category_name' => $property->category->category,
                 'property_name' => $property->title,
             ];
@@ -1301,6 +1396,9 @@ class HelperService
                 ];
                 send_push_notification($userFCMTokens, $fcmMsg);
             }
+
+            // Also trigger saved search alerts
+            \App\Jobs\CheckSavedSearchAlerts::dispatch();
 
             return true;
         } catch (Exception $e) {
@@ -1516,6 +1614,186 @@ class HelperService
         return $watermarkConfig;
     }
 
+    public static function checkAgentWatermarkFeature($agentId): array
+    {
+        try {
+            $packageAvailable = false;
+            $featureAvailable = false;
+            $limitAvailable = false;
+            $featureId = self::getFeatureId(config('constants.FEATURES.AGENT_WATERMARK.TYPE'));
+
+            if (empty($agentId) || empty($featureId)) {
+                return [
+                    'package_available' => $packageAvailable,
+                    'feature_available' => $featureAvailable,
+                    'limit_available' => $limitAvailable,
+                ];
+            }
+
+            $packageIds = UserPackage::where('user_id', $agentId)
+                ->where('role_context', 'agent')
+                ->onlyActive()
+                ->pluck('package_id');
+
+            if ($packageIds->isEmpty()) {
+                return [
+                    'package_available' => false,
+                    'feature_available' => false,
+                    'limit_available' => false,
+                ];
+            }
+
+            $packageAvailable = true;
+            $userPackageIds = UserPackage::where('user_id', $agentId)
+                ->where('role_context', 'agent')
+                ->whereIn('package_id', $packageIds)
+                ->onlyActive()
+                ->pluck('id');
+
+            $packageFeatures = PackageFeature::where('feature_id', $featureId)
+                ->whereIn('package_id', $packageIds)
+                ->with(['user_package_limits' => function ($query) use ($userPackageIds) {
+                    $query->whereIn('user_package_id', $userPackageIds);
+                }])
+                ->get();
+
+            if ($packageFeatures->isNotEmpty()) {
+                $featureAvailable = true;
+                foreach ($packageFeatures as $packageFeature) {
+                    if ($packageFeature->limit_type == 'unlimited') {
+                        $limitAvailable = true;
+                        break;
+                    }
+
+                    foreach ($packageFeature->user_package_limits as $limit) {
+                        if ($limit->total_limit > $limit->used_limit) {
+                            $limitAvailable = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+
+            return [
+                'package_available' => $packageAvailable,
+                'feature_available' => $featureAvailable,
+                'limit_available' => $limitAvailable,
+            ];
+        } catch (Exception $e) {
+            Log::error('Error checking agent watermark feature: '.$e->getMessage());
+
+            return [
+                'package_available' => false,
+                'feature_available' => false,
+                'limit_available' => false,
+            ];
+        }
+    }
+
+    public static function agentHasWatermarkFeature($agentId): bool
+    {
+        $feature = self::checkAgentWatermarkFeature($agentId);
+
+        log::info('Agent Watermark Feature Check', ['agent_id' => $agentId, 'feature_check_result' => $feature]);
+
+        return ! empty($feature['feature_available']) && ! empty($feature['limit_available']);
+    }
+
+    public static function getAgentWatermarkConfig($agentId): array
+    {
+        try {
+            $agentProfile = AgentProfile::where('customer_id', $agentId)->first();
+            if (! $agentProfile) {
+                Log::warning('Watermark: no AgentProfile found', ['agent_id' => $agentId]);
+
+                return [];
+            }
+
+            $watermarkImage = $agentProfile->getRawOriginal('watermark_image');
+            $watermarkPath = $watermarkImage ? storage_path('app/public/'.config('global.AGENT_WATERMARK_IMG_PATH').$watermarkImage) : null;
+            $fileExists = $watermarkPath ? file_exists($watermarkPath) : false;
+
+            Log::info('Watermark: agent config resolved', [
+                'agent_id'        => $agentId,
+                'watermark_enabled' => (bool) $agentProfile->watermark_enabled,
+                'watermark_image' => $watermarkImage,
+                'expected_path'   => $watermarkPath,
+                'file_exists'     => $fileExists,
+            ]);
+
+            return [
+                'source' => 'agent',
+                'enabled' => (bool) $agentProfile->watermark_enabled,
+                'watermark_image' => $watermarkImage,
+                'watermark_path' => ($watermarkPath && $fileExists) ? $watermarkPath : null,
+                'opacity' => $agentProfile->watermark_opacity ?? 25,
+                'size' => $agentProfile->watermark_size ?? 10,
+                'style' => $agentProfile->watermark_style ?? 'tile',
+                'position' => $agentProfile->watermark_position ?? 'center',
+                'rotation' => $agentProfile->watermark_rotation ?? 30,
+            ];
+        } catch (Exception $e) {
+            Log::error('Watermark: error getting agent config: '.$e->getMessage());
+
+            return [];
+        }
+    }
+
+    public static function resolveListingWatermarkConfig($agentId = null): array
+    {
+        if (! empty($agentId) && self::agentHasWatermarkFeature($agentId)) {
+            $agentWatermarkConfig = self::getAgentWatermarkConfig($agentId);
+
+            Log::info('Watermark: resolving for agent', [
+                'agent_id'       => $agentId,
+                'enabled'        => $agentWatermarkConfig['enabled'] ?? false,
+                'watermark_path' => $agentWatermarkConfig['watermark_path'] ?? null,
+                'result'         => (! empty($agentWatermarkConfig['enabled']) && ! empty($agentWatermarkConfig['watermark_path'])) ? 'agent_applied' : 'falling_back_to_admin',
+            ]);
+
+            if (! empty($agentWatermarkConfig['enabled']) && ! empty($agentWatermarkConfig['watermark_path'])) {
+                return $agentWatermarkConfig;
+            }
+            // Agent has feature but watermark not configured/enabled — fall through to admin watermark.
+        }
+
+        Log::info('Watermark: checking admin config', ['agent_id' => $agentId]);
+
+        $adminWatermarkConfig = self::getWatermarkConfigDecoded();
+        if (! empty($adminWatermarkConfig) && ! empty($adminWatermarkConfig['enabled'])) {
+            $adminWatermarkConfig['source'] = 'admin';
+            $adminWatermarkConfig['watermark_path'] = self::resolveAdminWatermarkPath($adminWatermarkConfig);
+
+            if (! empty($adminWatermarkConfig['watermark_path'])) {
+                return $adminWatermarkConfig;
+            }
+        }
+
+        return [];
+    }
+
+    private static function resolveAdminWatermarkPath(array $watermarkConfig): ?string
+    {
+        $watermarkImage = $watermarkConfig['watermark_image'] ?? null;
+        $watermarkPath = $watermarkImage ? public_path('assets/images/logo/'.$watermarkImage) : null;
+
+        if ($watermarkPath && file_exists($watermarkPath)) {
+            return $watermarkPath;
+        }
+
+        $companyLogo = self::getSettingData('company_logo');
+        if ($companyLogo) {
+            $watermarkPath = public_path('assets/images/logo/'.$companyLogo);
+            if (file_exists($watermarkPath)) {
+                return $watermarkPath;
+            }
+        }
+
+        $watermarkPath = public_path('assets/images/logo/logo.png');
+
+        return file_exists($watermarkPath) ? $watermarkPath : null;
+    }
+
     private static function getWatermarkConfig()
     {
         try {
@@ -1561,9 +1839,9 @@ class HelperService
     {
         if ($package->list_duration_type == 'Custom') {
             return $package->custom_duration;
-        } elseif ($package->list_duration_type == 'Package') {
+        } elseif ($package->list_duration_type == 'Package' || $package->list_duration_type === null) {
             return $package->duration / 24; // Duration is stored in hours
-        } else {
+        } elseif ($package->list_duration_type == 'Standard') {
             return 30; // Standard 30 days
         }
     }
@@ -1588,11 +1866,7 @@ class HelperService
             return Carbon::now()->addDays($duration);
         }
 
-        return Carbon::now()->addDays(30); // Default fallback if no package found
-
-        // if($userId == 0) { // Admin
-        //     return null; // Admin listings do not expire
-        // }
+        // return Carbon::now()->addDays(30); // Default fallback if no package found
 
     }
 
@@ -1829,12 +2103,12 @@ class HelperService
 
         return [
             'is_agent' => isset($agentData['become_agent']) &&
-                $agentData['become_agent']->status === 'Approved',
+                strtolower($agentData['become_agent']->status) === 'approved',
 
             'is_agent_verified' => isset($agentData['verify_agent']) &&
-                $agentData['verify_agent']->status === 'Approved',
+                strtolower($agentData['verify_agent']->status) === 'approved',
 
-            'is_user_verified' => $userVerification?->status === 'Approved',
+            'is_user_verified' => strtolower($userVerification?->status ?? '') === 'approved',
 
             'agent_verification_status' => $agentData['verify_agent']->status ?? 'not_applied',
 
@@ -1842,5 +2116,77 @@ class HelperService
 
             'user_verification_status' => $userVerification->status ?? 'not_applied',
         ];
+    }
+
+    /**
+     * Compute slice boundaries to guarantee a minimum number of "featured"
+     * items per page while backfilling the rest with "normal" items.
+     *
+     * Featured and normal items are paginated as two independent, ordered
+     * pools. Each page pulls up to $minFeatured featured items (its own slice,
+     * never repeated) and fills the remaining slots with normal items. When
+     * the featured pool is exhausted, pages contain only normal items.
+     *
+     * @return array{featured_offset:int, featured_take:int, normal_offset:int, normal_take:int}
+     */
+    public static function featuredFillSlice(int $offset, int $limit, int $featuredTotal, int $minFeatured = 3): array
+    {
+        $pageIndex = $limit > 0 ? intdiv($offset, $limit) : 0;
+        $perPage = min($minFeatured, $limit);
+
+        // How many featured items were consumed by all previous pages.
+        $featuredUsedBefore = min($featuredTotal, $pageIndex * $perPage);
+
+        // Featured available for this page (0..$perPage).
+        $featuredTake = max(0, min($perPage, $featuredTotal - $featuredUsedBefore));
+
+        // Normal offset = total slots used by previous pages minus the featured
+        // already consumed, so the normal pool stays gap-free across pages.
+        $normalOffset = max(0, ($pageIndex * $limit) - $featuredUsedBefore);
+        $normalTake = $limit - $featuredTake;
+
+        return [
+            'featured_offset' => $featuredUsedBefore,
+            'featured_take' => $featuredTake,
+            'normal_offset' => $normalOffset,
+            'normal_take' => $normalTake,
+        ];
+    }
+
+    public static function userHasPremiumAccess(int $userId): bool
+    {
+        try {
+            return UserPackage::where('user_id', $userId)
+                ->where('role_context', 'user')
+                ->onlyActive()
+                ->exists();
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+
+    public static function userHasFeatureAccess(int $userId, string $featureType): bool
+    {
+        try {
+            $featureId = self::getFeatureId($featureType);
+            if (! $featureId) {
+                return false;
+            }
+
+            $packageIds = UserPackage::where('user_id', $userId)
+                ->where('role_context', 'user')
+                ->onlyActive()
+                ->pluck('package_id');
+
+            if ($packageIds->isEmpty()) {
+                return false;
+            }
+
+            return PackageFeature::whereIn('package_id', $packageIds)
+                ->where('feature_id', $featureId)
+                ->exists();
+        } catch (Exception $e) {
+            return false;
+        }
     }
 }

@@ -7,21 +7,20 @@ use App\Http\Controllers\AdvertisementController;
 use App\Http\Controllers\AgentVerificationFormController;
 use App\Http\Controllers\AgentVerificationFormSectionController;
 use App\Http\Controllers\ArticleController;
-use App\Http\Controllers\BankController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CityImagesController;
-use App\Http\Controllers\CooperativeController;
 use App\Http\Controllers\CustomersController;
+use App\Http\Controllers\CrmLeadController;
 use App\Http\Controllers\CustomPageController;
 use App\Http\Controllers\DeepLinkController;
 use App\Http\Controllers\DemoDataController;
 use App\Http\Controllers\FaqController;
-use App\Http\Controllers\FinancialAdvisorController;
 use App\Http\Controllers\GeminiAIController;
 use App\Http\Controllers\GeminiSettingsController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\HomepageSectionController;
+use App\Http\Controllers\InstallerController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OutdoorFacilityController;
@@ -31,7 +30,10 @@ use App\Http\Controllers\ParameterController;
 use App\Http\Controllers\PayAsYouGoController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\AdminShortTermController;
+use App\Http\Controllers\AdminProjectInventoryController;
 use App\Http\Controllers\PropertController;
+use App\Http\Controllers\StoryController;
 use App\Http\Controllers\PropertysInquiryController;
 use App\Http\Controllers\ReportReasonController;
 use App\Http\Controllers\SeoSettingsController;
@@ -39,6 +41,9 @@ use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SliderController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VerifyCustomerFormController;
+use App\Http\Controllers\AuditLogController;
+use App\Http\Controllers\BulkImportController;
+use App\Http\Controllers\BulkImportGalleryController;
 use App\Http\Controllers\WebhookController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
@@ -75,6 +80,7 @@ Route::post('/webhook/flutterwave', [WebhookController::class, 'flutterwave'])->
 Route::post('/webhook/cashfree', [WebhookController::class, 'cashfree'])->middleware('api.localization')->name('webhook.cashfree');
 Route::post('/webhook/phonepe', [WebhookController::class, 'phonepe'])->middleware('api.localization')->name('webhook.phonepe');
 Route::post('/webhook/midtrans', [WebhookController::class, 'midtrans'])->middleware('api.localization')->name('webhook.midtrans');
+Route::match(['GET', 'POST'], '/webhook/mock', [WebhookController::class, 'mock'])->middleware('api.localization')->name('webhook.mock');
 
 Route::get('payment/success', [PaymentController::class, 'paymentSuccess'])->name('payment.success');
 Route::get('payment/success/web', [PaymentController::class, 'paymentSuccessWeb'])->name('payment.success.web');
@@ -87,6 +93,12 @@ Route::get('payment/cancel/web', [PaymentController::class, 'paymentCancelWeb'])
 Route::get('/payment/responses/paystack', static function () {
     return view('payments.responses.paystack');
 })->name('payment.paystack.response');
+
+Route::group(['prefix' => 'install', 'middleware' => ['web', 'installer']], static function () {
+    Route::get('purchase-code', [InstallerController::class, 'purchaseCodeIndex'])->name('install.purchase-code.index');
+    Route::post('purchase-code', [InstallerController::class, 'checkPurchaseCode'])->name('install.purchase-code.post');
+    Route::post('keys', [InstallerController::class, 'setKeys']);
+});
 
 // Redirect "property-details" links to app for mobile devices
 Route::get('property-details/{slug}', [DeepLinkController::class, 'handle']);
@@ -116,8 +128,6 @@ Route::middleware(['language'])->group(function () {
         Route::get('firebase_settings', [SettingController::class, 'index']);
         Route::get('app-settings', [SettingController::class, 'appSettingsIndex'])->name('app-settings.index');
         Route::get('web-settings', [SettingController::class, 'webSettingsIndex'])->name('web-settings.index');
-        //Route::post('web-settings-update', [SettingController::class, 'webSettings'])->name('web-settings');
-
         Route::get('system-version', [SettingController::class, 'index']);
         Route::post('firebase-settings', [SettingController::class, 'firebase_settings']);
         Route::post('app-settings', [SettingController::class, 'app_settings']);
@@ -132,7 +142,6 @@ Route::middleware(['language'])->group(function () {
         Route::post('gemini/generate-meta', [GeminiAIController::class, 'generateMetaDetails'])->name('gemini.generate-meta');
         Route::get('system-version', [SettingController::class, 'system_version']);
         Route::post('web-settings', [SettingController::class, 'web_settings']);
-        Route::post('web-settings-update', [SettingController::class, 'web_settings'])->name('web-settings.update-legacy');
         Route::get('notification-settings', [SettingController::class, 'notificationSettingIndex'])->name('notification-setting-index');
         Route::post('notification-settings', [SettingController::class, 'notificationSettingStore'])->name('notification-setting-store');
 
@@ -207,6 +216,17 @@ Route::middleware(['language'])->group(function () {
             Route::post('/unblock-user', [AdminAppointmentReportController::class, 'unblockUser'])->name('admin.appointment.reports.unblock-user');
         });
         /** End Appointment Reports Management */
+
+        /** CRM Leads Management */
+        Route::prefix('admin/crm/leads')->group(function () {
+            Route::get('/', [CrmLeadController::class, 'index'])->name('admin.crm.leads.index');
+            Route::get('/list', [CrmLeadController::class, 'getLeadsList'])->name('admin.crm.leads.list');
+            Route::post('/update-status', [CrmLeadController::class, 'updateStatus'])->name('admin.crm.leads.update-status');
+            Route::get('/show', [CrmLeadController::class, 'show'])->name('admin.crm.leads.show');
+            Route::delete('/{id}', [CrmLeadController::class, 'destroy'])->name('admin.crm.leads.destroy');
+        });
+        /** End CRM Leads Management */
+
         Route::post('system-version-setting', [SettingController::class, 'system_version_setting']);
 
         // / START :: HOME ROUTE
@@ -239,7 +259,6 @@ Route::middleware(['language'])->group(function () {
         Route::post('update-language-status', [LanguageController::class, 'updateStatus'])->name('update-language-status');
         Route::resource('language', LanguageController::class);
         Route::post('language_update', [LanguageController::class, 'update'])->name('language_update');
-        Route::get('language-destory/{id}', [LanguageController::class, 'destroy'])->name('language.destroy');
 
         // / END :: LANGUAGES ROUTE
 
@@ -281,7 +300,7 @@ Route::middleware(['language'])->group(function () {
 
         Route::resource('slider', SliderController::class);
         // Route::post('slider-order', [SliderController::class, 'update'])->name('slider.slider-order');
-        Route::get('slider-destroy/{id}', [SliderController::class, 'destroy'])->name('slider.destroy');
+        Route::get('slider-destroy/{id}', [SliderController::class, 'destroy'])->name('slider.destroy.url');
         Route::get('sliderList', [SliderController::class, 'sliderList']);
         // / END :: SLIDER ROUTE
 
@@ -290,7 +309,7 @@ Route::middleware(['language'])->group(function () {
         Route::resource('article', ArticleController::class);
         Route::get('article_list', [ArticleController::class, 'show'])->name('article_list');
         Route::get('add_article', [ArticleController::class, 'create'])->name('add_article');
-        Route::delete('article-destroy/{id}', [ArticleController::class, 'destroy'])->name('article.destroy');
+        Route::delete('article-destroy/{id}', [ArticleController::class, 'destroy'])->name('article.destroy.url');
         Route::post('article/generate-slug', [ArticleController::class, 'generateAndCheckSlug'])->name('article.generate-slug');
         // / END :: ARTICLE ROUTE
 
@@ -369,7 +388,7 @@ Route::middleware(['language'])->group(function () {
         Route::resource('outdoor_facilities', OutdoorFacilityController::class);
         Route::get('facility-list', [OutdoorFacilityController::class, 'show']);
         Route::post('facility-update', [OutdoorFacilityController::class, 'update']);
-        Route::get('facility-delete/{id}', [OutdoorFacilityController::class, 'destroy'])->name('outdoor_facilities.destroy');
+        Route::get('facility-delete/{id}', [OutdoorFacilityController::class, 'destroy'])->name('outdoor_facilities.destroy.url');
         // / END :: OUTDOOR FACILITY ROUTE
 
         // / START :: PROPERTY ROUTE
@@ -385,7 +404,7 @@ Route::middleware(['language'])->group(function () {
         Route::post('updatepropertystatus', [PropertController::class, 'updateStatus'])->name('updatepropertystatus');
         Route::post('property-gallery', [PropertController::class, 'removeGalleryImage'])->name('property.removeGalleryImage');
         Route::get('get-state-by-country', [PropertController::class, 'getStatesByCountry'])->name('property.getStatesByCountry');
-        Route::get('property-destroy/{id}', [PropertController::class, 'destroy'])->name('property.destroy');
+        Route::get('property-destroy/{id}', [PropertController::class, 'destroy'])->name('property.destroy.url');
         Route::get('getFeaturedPropertyList', [PropertController::class, 'getFeaturedPropertyList']);
         Route::post('updateaccessability', [PropertController::class, 'updateaccessability'])->name('updateaccessability');
         Route::post('update-property-request-status', [PropertController::class, 'updateRequestStatus'])->name('update-property-request-status');
@@ -426,6 +445,33 @@ Route::middleware(['language'])->group(function () {
         Route::post('notification-multiple-delete', [NotificationController::class, 'multiple_delete']);
         // / END :: NOTIFICATION
 
+        // / START :: BULK IMPORT
+        Route::prefix('bulk-import')->name('bulk-import.')->group(function () {
+            // Pages
+            Route::get('property', [BulkImportController::class, 'propertyIndex'])->name('property');
+            Route::get('project', [BulkImportController::class, 'projectIndex'])->name('project');
+
+            // Example CSV downloads
+            Route::get('download/property-csv', [BulkImportController::class, 'downloadPropertyCsv'])->name('download.property');
+            Route::get('download/project-csv', [BulkImportController::class, 'downloadProjectCsv'])->name('download.project');
+            Route::get('download/categories-csv', [BulkImportController::class, 'downloadCategoriesCsv'])->name('download.categories');
+
+            // CSV processing
+            Route::post('process/property', [BulkImportController::class, 'processPropertyCsv'])->name('process.property');
+            Route::post('process/project', [BulkImportController::class, 'processProjectCsv'])->name('process.project');
+
+            // Customer search (Select2) + info for "upload for customer" mode
+            Route::get('customer-search', [BulkImportController::class, 'searchCustomers'])->name('customer.search');
+            Route::get('customer-info', [BulkImportController::class, 'getCustomerInfo'])->name('customer.info');
+
+            // Gallery (shared between property and project import)
+            Route::get('gallery', [BulkImportGalleryController::class, 'index'])->name('gallery.index');
+            Route::post('gallery/upload', [BulkImportGalleryController::class, 'upload'])->name('gallery.upload');
+            Route::post('gallery/upload-video', [BulkImportGalleryController::class, 'uploadVideo'])->name('gallery.upload-video');
+            Route::post('gallery/destroy', [BulkImportGalleryController::class, 'destroy'])->name('gallery.destroy');
+        });
+        // / END :: BULK IMPORT
+
         // / START :: PROJECT
         Route::post('project-generate-slug', [ProjectController::class, 'generateAndCheckSlug'])->name('project.generate-slug');
         Route::post('updateProjectStatus', [ProjectController::class, 'updateStatus'])->name('updateProjectStatus');
@@ -434,38 +480,23 @@ Route::middleware(['language'])->group(function () {
         Route::delete('remove-project-floor/{id}', [ProjectController::class, 'removeFloorPlan'])->name('project.remove-floor-plan');
         Route::post('update-project-request-status', [ProjectController::class, 'updateRequestStatus'])->name('update-project-request-status');
         Route::resource('project', ProjectController::class);
+
+        /** Stories */
+        Route::get('story', [StoryController::class, 'index'])->name('story.index');
+        Route::get('getStoryList', [StoryController::class, 'getStoryList']);
+        Route::get('story/create', [StoryController::class, 'create'])->name('story.create');
+        Route::get('story/entity-media', [StoryController::class, 'getEntityMedia'])->name('story.entity-media');
+        Route::post('story', [StoryController::class, 'store'])->name('story.store');
+        Route::get('story/{id}', [StoryController::class, 'destroy'])->name('story.destroy');
         // / END :: PROJECT
 
-        // / START :: BANKS & COOPERATIVES
-        Route::prefix('banks')->group(function () {
-            Route::get('/', [BankController::class, 'index'])->name('banks.index');
-            Route::post('/', [BankController::class, 'store'])->name('banks.store');
-            Route::get('/{id}', [BankController::class, 'show'])->name('banks.show');
-            Route::post('/update/{id}', [BankController::class, 'update'])->name('banks.update');
-            Route::delete('/{id}', [BankController::class, 'destroy'])->name('banks.destroy');
-            Route::post('/status-update', [BankController::class, 'statusUpdate'])->name('banks.status-update');
-        });
-        Route::prefix('cooperatives')->group(function () {
-            Route::get('/', [CooperativeController::class, 'index'])->name('cooperatives.index');
-            Route::post('/', [CooperativeController::class, 'store'])->name('cooperatives.store');
-            Route::get('/{id}', [CooperativeController::class, 'show'])->name('cooperatives.show');
-            Route::post('/update/{id}', [CooperativeController::class, 'update'])->name('cooperatives.update');
-            Route::delete('/{id}', [CooperativeController::class, 'destroy'])->name('cooperatives.destroy');
-            Route::post('/status-update', [CooperativeController::class, 'statusUpdate'])->name('cooperatives.status-update');
-        });
-        Route::prefix('financial-advisors')->group(function () {
-            Route::get('/', [FinancialAdvisorController::class, 'index'])->name('financial-advisors.index');
-            Route::post('/', [FinancialAdvisorController::class, 'store'])->name('financial-advisors.store');
-            Route::get('/{id}', [FinancialAdvisorController::class, 'show'])->name('financial-advisors.show');
-            Route::post('/update/{id}', [FinancialAdvisorController::class, 'update'])->name('financial-advisors.update');
-            Route::delete('/{id}', [FinancialAdvisorController::class, 'destroy'])->name('financial-advisors.destroy');
-            Route::post('/status-update', [FinancialAdvisorController::class, 'statusUpdate'])->name('financial-advisors.status-update');
-        });
-        // / END :: BANKS & COOPERATIVES
+        /** Audit Logs */
+        Route::get('audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+        Route::get('audit-logs/list', [AuditLogController::class, 'list'])->name('audit-logs.list');
 
         // / START :: SEO SETTINGS
         Route::resource('seo_settings', SeoSettingsController::class);
-        Route::get('seo-settings-destroy/{id}', [SeoSettingsController::class, 'destroy'])->name('seo_settings.destroy');
+        Route::get('seo-settings-destroy/{id}', [SeoSettingsController::class, 'destroy'])->name('seo_settings.destroy.url');
         // / END :: SEO SETTINGS
 
         // / START :: FAQs
@@ -480,6 +511,7 @@ Route::middleware(['language'])->group(function () {
         // / END :: City Images
 
         // / START :: Homepage Sections
+        Route::post('homepage-sections/update-toggles', [HomepageSectionController::class, 'updateToggles'])->name('homepage-sections.update-toggles');
         Route::post('homepage-sections/status-update', [HomepageSectionController::class, 'statusUpdate'])->name('homepage-sections.status-update');
         Route::post('homepage-sections/update-order', [HomepageSectionController::class, 'updateOrder'])->name('homepage-sections.update-order');
         Route::get('homepage-sections/change-order', [HomepageSectionController::class, 'changeOrder'])->name('homepage-sections.change-order');
@@ -501,6 +533,14 @@ Route::middleware(['language'])->group(function () {
 
             return true;
         })->name('cache.gmaps.clear');
+
+        // Flush only the Open Street Maps cache store (osmmaps)
+        Route::post('admin/cache/osm/clear', function () {
+            Log::info('Open Street Maps cache cleared');
+            Cache::store('osmmaps')->clear();
+
+            return true;
+        })->name('cache.osm.clear');
 
         // / Start :: User Verification Form
         Route::prefix('verify-customer')->group(function () {
@@ -568,6 +608,27 @@ Route::middleware(['language'])->group(function () {
         Route::post('custom-page/generate-slug', [CustomPageController::class, 'generateAndCheckSlug'])->name('custom-page.generate-slug');
         // / END :: CUSTOM PAGES ROUTE
 
+        /** Vacation Rentals (FASE 8, T1) */
+        Route::prefix('admin/short-term')->group(function () {
+            Route::get('/reservations', [AdminShortTermController::class, 'reservationsIndex'])->name('admin.short-term.reservations.index');
+            Route::get('/reservations/list', [AdminShortTermController::class, 'getReservationsList'])->name('admin.short-term.reservations.list');
+            Route::post('/reservations/update-status', [AdminShortTermController::class, 'updateReservationStatus'])->name('admin.short-term.reservations.update-status');
+            Route::delete('/reservations/{id}', [AdminShortTermController::class, 'deleteReservation'])->name('admin.short-term.reservations.delete');
+
+            Route::get('/availability', [AdminShortTermController::class, 'availabilityIndex'])->name('admin.short-term.availability.index');
+            Route::get('/availability/list', [AdminShortTermController::class, 'getAvailabilityList'])->name('admin.short-term.availability.list');
+            Route::post('/availability', [AdminShortTermController::class, 'storeAvailability'])->name('admin.short-term.availability.store');
+            Route::delete('/availability/{id}', [AdminShortTermController::class, 'deleteAvailability'])->name('admin.short-term.availability.delete');
+        });
+
+        /** On-Plan Inventory (FASE 8, T2) */
+        Route::prefix('admin/project-inventory')->group(function () {
+            Route::get('/', [AdminProjectInventoryController::class, 'index'])->name('admin.project-inventory.index');
+            Route::get('/list', [AdminProjectInventoryController::class, 'getList'])->name('admin.project-inventory.list');
+            Route::post('/adjust', [AdminProjectInventoryController::class, 'adjust'])->name('admin.project-inventory.adjust');
+            Route::get('/movements/{id}', [AdminProjectInventoryController::class, 'movements'])->name('admin.project-inventory.movements');
+        });
+
     });
 
     Route::get('get-currency-symbol', [SettingController::class, 'getCurrencySymbol'])->name('get-currency-symbol');
@@ -596,13 +657,24 @@ Route::get('/js/lang', static function () {
 })->name('assets.lang');
 
 // Add New Migration Route
+// Operative utility routes used by the admin panel installer/settings.
+// These can alter the DB or cache, so they are gated: only reachable when
+// the app is NOT in production, or the authenticated user is an admin.
 Route::get('migrate', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     Artisan::call('migrate');
     $output = Artisan::output();
     echo nl2br($output); // Convert newlines to <br> for better readability in HTML
 });
 
 Route::get('migrate-status', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     Artisan::call('migrate:status');
     $output = Artisan::output();
     echo nl2br($output); // Convert newlines to <br> for better readability in HTML
@@ -610,6 +682,10 @@ Route::get('migrate-status', function () {
 
 // // Rollback last step Migration Route
 Route::get('/rollback', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     Artisan::call('migrate:rollback');
 
     return redirect()->back();
@@ -617,6 +693,10 @@ Route::get('/rollback', function () {
 
 // // Storage Link
 Route::get('/storage-link', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     Artisan::call('storage:link');
 
     return redirect()->back();
@@ -624,12 +704,20 @@ Route::get('/storage-link', function () {
 
 // Clear Config
 Route::get('/clear', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     Artisan::call('optimize:clear');
 
     return redirect()->back();
 });
 
 Route::get('/add-url', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     $envUpdates = [
         'APP_URL' => Request::root(),
     ];
@@ -637,12 +725,20 @@ Route::get('/add-url', function () {
 })->name('add-url-in-env');
 
 Route::get('/seed-demo-data', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     Artisan::call('db:seed', ['--class' => 'DemoDataSeeder']);
     $output = Artisan::output();
     echo nl2br($output); // Convert newlines to <br> for better readability in HTML
 });
 
 Route::get('/run-scheduler', function () {
+    if (app()->environment() === 'production' && ! Auth::check()) {
+        abort(404);
+    }
+
     if (Cache::has('scheduler_running')) {
         return response()->json(['status' => 'Already processed recently']);
     }
@@ -653,3 +749,5 @@ Route::get('/run-scheduler', function () {
 
     return response()->json(['status' => 'Scheduler processed']);
 });
+
+

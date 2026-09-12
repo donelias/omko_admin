@@ -11,6 +11,17 @@ use Illuminate\Support\Facades\Log;
 class ResponseService
 {
     /**
+     * Responses sent via Response::send() + exit bypass the HandleCors middleware,
+     * so the CORS headers must be emitted manually (mirrors the Apache .htaccess rules).
+     */
+    public static function corsHeaders()
+    {
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: POST, GET, DELETE, PUT, PATCH, OPTIONS');
+        header('Access-Control-Allow-Headers: token, Content-Type, authorization, x-active-role, content-language');
+    }
+
+    /**
      * @return Application|RedirectResponse|Redirector|true
      */
     public static function noPermissionThenRedirect($permission)
@@ -112,6 +123,7 @@ class ResponseService
      */
     public static function successResponse(string $message = 'Success', $data = null, array $customData = [], $code = null)
     {
+        self::corsHeaders();
         response()->json(array_merge([
             'error' => false,
             'message' => trans($message),
@@ -151,6 +163,7 @@ class ResponseService
             }
         }
 
+        self::corsHeaders();
         response()->json([
             'error' => true,
             'message' => trans($message),
@@ -180,6 +193,7 @@ class ResponseService
      */
     public static function warningResponse(string $message = 'Error Occurred', $data = null, $code = null)
     {
+        self::corsHeaders();
         response()->json([
             'error' => false,
             'warning' => true,

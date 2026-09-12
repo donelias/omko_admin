@@ -1,4 +1,4 @@
-// Bootstrap Table Localization for ebroker-admin
+// Bootstrap Table Localization for omko-admin
 // This file MUST be loaded after bootstrap-table.min.js
 // window.trans and window.currentLocale must be set before this file loads
 

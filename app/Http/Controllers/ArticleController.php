@@ -29,7 +29,7 @@ class ArticleController extends Controller
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
 
-        $articles = Article::all()->with('translations');
+        $articles = Article::with('translations')->get();
 
         return view('article.index', ['articles' => $articles]);
     }
@@ -170,7 +170,7 @@ class ArticleController extends Controller
                 $operate .= BootstrapTableService::editButton(route('article.edit', $row->id), false, null, null, null, null);
             }
             if (has_permissions('delete', 'article')) {
-                $operate .= BootstrapTableService::deleteAjaxButton(route('article.destroy', $row->id));
+                $operate .= BootstrapTableService::deleteAjaxButton(route('article.destroy.url', $row->id));
             }
 
             $tempRow = $row->toArray();

@@ -62,6 +62,11 @@ class User extends Authenticatable
         return false;
     }
 
+    public function getIsActiveAttribute()
+    {
+        return $this->status == 1;
+    }
+
     public function getProfileAttribute($image)
     {
         $path = $image ? config('global.ADMIN_PROFILE_IMG_PATH').$image : null;

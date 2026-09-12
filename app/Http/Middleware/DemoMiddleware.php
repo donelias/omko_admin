@@ -42,6 +42,10 @@ class DemoMiddleware
             // Allow demo users to approve/reject verification requests
             '/agent-verification/update-verification-status',
             '/user-verification/update-verification-status',
+
+            //Allow demo users to update their agent profile
+            // '/api/update-agent-profile',
+            // '/api/update-user-profile',
         ];
 
         // Exclude Emails

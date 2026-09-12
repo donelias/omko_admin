@@ -43,7 +43,6 @@ class CustomPageController extends Controller
         $request->validate([
             'title' => 'required',
             'slug' => 'nullable|regex:/^[a-z0-9-]+$/|unique:custom_pages,slug_id',
-            'icon' => 'nullable|image|mimes:jpg,png,jpeg,webp|max:2048',
             'content' => 'required',
         ]);
 
@@ -55,10 +54,6 @@ class CustomPageController extends Controller
             $page->slug_id = $request->slug ?? generateUniqueSlug($request->title, 7);
             $page->content = $request->content;
             $page->status = $request->status ?? 1;
-
-            if ($request->hasFile('icon')) {
-                $page->icon = FileService::compressAndUpload($request->file('icon'), config('global.CUSTOM_PAGE_ICON_PATH'));
-            }
 
             $page->save();
 
@@ -165,7 +160,6 @@ class CustomPageController extends Controller
         $request->validate([
             'title' => 'required',
             'slug' => 'nullable|regex:/^[a-z0-9-]+$/|unique:custom_pages,slug_id,'.$id.',id',
-            'icon' => 'nullable|image|mimes:jpg,png,jpeg,webp|max:2048',
             'content' => 'required',
         ]);
 
@@ -177,11 +171,6 @@ class CustomPageController extends Controller
             $page->slug_id = $request->slug ?? generateUniqueSlug($request->title, 7, null, $id);
             $page->content = $request->content;
             $page->status = $request->has('status') ? $request->status : $page->status;
-
-            if ($request->hasFile('icon')) {
-                $rawIcon = $page->getRawOriginal('icon');
-                $page->icon = FileService::compressAndReplace($request->file('icon'), config('global.CUSTOM_PAGE_ICON_PATH'), $rawIcon);
-            }
 
             $page->save();
 

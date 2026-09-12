@@ -130,9 +130,7 @@ class PayAsYouGoController extends Controller
             ResponseService::errorResponse(PERMISSION_ERROR_MSG);
         } else {
             PayAsYouGo::where('id', $request->id)->update(['status' => $request->status]);
-            $response['error'] = false;
-
-            return response()->json($response);
+            ResponseService::successResponse($request->status ? 'Package Activated Successfully' : 'Package Deactivated Successfully');
         }
     }
 }

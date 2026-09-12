@@ -27,15 +27,9 @@ class PaymentApiController extends Controller
     public function get_payment_settings(Request $request)
     {
         $payment_settings = Setting::select('type', 'data')->whereIn('type', ['paypal_gateway', 'razorpay_gateway', 'paystack_gateway', 'stripe_gateway', 'flutterwave_status', 'cashfree_gateway', 'bank_transfer_status', 'phonepe_gateway', 'midtrans_gateway'])->get();
-        foreach ($payment_settings as $setting) {
-            if ($setting->type === 'stripe_secret_key') {
-                $publicKey = file_get_contents(base_path('public_key.pem')); // Load the public key
-                $encryptedData = '';
-                if (openssl_public_encrypt($setting->data, $encryptedData, $publicKey)) {
-                    $setting->data = base64_encode($encryptedData);
-                }
-            }
-        }
+
+        // NOTE: No secret keys (e.g. stripe_secret_key) are ever returned to clients.
+        // Only gateway status/configuration flags are exposed for the payment UI.
 
         if (count($payment_settings)) {
             $response['error'] = false;
@@ -91,8 +85,10 @@ class PaymentApiController extends Controller
         $validator = Validator::make($request->all(), [
             'package_id' => 'required_without:pay_as_you_go_id',
             'pay_as_you_go_id' => 'required_without:package_id',
-            'payment_method' => 'required|in:razorpay,paystack,stripe,flutterwave,paypal,cashfree,phonepe,midtrans',
+            'payment_method' => 'required|in:razorpay,paystack,stripe,flutterwave,paypal,cashfree,phonepe,midtrans,mock',
             'platform_type' => 'required|in:app,web',
+            'property_id' => 'nullable|integer',
+            'project_id' => 'nullable|integer',
         ]);
         if ($validator->fails()) {
             ApiResponseService::validationError($validator->errors()->first());
@@ -122,6 +118,8 @@ class PaymentApiController extends Controller
                 $paymentTransactionData = PaymentTransaction::create([
                     'user_id' => $loggedInUserId,
                     'pay_as_you_go_id' => $payAsYouGo->id,
+                    'property_id' => $request->property_id ?? null,
+                    'project_id' => $request->project_id ?? null,
                     'amount' => $amount,
                     'payment_gateway' => Str::ucfirst($paymentSettings['payment_method']),
                     'payment_status' => 'pending',
@@ -158,6 +156,8 @@ class PaymentApiController extends Controller
                 $paymentTransactionData = PaymentTransaction::create([
                     'user_id' => $loggedInUserId,
                     'package_id' => $package->id,
+                    'property_id' => $request->property_id ?? null,
+                    'project_id' => $request->project_id ?? null,
                     'amount' => $amount,
                     'payment_gateway' => Str::ucfirst($paymentSettings['payment_method']),
                     'payment_status' => 'pending',
@@ -213,7 +213,12 @@ class PaymentApiController extends Controller
             ApiResponseService::validationError($validator->errors()->first());
         }
         try {
-            PaymentTransaction::where('id', $request->payment_transaction_id)->update(['payment_status' => 'failed']);
+            $paymentTransaction = PaymentTransaction::findOrFail($request->payment_transaction_id);
+            // Authorization: a user may only fail their own payment transaction
+            if (! Auth::check() || intval($paymentTransaction->user_id) !== intval(Auth::user()->id)) {
+                ApiResponseService::validationError(trans('Unauthorized'));
+            }
+            $paymentTransaction->update(['payment_status' => 'failed']);
             ApiResponseService::successResponse('Data Updated Successfully');
         } catch (Throwable $e) {
             DB::rollBack();
@@ -231,7 +236,7 @@ class PaymentApiController extends Controller
                 'file' => 'required|file|mimes:jpeg,png,jpg,pdf,doc,docx,webp|max:3072',
             ],[
 
-            'file.max' => __('Maximum file size is 3MB.'),
+            'file.max' => __('File size exceeds the :max limit. Please upload a smaller file.'),
             ]);
 
             if ($validator->fails()) {
@@ -342,6 +347,11 @@ class PaymentApiController extends Controller
             $paymentTransaction = PaymentTransaction::findOrFail($request->payment_transaction_id);
             if (empty($paymentTransaction)) {
                 ApiResponseService::validationError('Payment Transaction Not Found');
+            }
+
+            // Authorization: a user may only upload a bank receipt for their own payment transaction
+            if (! Auth::check() || intval($paymentTransaction->user_id) !== intval(Auth::user()->id)) {
+                ApiResponseService::validationError(trans('Unauthorized'));
             }
 
             if ($paymentTransaction->payment_type != 'bank transfer') {

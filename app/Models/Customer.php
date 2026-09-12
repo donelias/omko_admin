@@ -3,17 +3,18 @@
 namespace App\Models;
 
 use App\Services\FileService;
-use App\Services\HelperService;
 use App\Traits\HasAppTimezone;
+use Illuminate\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Model;
 use Laravel\Sanctum\HasApiTokens;
 
-// class Customer extends Authenticatable implements JWTSubject
-class Customer extends Authenticatable
+class Customer extends Model implements AuthenticatableContract
 {
-    use HasApiTokens, HasAppTimezone, HasFactory;
+    use Authenticatable, HasApiTokens, HasAppTimezone, HasFactory;
+
+    protected $table = 'customers';
 
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
@@ -24,12 +25,14 @@ class Customer extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'slug_id',
+        'auth_id',
         'email',
         'password',
-        'auth_id',
-        'mobile',
+        'full_mobile',
         'country_code',
         'default_language',
+        'mobile',
         'profile',
         'address',
         'fcm_id',
@@ -37,122 +40,126 @@ class Customer extends Authenticatable
         'is_admin_added',
         'is_email_verified',
         'isActive',
-        'slug_id',
+        'is_agent',
+        'is_agent_verified',
+        'api_token',
         'notification',
+        'subscription',
+        'twiiter_id',
         'latitude',
         'longitude',
         'city',
         'state',
         'country',
-        'is_agent',
-        'is_agent_verified',
-        'created_at',
-        'updated_at',
+        'is_premium',
     ];
 
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array<int, string>
+     */
     protected $hidden = [
-        'api_token',
+        'password',
     ];
 
-    protected $casts = [
-        'isActive' => 'boolean',
-        'notification' => 'boolean',
-        'is_admin_added' => 'boolean',
-        'is_email_verified' => 'boolean',
-        'is_agent' => 'boolean',
-        'is_agent_verified' => 'boolean',
-    ];
-
-    protected $appends = [
-        'is_user_verified',
-        'is_agent',
-        'is_agent_verified',
-        // 'become_agent_status',
-        // 'agent_verification_status',
-        // 'user_verification_status'
-    ];
-
-    protected static function boot()
+    public function getProfileAttribute($image)
     {
-        parent::boot();
-        static::deleting(static function ($customer) {
-            if (collect($customer)->isNotEmpty()) {
-                // before delete() method call this
-                $userId = $customer->id;
+        if (filter_var($image, FILTER_VALIDATE_URL)) {
+            return $image;
+        }
 
-                /** Delete Directly with delete query */
-                Projects::where('added_by', $userId)->delete();
-                Notifications::where('customers_id', $userId)->delete();
-                Advertisement::where('customer_id', $userId)->delete();
-                UserPackage::where('user_id', $userId)->delete();
+        $path = $image ? config('global.CUSTOMER_PROFILE_IMG_PATH').$image : null;
 
-                /** Delete Payment Transactions */
-                $paymentTransactions = PaymentTransaction::where('user_id', $userId)->get();
-                foreach ($paymentTransactions as $paymentTransaction) {
-                    $paymentTransaction->delete();
-                }
-
-                /** Delete with modal boot events */
-                $properties = Property::where('added_by', $userId)->get();
-                foreach ($properties as $property) {
-                    if (! empty($property)) {
-                        $property->delete(); // This will trigger the deleting and deleted events in modal
-                    }
-                }
-                $chats = Chats::where('sender_id', $userId)->orWhere('receiver_id', $userId)->get();
-                foreach ($chats as $chat) {
-                    if (collect($chat)->isNotEmpty()) {
-                        $chat->delete(); // This will trigger the deleting and deleted events in modal
-                    }
-                }
-                user_reports::where('customer_id', $userId)->delete();
-                Usertokens::where('customer_id', $userId)->delete();
-                Favourite::where('user_id', $userId)->delete();
-                InterestedUser::where('customer_id', $userId)->delete();
-            }
-        });
+        return ! empty($path) ? FileService::getFileUrl($path) : null;
     }
 
     /**
-     * Get the identifier that will be stored in the subject claim of the JWT.
+     * Resolve the public-facing (agent) identity for this customer.
+     * Agent profile data takes priority, falling back to the customer's own
+     * fields. Mutates the model so name/email/profile reflect the resolved
+     * agent identity for serialization, and returns the resolved values.
      *
-     * @return mixed
+     * @return array{id: int|null, customer_id: int|null, agent_name: string|null, agent_email: string|null, agent_profile_photo: string|null, agent_address: string|null, agent_mobile: string|null, agent_country_code: string|null, about_me: string|null, facebook_id: string|null, twitter_id: string|null, youtube_id: string|null, instagram_id: string|null, linkedin_id: string|null, created_at: mixed, updated_at: mixed}
      */
-    public function getJWTIdentifier()
+    public function applyResolvedAgentProfile(): array
     {
-        return $this->getKey();
-    }
+        $agentProfile = $this->agent_profile;
 
-    /**
-     * Return a key value array, containing any custom claims to be added to the JWT.
-     *
-     * @return array
-     */
-    public function getJWTCustomClaims()
-    {
+        $name = $agentProfile?->agent_name ?: $this->getRawOriginal('name');
+        $email = $agentProfile?->agent_email ?: $this->getRawOriginal('email');
+
+        $photo = $agentProfile?->agent_profile_photo;
+        if (! $photo) {
+            $photo = $this->profile;
+        }
+
+        $this->name = $name;
+        $this->email = $email;
+        $this->profile = $photo;
+
         return [
+            'id' => $agentProfile?->id,
             'customer_id' => $this->id,
+            'agent_name' => $name,
+            'agent_email' => $email,
+            'agent_profile_photo' => $photo,
+            'agent_address' => $agentProfile?->agent_address,
+            'agent_mobile' => $agentProfile?->agent_mobile,
+            'agent_country_code' => $agentProfile?->agent_country_code,
+            'about_me' => $agentProfile?->about_me,
+            'facebook_id' => $agentProfile?->facebook_id,
+            'twitter_id' => $agentProfile?->twitter_id,
+            'youtube_id' => $agentProfile?->youtube_id,
+            'instagram_id' => $agentProfile?->instagram_id,
+            'linkedin_id' => $agentProfile?->linkedin_id,
+            'created_at' => $agentProfile?->created_at,
+            'updated_at' => $agentProfile?->updated_at,
         ];
     }
 
-    public function user_purchased_package()
+    /**
+     * Accessor alias for applyResolvedAgentProfile() so code that reads
+     * ->resolved_agent_profile keeps working.
+     */
+    public function getResolvedAgentProfileAttribute(): array
     {
-        return $this->hasMany(UserPackage::class, 'user_id');
+        return $this->applyResolvedAgentProfile();
     }
 
-    public function getTotalPropertiesAttribute()
+    public function usertokens()
     {
-        return Property::where('added_by', $this->id)->count();
+        return $this->hasMany(Usertokens::class, 'customer_id');
     }
 
-    public function getTotalProjectsAttribute()
+    public function agent_profile()
     {
-        return Projects::where('added_by', $this->id)->count();
+        return $this->hasOne(AgentProfile::class, 'customer_id');
     }
 
-    public function favourite()
+    public function agent_profiles()
     {
-        return $this->hasMany(Favourite::class, 'user_id');
+        return $this->hasMany(AgentProfile::class, 'customer_id');
+    }
+
+    public function verifyCustomer()
+    {
+        return $this->hasOne(VerifyCustomer::class, 'user_id');
+    }
+
+    public function verify_customer()
+    {
+        return $this->hasOne(VerifyCustomer::class, 'user_id');
+    }
+
+    public function verifyAgent()
+    {
+        return $this->hasOne(AgentVerification::class, 'customer_id')->where('form_type', 'verify_agent');
+    }
+
+    public function becomeAgent()
+    {
+        return $this->hasOne(AgentVerification::class, 'customer_id')->where('form_type', 'become_agent');
     }
 
     public function property()
@@ -165,50 +172,19 @@ class Customer extends Authenticatable
         return $this->hasMany(Projects::class, 'added_by');
     }
 
-    public function getProfileAttribute($image)
+    public function interested_users()
     {
-        // Check if $image is a valid URL
-        if (filter_var($image, FILTER_VALIDATE_URL)) {
-            return $image; // If $image is already a URL, return it as it is
-        } else {
-            $path = $image ? config('global.USER_IMG_PATH').$image : null;
-
-            return ! empty($path) ? FileService::getFileUrl($path) : null;
-        }
+        return $this->hasMany(InterestedUser::class, 'customer_id');
     }
 
-    public function getMobileAttribute($mobile)
+    public function leads()
     {
-        if (! empty($mobile)) {
-            if (env('DEMO_MODE')) {
-                if (env('DEMO_MODE') && Auth::check() != false && Auth::user()->email == 'superadmin@gmail.com') {
-                    return $mobile;
-                } else {
-                    return '****************************';
-                }
-            }
-        }
-
-        return $mobile;
+        return $this->hasMany(Lead::class, 'agent_id');
     }
 
-    public function getPhoneNumberAttribute()
+    public function ad_integration()
     {
-        if (! empty($this->country_code) && ! empty($this->getRawOriginal('mobile'))) {
-            return $this->country_code.$this->getRawOriginal('mobile');
-        }
-
-        return null;
-    }
-
-    public function usertokens()
-    {
-        return $this->hasMany(Usertokens::class, 'customer_id');
-    }
-
-    public function agent_availabilities()
-    {
-        return $this->hasMany(AgentAvailability::class, 'agent_id');
+        return $this->hasOne(AgentAdIntegration::class, 'agent_id');
     }
 
     public function agent_booking_preferences()
@@ -216,148 +192,66 @@ class Customer extends Authenticatable
         return $this->hasOne(AgentBookingPreference::class, 'agent_id');
     }
 
-    public function agent_profile()
+    public function agent_extra_time_slots()
     {
-        return $this->hasOne(AgentProfile::class, 'customer_id');
+        return $this->hasMany(AgentExtraTimeSlot::class, 'agent_id');
     }
 
-    public function getResolvedAgentProfileAttribute(): array
+    public function agent_availabilities()
     {
-        $profile = $this->agent_profile;
-
-        return [
-            'id' => $profile?->id,
-            'customer_id' => $this->id,
-            'agent_name' => $profile?->agent_name ?? $this->name,
-            'agent_email' => $profile?->agent_email ?? $this->email,
-            'agent_profile_photo' => $profile?->agent_profile_photo ?? $this->profile,
-            'agent_address' => $profile?->agent_address ?? null,
-            'agent_mobile' => $profile?->agent_mobile ?? null,
-            'agent_country_code' => $profile?->agent_country_code ?? null,
-            'about_me' => $profile?->about_me ?? null,
-            'facebook_id' => $profile?->facebook_id ?? null,
-            'twitter_id' => $profile?->twitter_id ?? null,
-            'youtube_id' => $profile?->youtube_id ?? null,
-            'instagram_id' => $profile?->instagram_id ?? null,
-            'created_at' => $profile?->created_at,
-            'updated_at' => $profile?->updated_at,
-        ];
+        return $this->hasMany(AgentAvailability::class, 'agent_id');
     }
 
-    // public function agent_verifications()
-    // {
-    //     return $this->hasMany(AgentVerification::class, 'customer_id');
-    // }
-
-    public function becomeAgent()
+    public function saved_searches()
     {
-        return $this->hasOne(AgentVerification::class, 'customer_id')
-            ->where('form_type', 'become_agent');
+        return $this->hasMany(SavedSearch::class, 'customer_id');
     }
 
-    public function verifyAgent()
+    public function favourites()
     {
-        return $this->hasOne(AgentVerification::class, 'customer_id')
-            ->where('form_type', 'verify_agent');
+        return $this->hasMany(Favourite::class, 'user_id');
     }
 
-    public function verifyCustomer()
+    public function user_packages()
     {
-        return $this->hasOne(VerifyCustomer::class, 'user_id');
+        return $this->hasMany(UserPackage::class, 'user_id');
     }
 
-    // public function become_agent_verification()
-    // {
-    //     return $this->hasOne(AgentVerification::class, 'customer_id')->where('form_type', 'become_agent');
-    // }
-
-    // public function agent_verification()
-    // {
-    //     return $this->hasOne(AgentVerification::class, 'customer_id')->where('form_type', 'verify_agent');
-    // }
-
-    // public function user_verification()
-    // {
-    //     return $this->hasOne(VerifyCustomer::class, 'user_id')->select('user_id', 'status');
-
-    // }
-
-    // public function getBecomeAgentStatusAttribute()
-    // {
-    //    return $this->become_agent_verification()->status;
-    // }
-
-    // public function getAgentVerificationStatusAttribute()
-    // {
-    //     return $this->agent_verification()->status ?? "not_applied";
-    // }
-    // public function getUserVerificationStatusAttribute()
-    // {
-    //     return $this->user_verification()->status ?? "not_applied";
-    // }
-
-    /**
-     * Get the user associated with the Customer
-     */
-    // public function verify_customer()
-    // {
-    //     return $this->hasOne(VerifyCustomer::class, 'user_id');
-    // }
-
-    public function getIsUserVerifiedAttribute()
+    public function payments()
     {
-        return $this->whereHas('verifyCustomer', function ($query) {
-            $query->where(['user_id' => $this->id, 'status' => 'approved']);
-        })->exists() ? true : false;
+        return $this->hasMany(Payments::class, 'customer_id');
     }
 
-    public function getIsDemoUserAttribute()
+    public function payment_transactions()
     {
-        return env('DEMO_MODE') && $this->email == 'wrteamdemo@gmail.com' && $this->getRawOriginal('mobile') == '1234567890' && $this->country_code == '91' && $this->logintype == '1' ? true : false;
+        return $this->hasMany(PaymentTransaction::class, 'user_id');
     }
 
-    public function getIsAgentAttribute()
+    public function appointments()
     {
-        return (bool) $this->getRawOriginal('is_agent');
+        return $this->hasMany(Appointment::class, 'user_id');
     }
 
-    public function getIsAgentVerifiedAttribute()
+    public function chats()
     {
-        return (bool) $this->getRawOriginal('is_agent_verified');
+        return $this->hasMany(Chats::class, 'sender_id');
     }
 
-    public function activateAgent(): bool
+    public function stories()
     {
-        return $this->update(['is_agent' => true]);
+        return $this->hasMany(Story::class, 'agent_id');
     }
 
-    public function deactivateAgent(): bool
+    public function scopeWithStoryStatus($query)
     {
-        return $this->update(['is_agent' => false, 'is_agent_verified' => false]);
-    }
-
-    public function getIsAppointmentAvailableAttribute()
-    {
-        $status = false;
-        if ($this->is_user_verified) {
-            $propertyExists = $this->property()->where(['status' => 1, 'request_status' => 'approved'])->whereIn('propery_type', [0, 1])->exists();
-            $appointmentScheduleExists = $this->agent_availabilities()->where('is_active', 1)->exists();
-            $status = $propertyExists && $appointmentScheduleExists ? true : false;
-        }
-
-        return $status;
-    }
-
-    public function getTimezone($getForAgent = false)
-    {
-        if ($getForAgent) {
-            $agentBookingPreference = $this->agent_booking_preferences;
-            if ($agentBookingPreference) {
-                return $agentBookingPreference->timezone ?? 'UTC';
-            }
-        }
-        $adminTimezone = HelperService::getSettingData('timezone') ?? config('app.timezone');
-
-        return $adminTimezone;
+        return $query->addSelect([
+            'story_status' => Story::query()
+                ->selectRaw('CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END')
+                ->whereColumn('stories.agent_id', 'customers.id')
+                ->where('stories.is_active', true)
+                ->where(function ($q) {
+                    $q->whereNull('stories.expires_at')->orWhere('stories.expires_at', '>', now());
+                }),
+        ]);
     }
 }

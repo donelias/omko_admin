@@ -13,38 +13,15 @@ use Intervention\Image\Facades\Image;
 
 class FileService
 {
-    private const PROPERTY_IMAGE_WIDTH = 1500;
-
-    private const PROPERTY_IMAGE_HEIGHT = 1026;
-
-    private const PROPERTY_TITLE_TARGET_BYTES = 220000;
-
-    private const PROPERTY_TITLE_QUALITY_MAX = 94;
-
-    private const PROPERTY_TITLE_QUALITY_MIN = 88;
-
-    private const PROPERTY_GALLERY_TARGET_BYTES = 146559;
-
-    private const PROPERTY_GALLERY_QUALITY_MAX = 92;
-
-    private const PROPERTY_GALLERY_QUALITY_MIN = 82;
-
-    private const PROPERTY_QUALITY_STEP = 2;
-
     /**
      * Compress and upload an image (optional watermark)
      *
      * @return string|false
      */
-    public static function compressAndUpload($requestFile, string $folder, bool $addWaterMark = false)
+    public static function compressAndUpload($requestFile, string $folder, bool $addWaterMark = false, $watermarkAgentId = null)
     {
         $filenameWithoutExt = pathinfo($requestFile->getClientOriginalName(), PATHINFO_FILENAME);
         $extension = strtolower($requestFile->getClientOriginalExtension());
-        if (empty($extension)) {
-            $mime = $requestFile->getMimeType();
-            $map = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'application/pdf' => 'pdf'];
-            $extension = $map[$mime] ?? 'jpg';
-        }
         $fileName = time().'-'.Str::slug($filenameWithoutExt).'.'.$extension;
         $disk = 'public';
         $path = $folder.''.$fileName;
@@ -56,27 +33,7 @@ class FileService
                 // Compress and save image
                 try {
                     Log::info('FileService::compressAndUpload: Calling Image::make');
-                    $image = Image::make($requestFile);
-                    $propertyImageProfile = self::getPropertyImageProfile($folder);
-
-                    if (! empty($propertyImageProfile)) {
-                        // Keep composition and avoid quality loss from forced crop/upscale.
-                        $image->resize(self::PROPERTY_IMAGE_WIDTH, self::PROPERTY_IMAGE_HEIGHT, function ($constraint) {
-                            $constraint->aspectRatio();
-                            $constraint->upsize();
-                        });
-
-                        $image = self::encodeWithTargetSize(
-                            $image,
-                            $extension,
-                            $propertyImageProfile['target_bytes'],
-                            $propertyImageProfile['quality_max'],
-                            $propertyImageProfile['quality_min'],
-                            self::PROPERTY_QUALITY_STEP
-                        );
-                    } else {
-                        $image = $image->encode($extension, 80);
-                    }
+                    $image = Image::make($requestFile)->encode($extension, 80);
                     Log::info('FileService::compressAndUpload: Image made');
                 } catch (\Throwable $e) {
                     Log::error('FileService::compressAndUpload: Image::make failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
@@ -117,56 +74,27 @@ class FileService
                     ]);
                 }
 
-                // Queue watermark if enabled
-                if ($addWaterMark && HelperService::getWatermarkConfigStatus()) {
-                    AddWatermarkJob::dispatch($absolutePath, $extension)->delay(now()->addSeconds(5)); // small safety delay
+                // Queue watermark if a valid admin or agent config is available.
+                // Callers must pass $watermarkAgentId explicitly for agent uploads —
+                // a null id means the upload is not agent-context (e.g. user role),
+                // so only the admin watermark config may apply.
+                if ($addWaterMark) {
+                    $watermarkConfig = HelperService::resolveListingWatermarkConfig($watermarkAgentId);
+                    Log::info('FileService: watermark dispatch check', [
+                        'file'              => $fileName,
+                        'watermark_agent_id' => $watermarkAgentId,
+                        'config_source'     => $watermarkConfig['source'] ?? 'none',
+                        'dispatching'       => ! empty($watermarkConfig),
+                    ]);
+                    if (! empty($watermarkConfig)) {
+                        AddWatermarkJob::dispatch($absolutePath, $extension, $watermarkConfig)->delay(now()->addSeconds(5));
+                    }
                 }
 
                 return $fileName;
             }
 
-            if (in_array($extension, ['pdf'])) {
-                $minSizeForCompression = 512 * 1024; // skip PDFs under 512KB
-                $tempInput = $requestFile->getPathname();
-
-                if (filesize($tempInput) > $minSizeForCompression) {
-                    $tempOutput = tempnam(sys_get_temp_dir(), 'pdf_compressed_') . '.pdf';
-
-                    $gsCommand = sprintf(
-                        'gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook -dNOPAUSE -dQUIET -dBATCH -sOutputFile=%s %s 2>&1',
-                        escapeshellarg($tempOutput),
-                        escapeshellarg($tempInput)
-                    );
-
-                    Log::info('FileService::compressAndUpload: Compressing PDF', ['input' => $tempInput, 'size' => filesize($tempInput)]);
-
-                    exec($gsCommand, $gsOutput, $exitCode);
-
-                    if ($exitCode === 0 && file_exists($tempOutput) && filesize($tempOutput) > 0 && filesize($tempOutput) < filesize($tempInput)) {
-                        Log::info('FileService::compressAndUpload: PDF compressed', [
-                            'original' => filesize($tempInput),
-                            'compressed' => filesize($tempOutput),
-                            'ratio' => round(filesize($tempOutput) / filesize($tempInput) * 100, 1) . '%',
-                        ]);
-
-                        Storage::disk($disk)->put($path, file_get_contents($tempOutput));
-                    } else {
-                        Log::warning('FileService::compressAndUpload: PDF compression failed or no reduction, using original', [
-                            'exitCode' => $exitCode,
-                            'gsOutput' => implode("\n", $gsOutput),
-                        ]);
-                        $requestFile->storeAs($folder, $fileName, $disk);
-                    }
-
-                    if (file_exists($tempOutput)) {
-                        unlink($tempOutput);
-                    }
-
-                    return $fileName;
-                }
-            }
-
-            // Non-image files (PDFs under threshold or other types)
+            // Non-image files
             $requestFile->storeAs($folder, $fileName, $disk);
 
             return $fileName;
@@ -183,13 +111,7 @@ class FileService
      */
     public static function upload($requestFile, string $folder): string
     {
-        $extension = strtolower($requestFile->getClientOriginalExtension());
-        if (empty($extension)) {
-            $mime = $requestFile->getMimeType();
-            $map = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'application/pdf' => 'pdf'];
-            $extension = $map[$mime] ?? 'jpg';
-        }
-        $fileName = uniqid('', true).time().'.'.$extension;
+        $fileName = uniqid('', true).time().'.'.$requestFile->getClientOriginalExtension();
         $requestFile->storeAs($folder, $fileName, 'public');
 
         return $folder.'/'.$fileName;
@@ -208,13 +130,13 @@ class FileService
     /**
      * Compress and replace an existing image
      */
-    public static function compressAndReplace($requestFile, string $folder, $deleteRawOriginalImage, bool $addWaterMark = false)
+    public static function compressAndReplace($requestFile, string $folder, $deleteRawOriginalImage, bool $addWaterMark = false, $watermarkAgentId = null)
     {
         if (! empty($deleteRawOriginalImage)) {
             self::delete($folder, $deleteRawOriginalImage);
         }
 
-        return self::compressAndUpload($requestFile, $folder, $addWaterMark);
+        return self::compressAndUpload($requestFile, $folder, $addWaterMark, $watermarkAgentId);
     }
 
     /**
@@ -315,50 +237,6 @@ class FileService
         };
 
         return 'data:'.$mime.';base64,'.$base64;
-    }
-
-    private static function getPropertyImageProfile(string $folder): ?array
-    {
-        $normalizedFolder = trim($folder, '/');
-        $propertyTitlePath = trim(config('global.PROPERTY_TITLE_IMG_PATH'), '/');
-        $propertyGalleryPath = trim(config('global.PROPERTY_GALLERY_IMG_PATH'), '/');
-
-        if (str_starts_with($normalizedFolder, $propertyTitlePath)) {
-            return [
-                'target_bytes' => self::PROPERTY_TITLE_TARGET_BYTES,
-                'quality_max' => self::PROPERTY_TITLE_QUALITY_MAX,
-                'quality_min' => self::PROPERTY_TITLE_QUALITY_MIN,
-            ];
-        }
-
-        if (str_starts_with($normalizedFolder, $propertyGalleryPath)) {
-            return [
-                'target_bytes' => self::PROPERTY_GALLERY_TARGET_BYTES,
-                'quality_max' => self::PROPERTY_GALLERY_QUALITY_MAX,
-                'quality_min' => self::PROPERTY_GALLERY_QUALITY_MIN,
-            ];
-        }
-
-        return null;
-    }
-
-    private static function encodeWithTargetSize($image, string $extension, int $targetBytes, int $qualityMax, int $qualityMin, int $qualityStep)
-    {
-        $best = $image->encode($extension, $qualityMax);
-        if (strlen((string) $best) <= $targetBytes) {
-            return $best;
-        }
-
-        for ($quality = $qualityMax - $qualityStep; $quality >= $qualityMin; $quality -= $qualityStep) {
-            $candidate = $image->encode($extension, $quality);
-            $best = $candidate;
-
-            if (strlen((string) $candidate) <= $targetBytes) {
-                break;
-            }
-        }
-
-        return $best;
     }
 
     /**

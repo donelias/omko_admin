@@ -128,12 +128,6 @@
                         {{ Form::label('price', __('Price') . '(' . $currency_symbol . ')', ['class' => 'form-label col-12 ']) }}
                         {{ Form::number('price', isset($list->price) ? $list->price : '', ['class' => 'form-control ', 'placeholder' => __('Price'), 'required' => 'true', 'min' => '1', 'max' => '9223372036854775807', 'id' => 'price']) }}
                     </div>
-
-                    {{-- Currency --}}
-                    <div class="control-label col-12 form-group mandatory">
-                        {{ Form::label('currency', __('Currency'), ['class' => 'form-label col-12']) }}
-                        {{ Form::select('currency', ['USD' => 'USD', 'DOP' => 'RD$'], isset($list->currency) ? $list->currency : 'USD', ['class' => 'form-select', 'required' => true]) }}
-                    </div>
                 </div>
             </div>
         </div>
@@ -608,11 +602,20 @@
     </div>
 @endsection
 @section('script')
-    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
-    <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @if (system_setting('map_service_provider') === 'open_street_maps')
+        <script>window.MAP_SERVICE_PROVIDER = 'open_street_maps';</script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="{{ asset('assets/js/osm-maps-helper.js') }}"></script>
+        <script>jQuery(document).ready(function () { if (typeof initMap === 'function') initMap(); });</script>
+    @else
+        <script>window.MAP_SERVICE_PROVIDER = 'google_maps';</script>
+        <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key={{ env('MAP_API_KEY') }}&libraries=marker,places&loading=async&callback=initMap" async defer></script>
+        <script src="{{ asset('assets/js/maps-helper.js') }}"></script>
+    @endif
     <script>
         function initMap() {
-            window.initBackendPlacesMap({
+            var mapOptions = {
                 defaultLatitudeSelector: '#latitude',
                 defaultLongitudeSelector: '#longitude',
                 mapElementId: 'map',
@@ -623,7 +626,12 @@
                 addressSelector: '#address',
                 latitudeSelector: '#latitude',
                 longitudeSelector: '#longitude'
-            });
+            };
+            if (window.MAP_SERVICE_PROVIDER === 'open_street_maps') {
+                window.initOsmPlacesMap(mapOptions);
+            } else {
+                window.initBackendPlacesMap(mapOptions);
+            }
         }
 
         $(document).ready(function() {

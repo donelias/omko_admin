@@ -53,9 +53,7 @@ class PaymentController extends Controller
                 $query->where('payment_type', 'manual');
             })
             ->when(! empty($roleFilter), function ($query) use ($roleFilter) {
-                $query->whereHas('customer', function ($q) use ($roleFilter) {
-                    $q->where('is_agent', $roleFilter === 'agent' ? 1 : 0);
-                });
+                $query->where('role_context', $roleFilter);
             })
             ->when($request->has('search') && ! empty($search), function ($query) use ($search) {
                 $query->where(function ($searchQuery) use ($search) {
@@ -160,7 +158,7 @@ class PaymentController extends Controller
                     $tempRow['operate'] = BootstrapTableService::button('bi bi-receipt', '', $receiptButtonClasses, $receiptButtonAttributes);
                 }
             }
-            $tempRow['customer_role'] = ($row->customer && $row->customer->is_agent) ? 'agent' : 'user';
+            $tempRow['customer_role'] = $row->role_context ?? 'user';
             $tempRow['price_symbol'] = $priceSymbol;
             $rows[] = $tempRow;
             $count++;
@@ -276,6 +274,7 @@ class PaymentController extends Controller
                 'type' => '1',
                 'send_type' => '0',
                 'customers_id' => $payment->customer_id,
+                'role_context' => $payment->role_context ?? 'user',
             ]);
             DB::commit();
 

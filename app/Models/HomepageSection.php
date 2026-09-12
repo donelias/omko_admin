@@ -21,6 +21,7 @@ class HomepageSection extends Model
      */
     protected $fillable = [
         'title',
+        'app_title',
         'section_type',
         'is_active',
         'sort_order',
@@ -50,5 +51,10 @@ class HomepageSection extends Model
     public function getTranslatedTitleAttribute()
     {
         return HelperService::getTranslatedData($this, $this->title, 'title');
+    }
+
+    public function getTranslatedAppTitleAttribute()
+    {
+        return HelperService::getTranslatedData($this, $this->app_title, 'app_title');
     }
 }

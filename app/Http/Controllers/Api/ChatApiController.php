@@ -116,8 +116,8 @@ class ChatApiController extends Controller
             }
             $username = $customer->name;
         } else {
-            $user_data = User::select('fcm_id', 'name')->get();
-            $username = 'Admin';
+            $user_data = User::select('fcm_id', 'name', 'type')->get();
+            $username = $user_data->where('type', 0)->first()?->name ?? 'Admin';
             foreach ($user_data as $user) {
                 array_push($fcm_id, $user->fcm_id);
             }
@@ -294,6 +294,7 @@ class ChatApiController extends Controller
             $adminData = User::where('type', 0)->select('id', 'name', 'profile')->first();
             $userId = $request->user_id;
             $reciever = Customer::find($request->user_id);
+            $property = Property::select('id', 'slug_id')->find($request->property_id);
 
             Chats::where([
                 'property_id' => $request->property_id,
@@ -384,6 +385,8 @@ class ChatApiController extends Controller
                     'is_agent_verified' => $reciever->is_agent_verified ?? false,
                     'is_user_verified' => $reciever->is_user_verified ?? false,
                     'is_admin' => $reciever?->id == 0 ? true : false,
+                    'property_slug_id' => $property->slug_id ?? '',
+                    'sender_slug_id' => $reciever->slug_id ?? '',
                 ]);
 
             } else {
@@ -692,7 +695,7 @@ class ChatApiController extends Controller
         $page = $request->page ?? 1;
         $role_context = $request->user_active_role;
 
-        $adminData = User::where('type', 0)->select('id', 'name', 'profile')->first();
+        $adminData = User::where('type', 0)->select('id', 'name', 'profile', 'slug_id')->first();
 
         $chats = Chats::with(['sender', 'receiver', 'property.translations'])
             ->where(function ($query) use ($current_user, $role_context) {
@@ -719,6 +722,7 @@ class ChatApiController extends Controller
 
             $tempRow = [];
             $tempRow['property_id'] = $row->property_id;
+            $tempRow['property_slug_id'] = $row->property->slug_id ?? '';
             $tempRow['title'] = $row->property->title ?? '';
             $tempRow['translated_title'] = $row->property->translated_title ?? '';
             $tempRow['title_image'] = $row->property->title_image ?? '';
@@ -748,7 +752,8 @@ class ChatApiController extends Controller
                 $tempRow['is_blocked_by_user'] = $blockedByAdmin;
 
                 $tempRow['user_id'] = 0;
-                $tempRow['name'] = 'Admin';
+                $tempRow['sender_slug_id'] = $adminData->slug_id ?? '';
+                $tempRow['name'] = $adminData->name ?? 'Admin';
                 $tempRow['profile'] = ! empty($adminData->getRawOriginal('profile'))
                     ? $adminData->profile
                     : url('assets/images/faces/2.jpg');
@@ -786,6 +791,7 @@ class ChatApiController extends Controller
                 }
 
                 $tempRow['user_id'] = $other->id;
+                $tempRow['sender_slug_id'] = $other->slug_id ?? '';
                 $tempRow['name'] = $other->name;
                 $tempRow['profile'] = $other->profile;
                 $tempRow['fcm_id'] = $other->fcm_id;
@@ -835,6 +841,12 @@ class ChatApiController extends Controller
             if (isset($request->message_id)) {
                 $chat = Chats::where('id', $request->message_id)->first();
                 if ($chat !== null) {
+                    // Authorization: only a participant of the conversation may delete the message
+                    $currentUserId = Auth::check() ? intval(Auth::user()->id) : null;
+                    $isParticipant = $currentUserId !== null && (intval($chat->sender_id) === $currentUserId || intval($chat->receiver_id) === $currentUserId);
+                    if (! $isParticipant) {
+                        ApiResponseService::validationError(trans('Unauthorized'));
+                    }
                     if (! empty($fcmId)) {
                         $registrationIDs = array_filter($fcmId);
                         $fcmMsg = [
@@ -858,6 +870,12 @@ class ChatApiController extends Controller
                     ApiResponseService::successResponse('No Data Found');
                 }
             } elseif (isset($request->sender_id) && isset($request->receiver_id) && isset($request->property_id)) {
+                // Authorization: the authenticated user must be one of the two conversation participants
+                $currentUserId = Auth::check() ? intval(Auth::user()->id) : null;
+                $isParticipant = $currentUserId !== null && (intval($request->sender_id) === $currentUserId || intval($request->receiver_id) === $currentUserId);
+                if (! $isParticipant) {
+                    ApiResponseService::validationError(trans('Unauthorized'));
+                }
                 $userChat = Chats::where('property_id', $request->property_id)->where(function ($query) use ($request) {
                     $query->where(function ($query) use ($request) {
                         $query->where('sender_id', $request->sender_id)->where('receiver_id', $request->receiver_id);

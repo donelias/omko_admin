@@ -23,12 +23,15 @@ use App\Models\UserInterest;
 use App\Models\VerifyCustomer;
 use App\Rules\VideoUrlRule;
 use App\Services\ApiResponseService;
+use App\Services\AuditLogService;
 use App\Services\FileService;
 use App\Services\HelperService;
 use App\Services\ResponseService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
+use App\Models\Notifications;
+use App\Models\Usertokens;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -78,7 +81,7 @@ class PropertyApiController extends Controller
                 'property' => function ($query) {
                     $query->onlyActive();
                 },
-            ]);
+            ])->withStoryStatus();
         }, 'user', 'category' => function ($categoryQuery) {
             $categoryQuery->select('id', 'category', 'image', 'slug_id')->with('translations');
         }, 'parameters', 'favourite', 'interested_users', 'translations'])->onlyActive();
@@ -109,11 +112,9 @@ class PropertyApiController extends Controller
         // If Posted Since 0 or 1 is passed
         if ($request->has('posted_since') && $request->posted_since !== '') {
             $posted_since = $request->posted_since;
-            // 0 - Last Week
+            // 0 - Last Week (last 7 days)
             if ($posted_since == 0) {
-                $startDateOfWeek = Carbon::now()->subWeek()->startOfWeek();
-                $endDateOfWeek = Carbon::now()->subWeek()->endOfWeek();
-                $property = $property->whereBetween('created_at', [$startDateOfWeek, $endDateOfWeek]);
+                $property = $property->where('created_at', '>=', Carbon::now()->subWeek());
             }
             // 1 - Yesterday
             if ($posted_since == 1) {
@@ -218,7 +219,7 @@ class PropertyApiController extends Controller
         if ($request->has('search') && ! empty($request->search)) {
             $search = $request->search;
             $property = $property->where(function ($query) use ($search) {
-                $query->where('title', 'LIKE', "%$search%")
+                $this->applyTitleSearchFilter($query, $search)
                     ->orWhere('address', 'LIKE', "%$search%")
                     ->orWhereHas('category', function ($query1) use ($search) {
                         $query1->where('category', 'LIKE', "%$search%");
@@ -253,7 +254,7 @@ class PropertyApiController extends Controller
 
                 foreach ($property_details as $key => $property) {
 
-                    $customerId = $property['customer']['id'] ?? null;
+                    $customerId = $property['customer_id'] ?? $property['customer']['id'] ?? null;
 
                     // if ($customerId) {
                     //     $meta = HelperService::getCustomerMeta($customerId);
@@ -265,6 +266,14 @@ class PropertyApiController extends Controller
                     //     $property_details[$key]['become_agent_status'] = $meta['become_agent_status'] ?? 'not_applied';
                     //     $property_details[$key]['user_verification_status'] = $meta['user_verification_status'] ?? 'not_applied';
                     // }
+
+                    // Meta Ads: exponer únicamente el pixel_id del agente dueño de la
+                    // propiedad (para que el front inicialice el pixel correcto). Nunca tokens.
+                    if (($request->has('id') || $request->has('slug_id')) && $key === 0 && $customerId) {
+                        $property_details[$key]['pixel_id'] = \App\Models\AgentAdIntegration::where('agent_id', $customerId)
+                            ->where('is_active', true)
+                            ->value('pixel_id');
+                    }
                 }
                 /**
                  * Check that id or slug id passed and get the similar properties data according to param passed
@@ -272,7 +281,7 @@ class PropertyApiController extends Controller
                  * */
                 $propertyAddedAs = $property_details[0]['role_context'] ?? 'user';
                 $categoryId = $property_details[0]['category']['id'] ?? null;
-                $similarPropertyQuery = Property::onlyActive()->select('id', 'slug_id', 'category_id', 'title', 'added_by', 'role_context', 'address', 'city', 'country', 'state', 'propery_type', 'price', 'created_at', 'title_image', 'request_status', 'is_premium')->when($categoryId, function ($q) use ($categoryId) {
+                $similarPropertyQuery = Property::onlyActive()->select('id', 'slug_id', 'category_id', 'title', 'added_by', 'role_context', 'address', 'city', 'country', 'state', 'propery_type', 'price', 'currency', 'created_at', 'title_image', 'request_status', 'is_premium')->when($categoryId, function ($q) use ($categoryId) {
                     return $q->where('category_id', $categoryId);
                 })->where('role_context', $propertyAddedAs)->inRandomOrder()->with(['category.translations', 'translations', 'customer' => function ($query) {
                     $query->withCount([
@@ -282,7 +291,7 @@ class PropertyApiController extends Controller
                         'property' => function ($query) {
                             $query->onlyActive();
                         },
-                    ]);
+                    ])->withStoryStatus();
                 }])->limit(10);
                 if ((isset($id) && ! empty($id))) {
                     $getSimilarPropertiesQueryData = $similarPropertyQuery->where('id', '!=', $id)->get()->map(function ($item) {
@@ -307,9 +316,9 @@ class PropertyApiController extends Controller
                 if (! empty($getSimilarProperties)) {
                     foreach ($getSimilarProperties as $key => $property) {
 
-                        $customerId = $property['customer']['id'] ?? null;
+                            $customerId = $property['customer_id'] ?? $property['customer']['id'] ?? null;
 
-                        if ($customerId) {
+                            if ($customerId) {
                             $meta = HelperService::getCustomerMeta($customerId);
 
                             $getSimilarProperties[$key]['is_agent'] = $meta['is_agent'] ?? false;
@@ -487,9 +496,9 @@ class PropertyApiController extends Controller
                     'location.state' => 'nullable',
                     'location.city' => 'nullable',
                     'location.place_id' => 'nullable',
-                    'location.latitude' => 'nullable',
-                    'location.longitude' => 'nullable',
-                    'location.range' => 'nullable',
+                    'location.latitude' => 'nullable|numeric|between:-90,90',
+                    'location.longitude' => 'nullable|numeric|between:-180,180',
+                    'location.radius' => 'nullable|numeric|min:0',
                     'price.min_price' => 'nullable|numeric',
                     'price.max_price' => 'nullable|numeric',
                     'posted_since' => 'nullable|in:0,1,2,3,4',
@@ -504,6 +513,10 @@ class PropertyApiController extends Controller
                     'nearby_places.*.id' => 'nullable|exists:outdoor_facilities,id',
                     'nearby_places.*.value' => 'nullable|integer',
                     'role_context' => 'nullable|in:user,agent',
+                    'project_id' => 'nullable|exists:projects,id',
+                    'is_project_unit' => 'nullable|in:0,1',
+                    'availability.check_in' => 'nullable|date',
+                    'availability.check_out' => 'nullable|date|after_or_equal:availability.check_in',
                 ],
                 [
                     'property_type.in' => trans('Property type is not valid'),
@@ -544,7 +557,7 @@ class PropertyApiController extends Controller
             $minPrice = isset($filters['price']['min_price']) ? $filters['price']['min_price'] : null;
             $maxPrice = isset($filters['price']['max_price']) ? $filters['price']['max_price'] : null;
             $postedSince = $filters['posted_since'] ?? null;
-            $range = isset($filters['location']['range']) ? $filters['location']['range'] : null;
+            $range = isset($filters['location']['radius']) ? $filters['location']['radius'] : null;
             $promoted = isset($filters['flags']['promoted']) ? $filters['flags']['promoted'] : null;
             $getPremiumProperties = isset($filters['flags']['get_all_premium_properties']) ? $filters['flags']['get_all_premium_properties'] : null;
             $mostViewed = isset($filters['flags']['most_views']) ? $filters['flags']['most_views'] : null;
@@ -553,6 +566,10 @@ class PropertyApiController extends Controller
             $nearbyPlaces = isset($filters['nearby_places']) ? $filters['nearby_places'] : null;
             $title = isset($filters['title']) ? $filters['title'] : null;
             $addedAs = isset($filters['role_context']) ? $filters['role_context'] : null;
+            $projectId = isset($filters['project_id']) ? $filters['project_id'] : null;
+            $isProjectUnit = isset($filters['is_project_unit']) ? $filters['is_project_unit'] : null;
+            $availabilityCheckIn = isset($filters['availability']['check_in']) ? $filters['availability']['check_in'] : null;
+            $availabilityCheckOut = isset($filters['availability']['check_out']) ? $filters['availability']['check_out'] : null;
 
             // Create a property query
             $propertyQuery = Property::whereIn('propery_type', [0, 1])->where(function ($query) {
@@ -571,10 +588,38 @@ class PropertyApiController extends Controller
                 $propertyQuery = $propertyQuery->where('category_id', $categoryId);
             }
 
+            // If Project Id is passed (on-plan units of a project)
+            if (! empty($projectId)) {
+                $propertyQuery = $propertyQuery->where('project_id', $projectId);
+            }
+
+            // If on-plan only filter is passed
+            if (isset($isProjectUnit) && ($isProjectUnit === '0' || $isProjectUnit === '1')) {
+                $propertyQuery = $propertyQuery->where('is_project_unit', (int) $isProjectUnit);
+            }
+
+            // If availability date range is passed (short-term rental search)
+            if (! empty($availabilityCheckIn) && ! empty($availabilityCheckOut)) {
+                $propertyQuery = $propertyQuery->whereHas('availabilitySlots', function ($q) use ($availabilityCheckIn, $availabilityCheckOut) {
+                    $q->where('status', 1)
+                        ->whereDate('date_from', '<=', $availabilityCheckIn)
+                        ->whereDate('date_to', '>=', $availabilityCheckOut);
+                })->whereDoesntHave('shortTermReservations', function ($q) use ($availabilityCheckIn, $availabilityCheckOut) {
+                    $q->whereIn('status', ['pending', 'confirmed'])
+                        ->where(function ($overlap) use ($availabilityCheckIn, $availabilityCheckOut) {
+                            $overlap->whereBetween('check_in', [$availabilityCheckIn, Carbon::parse($availabilityCheckOut)->subDay()->toDateString()])
+                                ->orWhereBetween('check_out', [Carbon::parse($availabilityCheckIn)->addDay()->toDateString(), $availabilityCheckOut])
+                                ->orWhere(function ($enclose) use ($availabilityCheckIn, $availabilityCheckOut) {
+                                    $enclose->where('check_in', '<=', $availabilityCheckIn)->where('check_out', '>=', $availabilityCheckOut);
+                                });
+                        });
+                });
+            }
+
             // If Status is passed (0/1), allow filtering on status
             if ($isAiEnabled == 0 && isset($filters['search']) && $filters['search'] !== '') {
                 $propertyQuery = $propertyQuery->where(function ($whereCondition) use ($search) {
-                    $whereCondition->where('title', 'like', '%'.$search.'%')
+                    $this->applyTitleSearchFilter($whereCondition, $search)
                         ->orWhere('address', 'like', '%'.$search.'%')
                         ->orWhereHas('category', function ($query) use ($search) {
                             $query->where('category', 'like', '%'.$search.'%');
@@ -628,7 +673,7 @@ class PropertyApiController extends Controller
 
             // If Title is passed
             if (isset($title) && ! empty($title)) {
-                $propertyQuery = $propertyQuery->where('title', 'like', '%'.$title.'%');
+                $this->applyTitleSearchFilter($propertyQuery, $title);
             }
 
             // If Category Slug is Passed
@@ -753,45 +798,20 @@ class PropertyApiController extends Controller
                 $propertyQuery = $propertyQuery->where('is_premium', 1);
             }
 
-            // Add promoted_count and favourite_count for ordering
-            $propertyQuery = $propertyQuery->withCount([
-                'advertisement as promoted_count' => function ($query) {
-                    $query->where('status', 0)
-                        ->where('is_enable', 1)
-                        ->where('for', 'property')
-                        ->groupBy('property_id');
-                },
-            ])
-                ->withCount('favourite');
+            // favourite_count is needed for ordering (most_liked) and the response
+            $propertyQuery = $propertyQuery->withCount('favourite');
 
-            // Always group promoted properties first
-            $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END');
-
-            // Randomize promoted properties, order non-promoted by id descending
-            // Using a large number minus id for non-promoted to achieve DESC order in ASC context
-            if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
-                // For most viewed: randomize promoted, order non-promoted by total_click DESC
-                $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - total_click) END');
-            }
-            // If Most Liked Passed then show the property data with promoted-first and Favourite Count Descending
-            elseif (isset($mostLiked) && ! empty($mostLiked) && $mostLiked == 1) {
-                // For most liked: randomize promoted, order non-promoted by favourite_count DESC
-                $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - favourite_count) END');
-            } else {
-                // Default: randomize promoted, order non-promoted by id DESC
-                $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - id) END');
-            }
-
-            // Latitude and Longitude
+            // Latitude and Longitude (applied to the base query so both pools inherit it)
             if (isset($latitude) && ! empty($latitude) && isset($longitude) && ! empty($longitude) && $latitude != 'null' && $longitude != 'null') {
                 if (isset($range) && ! empty($range) && $range != 'null') {
                     // Get the distance from the latitude and longitude
+                    $this->applyBoundingBox($propertyQuery, $latitude, $longitude, $range);
                     $propertyQuery = $propertyQuery->selectRaw("
-                            (6371 * acos(cos(radians($latitude))
+                            (6371 * acos(cos(radians(?))
                             * cos(radians(latitude))
-                            * cos(radians(longitude) - radians($longitude))
-                            + sin(radians($latitude))
-                            * sin(radians(latitude)))) AS distance")
+                            * cos(radians(longitude) - radians(?))
+                            + sin(radians(?))
+                            * sin(radians(latitude)))) AS distance", [$latitude, $longitude, $latitude])
                         ->where('latitude', '!=', 0)
                         ->where('longitude', '!=', 0)
                         ->having('distance', '<', $range);
@@ -800,38 +820,114 @@ class PropertyApiController extends Controller
                 }
             }
 
-            // Get total properties
-            $totalProperties = $propertyQuery->clone()->count();
+            // Shared mapper for the response shape
+            $mapProperty = function ($property) {
+                $property->promoted = $property->is_promoted;
+                $property->is_premium = $property->is_premium == 1 ? true : false;
+                $property->property_type = $property->propery_type;
+                $property->assign_facilities = $property->assign_facilities;
+                $property->parameters = $property->parameters;
+                if ($property->category) {
+                    $property->category->translated_name = $property->category->translated_name;
+                }
+                $property->translated_title = $property->translated_title;
+                $property->translated_description = $property->translated_description;
+                unset($property->propery_type);
 
-            // Get properties list data
-            $propertiesData = $propertyQuery
-                ->with('category:id,category,image,slug_id', 'category.translations', 'translations')
-                ->addSelect('id', 'slug_id', 'propery_type', 'title_image', 'category_id', 'title', 'price', 'city', 'state', 'country', 'rentduration', 'added_by', 'is_premium', 'latitude', 'longitude', 'total_click')
-                ->withCount('favourite')
-                ->skip($offset)
-                ->take($limit)
-                ->get()
-                ->map(function ($property) {
-                    $property->promoted = $property->is_promoted;
-                    $property->is_premium = $property->is_premium == 1 ? true : false;
-                    $property->property_type = $property->propery_type;
-                    $property->assign_facilities = $property->assign_facilities;
-                    $property->parameters = $property->parameters;
-                    if ($property->category) {
-                        $property->category->translated_name = $property->category->translated_name;
-                    }
-                    $property->translated_title = $property->translated_title;
-                    $property->translated_description = $property->translated_description;
-                    unset($property->propery_type);
+                return $property;
+            };
 
-                    return $property;
-                });
+            // Eager-loads + columns needed for the listing rows
+            $withListingColumns = function ($query) {
+                return $query->with('category:id,category,image,slug_id', 'category.translations', 'translations')
+                    ->addSelect('id', 'slug_id', 'propery_type', 'title_image', 'category_id', 'title', 'price', 'city', 'state', 'country', 'rentduration', 'added_by', 'is_premium', 'latitude', 'longitude', 'total_click');
+            };
+
+            // Active-advertisement constraint that marks a property as "featured/promoted"
+            $promotedConstraint = function ($query) {
+                $query->where(['status' => 0, 'is_enable' => 1, 'for' => 'property']);
+            };
+
+            // The featured-fill distribution only applies to the plain listing.
+            // When the client explicitly asks for promoted-only or premium-only,
+            // keep the original promoted-first ordering instead.
+            $applyFeaturedFill = ! ($promoted == 1) && ! ($getPremiumProperties == 1);
+
+            if ($applyFeaturedFill) {
+                // Featured pool: promoted properties, stable order by id DESC
+                $featuredQuery = $propertyQuery->clone()
+                    ->whereHas('advertisement', $promotedConstraint)
+                    ->orderByDesc('id');
+
+                // Normal pool: non-promoted properties, ordered by the chosen sort key
+                $normalQuery = $propertyQuery->clone()
+                    ->whereDoesntHave('advertisement', $promotedConstraint);
+
+                if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
+                    $normalQuery = $normalQuery->orderByDesc('total_click');
+                } elseif (isset($mostLiked) && ! empty($mostLiked) && $mostLiked == 1) {
+                    $normalQuery = $normalQuery->orderByDesc('favourite_count');
+                } else {
+                    $normalQuery = $normalQuery->orderByDesc('id');
+                }
+
+                $featuredTotal = $featuredQuery->clone()->count();
+                $normalTotal = $normalQuery->clone()->count();
+                $totalProperties = $featuredTotal + $normalTotal;
+
+                // Guarantee minimum 3 featured per page, backfill the rest with normal
+                $slice = HelperService::featuredFillSlice($offset, $limit, $featuredTotal, 3);
+
+                $featuredItems = $slice['featured_take'] > 0
+                    ? $withListingColumns($featuredQuery)->skip($slice['featured_offset'])->take($slice['featured_take'])->get()
+                    : collect();
+
+                $normalItems = $slice['normal_take'] > 0
+                    ? $withListingColumns($normalQuery)->skip($slice['normal_offset'])->take($slice['normal_take'])->get()
+                    : collect();
+
+                // Featured always on top of each page
+                $propertiesData = $featuredItems->concat($normalItems)->map($mapProperty)->values();
+            } else {
+                // Promoted-first ordering (original behaviour) for promoted/premium-only requests
+                $propertyQuery = $propertyQuery->withCount([
+                    'advertisement as promoted_count' => function ($query) {
+                        $query->where('status', 0)
+                            ->where('is_enable', 1)
+                            ->where('for', 'property')
+                            ->groupBy('property_id');
+                    },
+                ]);
+
+                $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END');
+
+                if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
+                    $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - total_click) END');
+                } elseif (isset($mostLiked) && ! empty($mostLiked) && $mostLiked == 1) {
+                    $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - favourite_count) END');
+                } else {
+                    $propertyQuery = $propertyQuery->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - id) END');
+                }
+
+                $totalProperties = $propertyQuery->clone()->count();
+
+                $featuredTotal = $propertyQuery->clone()->whereHas('advertisement', $promotedConstraint)->count();
+                $normalTotal = $totalProperties - $featuredTotal;
+
+                $propertiesData = $withListingColumns($propertyQuery)
+                    ->skip($offset)
+                    ->take($limit)
+                    ->get()
+                    ->map($mapProperty);
+            }
 
             $response = [
                 'error' => false,
                 'total' => $totalProperties,
                 'data' => $propertiesData,
                 'message' => trans('Data Fetched Successfully'),
+                'featured_total' => $featuredTotal,
+                'normal_total' => $normalTotal,
             ];
 
             return response()->json($response);
@@ -896,6 +992,7 @@ class PropertyApiController extends Controller
                 },
             ],
             'custom_video' => 'nullable|file|mimes:mp4,webm,ogg|max:20480|required_if:video_type,0',
+            'is_draft' => 'nullable|in:true,false',
         ];
 
         if ($request->has('id') && ! empty($request->id)) {
@@ -922,11 +1019,11 @@ class PropertyApiController extends Controller
             'meta_title.max' => trans('The Meta Title must not exceed more than 255 characters.'),
             'meta_image.image' => trans('The Meta Image must be an image.'),
             'meta_image.mimes' => trans('The Meta Image must be a JPG, PNG, or JPEG file.'),
-            'meta_image.max' => trans('The Meta Image must not exceed more than 5MB.'),
+            'meta_image.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
             'meta_description.max' => trans('The Meta Description must not exceed more than 255 characters.'),
             'meta_keywords.max' => trans('The Meta Keywords must not exceed more than 255 characters.'),
-            'custom_video.max' => 'The custom video must not be greater than 20MB.',
-            'custom_video.*.max' => 'The custom video must not be greater than 20MB.',
+            'custom_video.max' => 'File size exceeds the :max limit. Please upload a smaller video.',
+            'custom_video.*.max' => 'File size exceeds the :max limit. Please upload a smaller video.',
         ]);
 
         if ($validator->fails()) {
@@ -935,13 +1032,20 @@ class PropertyApiController extends Controller
                 'message' => $validator->errors()->first(),
             ]);
         }
+        
 
         try {
             DB::beginTransaction();
             $loggedInUserId = Auth::user()->id;
+            $watermarkAgentId = $request->user_active_role === 'agent' ? $loggedInUserId : null;
             $alertNewPropertyNotification = false;
             $isDraft = false;
             $isPayAsYouGo = false;
+
+            // add property as draft if user send is_draft as true, otherwise proceed with normal flow
+            if ($request->boolean('is_draft')) {
+                $isDraft = true;   
+            }
 
             if ($request->has('id') && ! empty($request->id)) {
                 $saveProperty = Property::where('added_by', $loggedInUserId)
@@ -1088,9 +1192,9 @@ class PropertyApiController extends Controller
             if ($request->hasFile('title_image')) {
                 $path = config('global.PROPERTY_TITLE_IMG_PATH');
                 if ($saveProperty->id && $saveProperty->getRawOriginal('title_image')) {
-                    $saveProperty->title_image = FileService::compressAndReplace($request->file('title_image'), $path, $saveProperty->getRawOriginal('title_image'), true);
+                    $saveProperty->title_image = FileService::compressAndReplace($request->file('title_image'), $path, $saveProperty->getRawOriginal('title_image'), true, $watermarkAgentId);
                 } else {
-                    $saveProperty->title_image = FileService::compressAndUpload($request->file('title_image'), $path, true);
+                    $saveProperty->title_image = FileService::compressAndUpload($request->file('title_image'), $path, true, $watermarkAgentId);
                 }
             }
 
@@ -1182,7 +1286,7 @@ class PropertyApiController extends Controller
                 foreach ($request->file('gallery_images') as $file) {
                     $gallaryImageData[] = [
                         'propertys_id' => $saveProperty->id,
-                        'image' => FileService::compressAndUpload($file, $path, true),
+                        'image' => FileService::compressAndUpload($file, $path, true, $watermarkAgentId),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ];
@@ -1260,6 +1364,7 @@ class PropertyApiController extends Controller
             }
 
             DB::commit();
+            AuditLogService::log('property', $saveProperty->id, $saveProperty->title, 'created', "Property '{$saveProperty->title}' created via app/web", 'api');
             $response['error'] = false;
             $response['message'] = trans('Property Posted Successfully');
             $response['data'] = $result;
@@ -1439,11 +1544,11 @@ class PropertyApiController extends Controller
             'meta_title.max' => trans('The Meta Title must not exceed more than 255 characters.'),
             'meta_image.image' => trans('The Meta Image must be an image.'),
             'meta_image.mimes' => trans('The Meta Image must be a JPG, PNG, or JPEG file.'),
-            'meta_image.max' => trans('The Meta Image must not exceed more than 5MB.'),
+            'meta_image.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
             'meta_description.max' => trans('The Meta Description must not exceed more than 255 characters.'),
             'meta_keywords.max' => trans('The Meta Keywords must not exceed more than 255 characters.'),
-            'custom_video.max' => trans('The custom video must not be greater than 20MB.'),
-            'custom_video.*.max' => trans('The custom video must not be greater than 20MB.'),
+            'custom_video.max' => trans('File size exceeds the :max limit. Please upload a smaller video.'),
+            'custom_video.*.max' => trans('File size exceeds the :max limit. Please upload a smaller video.'),
         ]);
         if ($validator->fails()) {
             return response()->json([
@@ -1454,6 +1559,7 @@ class PropertyApiController extends Controller
         try {
             DB::beginTransaction();
             $loggedInUserId = Auth::user()->id;
+            $watermarkAgentId = $request->user_active_role === 'agent' ? $loggedInUserId : null;
             $id = $request->id;
             $action_type = $request->action_type;
             if ($request->slug_id) {
@@ -1611,7 +1717,7 @@ class PropertyApiController extends Controller
                         $profile = $request->file('title_image');
                         $rawImage = $property->getRawOriginal('title_image');
                         FileService::clearCachedBlurImageUrl('blur_property_title_image_'.$property->id);
-                        $property->title_image = FileService::compressAndReplace($profile, $path, $rawImage, true);
+                        $property->title_image = FileService::compressAndReplace($profile, $path, $rawImage, true, $watermarkAgentId);
                     }
 
                     if ($request->has('remove_meta_image') && $request->remove_meta_image == 1) {
@@ -1732,7 +1838,7 @@ class PropertyApiController extends Controller
                         $path = config('global.PROPERTY_GALLERY_IMG_PATH').$propertyId.'/';
                         $galleryImagesData = [];
                         foreach ($request->file('gallery_images') as $file) {
-                            $image = FileService::compressAndUpload($file, $path, true);
+                            $image = FileService::compressAndUpload($file, $path, true, $watermarkAgentId);
                             $galleryImagesData[] = [
                                 'propertys_id' => $propertyId,
                                 'image' => $image,
@@ -1819,6 +1925,39 @@ class PropertyApiController extends Controller
                         $update_property->user_verification_status = $meta['user_verification_status'] ?? 'not_applied';
                     }
 
+                    // Notify owner when edited property goes back to pending review
+                    if ($update_property->getRawOriginal('request_status') === 'pending') {
+                        $notifyCustomer = $update_property->customer;
+                        if ($notifyCustomer && $notifyCustomer->isActive == 1 && $notifyCustomer->notification == 1) {
+                            $tokens = Usertokens::where('customer_id', $notifyCustomer->id)->pluck('fcm_id')->toArray();
+                            if (! empty($tokens)) {
+                                $fcmMsg = [
+                                    'title' => 'Property updated :- :property_name',
+                                    'message' => trans('Your property edit is pending review by administrator'),
+                                    'type' => 'property_inquiry',
+                                    'body' => trans('Your property edit is pending review by administrator'),
+                                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                                    'sound' => 'default',
+                                    'id' => (string) $update_property->id,
+                                    'role_context' => $update_property->role_context ?? 'user',
+                                    'replace' => ['property_name' => $update_property->title],
+                                ];
+                                send_push_notification($tokens, $fcmMsg);
+                            }
+                        }
+                        Notifications::create([
+                            'title' => 'Property Updated :- '.$update_property->title,
+                            'message' => trans('Your property edit is pending review by administrator'),
+                            'image' => '',
+                            'type' => '1',
+                            'send_type' => '0',
+                            'customers_id' => $loggedInUserId,
+                            'propertys_id' => $update_property->id,
+                            'role_context' => $update_property->role_context ?? 'user',
+                        ]);
+                    }
+
+                    AuditLogService::log('property', $update_property->id, $update_property->title, 'updated', "Property '{$update_property->title}' updated via app/web", 'api');
                     $response['error'] = false;
                     $response['message'] = trans('Property Updated Successfully');
                     $response['data'] = $update_property;
@@ -1871,7 +2010,9 @@ class PropertyApiController extends Controller
                 ]);
             }
 
+            $propertyTitle = $property->title;
             $property->delete();
+            AuditLogService::log('property', $request->id, $propertyTitle, 'deleted', "Property '{$propertyTitle}' deleted via app/web", 'api');
 
             return response()->json(['error' => false, 'message' => trans('Property Deleted Successfully')]);
         } catch (Exception $e) {
@@ -2003,6 +2144,8 @@ class PropertyApiController extends Controller
             // update user status
             $propertyQueryData->status = $request->status == 1 ? 1 : 0;
             $propertyQueryData->save();
+            $statusLabel = $request->status == 1 ? 'Active' : 'Inactive';
+            AuditLogService::log('property', $propertyQueryData->id, $propertyQueryData->title, 'status_changed', "Property status changed to {$statusLabel} via app/web", 'api');
             ApiResponseService::successResponse('Data Updated Successfully');
         } catch (Exception $e) {
             ApiResponseService::errorResponse();
@@ -2013,7 +2156,7 @@ class PropertyApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'property_type' => 'nullable|in:0,1,2,3',
-            'request_status' => 'nullable|in:approved,rejected,pending,expired',
+            'request_status' => 'nullable|in:approved,rejected,pending,expired,draft',
             'is_promoted' => 'nullable|in:1',
         ]);
         if ($validator->fails()) {
@@ -2111,7 +2254,7 @@ class PropertyApiController extends Controller
                     ->when($request->filled('request_status'), function ($query) use ($request) {
                         // IF Request Status is passed and status has approved or rejected or pending or expired
                         if ($request->request_status == 'expired') {
-                            return $query->whereNotNull('expiry_date')->where('expiry_date', '<', now());
+                            return $query->whereNotNull('expiry_date')->where('expiry_date', '<', now()->startOfDay());
                         }
 
                         return $query->where('request_status', $request->request_status);
@@ -2127,8 +2270,12 @@ class PropertyApiController extends Controller
                 // Get total properties
                 $totalProperties = $propertyQuery->count();
 
+                // Compute once — avoids N+1 inside the map below (agent role only)
+                $isAgentRole = $request->user_active_role === 'agent';
+                $agentHasActiveStory = $isAgentRole && \App\Models\Story::where('agent_id', $loggedInUserData->id)->active()->exists();
+
                 // Get the property data with extra data and changes :- is_premium, post_created and promoted
-                $propertyData = $propertyQuery->skip($offset)->take($limit)->orderBy('id', 'DESC')->get()->map(function ($property) use ($loggedInUserData) {
+                $propertyData = $propertyQuery->skip($offset)->take($limit)->orderBy('id', 'DESC')->get()->map(function ($property) use ($loggedInUserData, $agentHasActiveStory, $isAgentRole) {
                     // Add lastest Reject reason when request status is rejected
                     $property->reject_reason = (object) [];
                     if ($property->request_status == 'rejected') {
@@ -2177,7 +2324,9 @@ class PropertyApiController extends Controller
                         $property->user_verification_status = $meta['user_verification_status'] ?? 'not_applied';
                     }
 
-                    // $propertyData = new CustomerResource($property);
+                    if ($isAgentRole) {
+                        $property->has_active_story = $agentHasActiveStory;
+                    }
 
                     return $property;
                 });
@@ -2193,11 +2342,11 @@ class PropertyApiController extends Controller
                 $getSimilarProperties = [];
                 if ($propertyData->isNotEmpty()) {
                     if ($request->has('id')) {
-                        $getSimilarPropertiesQueryData = Property::where(['post_type' => 1, 'added_by' => $loggedInUserID, 'category_id' => $propertyData[0]['category_id']])->where('id', '!=', $request->id)->select('id', 'slug_id', 'category_id', 'title', 'added_by', 'address', 'city', 'country', 'state', 'propery_type', 'price', 'created_at', 'title_image', 'is_premium', 'expiry_date')->orderBy('id', 'desc')->limit(10)->get();
+                        $getSimilarPropertiesQueryData = Property::where(['post_type' => 1, 'added_by' => $loggedInUserID, 'category_id' => $propertyData[0]['category_id']])->where('id', '!=', $request->id)->select('id', 'slug_id', 'category_id', 'title', 'added_by', 'address', 'city', 'country', 'state', 'propery_type', 'price', 'currency', 'created_at', 'title_image', 'is_premium', 'expiry_date')->orderBy('id', 'desc')->limit(10)->get();
                         $getSimilarProperties = get_property_details($getSimilarPropertiesQueryData, $loggedInUserData, true);
 
                     } elseif ($request->has('slug_id')) {
-                        $getSimilarPropertiesQueryData = Property::where(['post_type' => 1, 'added_by' => $loggedInUserID, 'category_id' => $propertyData[0]['category_id']])->where('slug_id', '!=', $request->slug_id)->select('id', 'slug_id', 'category_id', 'title', 'added_by', 'address', 'city', 'country', 'state', 'propery_type', 'price', 'created_at', 'title_image', 'is_premium', 'expiry_date')->orderBy('id', 'desc')->limit(10)->get();
+                        $getSimilarPropertiesQueryData = Property::where(['post_type' => 1, 'added_by' => $loggedInUserID, 'category_id' => $propertyData[0]['category_id']])->where('slug_id', '!=', $request->slug_id)->select('id', 'slug_id', 'category_id', 'title', 'added_by', 'address', 'city', 'country', 'state', 'propery_type', 'price', 'currency', 'created_at', 'title_image', 'is_premium', 'expiry_date')->orderBy('id', 'desc')->limit(10)->get();
                         $getSimilarProperties = get_property_details($getSimilarPropertiesQueryData, $loggedInUserData, true);
                     }
                 }
@@ -2505,13 +2654,7 @@ class PropertyApiController extends Controller
     public function getPropertiesOnMap(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'latitude' => 'nullable|numeric',
-            'longitude' => 'nullable|numeric',
-            'city' => 'nullable|string',
-            'state' => 'nullable|string',
-            'country' => 'nullable|string',
-            'category_id' => 'nullable|integer',
-            'property_type' => 'nullable|in:0,1,2,3',
+            'filters' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -2520,7 +2663,39 @@ class PropertyApiController extends Controller
 
         try {
 
-            // ✅ Property Mapper
+            // Decode filters (base64 → JSON, same structure as getPropertyList)
+            $filters = $request->filters;
+            if (! empty($filters)) {
+                $filters = base64_decode($filters);
+                $filters = json_validate($filters) ? json_decode($filters, true) : [];
+            } else {
+                $filters = [];
+            }
+
+            // Extract filter variables
+            $propertyType    = $filters['property_type'] ?? null;
+            $categoryId      = $filters['category_id'] ?? null;
+            $categorySlugId  = $filters['category_slug_id'] ?? null;
+            $country         = $filters['location']['country'] ?? null;
+            $state           = $filters['location']['state'] ?? null;
+            $city            = $filters['location']['city'] ?? null;
+            $placeId         = $filters['location']['place_id'] ?? null;
+            $latitude        = $filters['location']['latitude'] ?? null;
+            $longitude       = $filters['location']['longitude'] ?? null;
+            $range           = $filters['location']['radius'] ?? null;
+            $minPrice        = $filters['price']['min_price'] ?? null;
+            $maxPrice        = $filters['price']['max_price'] ?? null;
+            $postedSince     = $filters['posted_since'] ?? null;
+            $promoted        = $filters['flags']['promoted'] ?? null;
+            $mostViewed      = $filters['flags']['most_viewed'] ?? null;
+            $mostLiked       = $filters['flags']['most_liked'] ?? null;
+            $getPremium      = $filters['flags']['get_all_premium_properties'] ?? null;
+            $parameters      = $filters['parameters'] ?? null;
+            $nearbyPlaces    = $filters['nearby_places'] ?? null;
+            $search          = $filters['search'] ?? null;
+            $addedAs         = $filters['role_context'] ?? null;
+
+            // Property Mapper
             $propertyMapper = function ($propertyData) {
                 $propertyData->promoted = $propertyData->is_promoted ?? false;
                 $propertyData->property_type = $propertyData->propery_type;
@@ -2539,7 +2714,7 @@ class PropertyApiController extends Controller
                 return $propertyData;
             };
 
-            // ✅ Base Query
+            // Base Query
             $propertyQuery = Property::select(
                 'id',
                 'slug_id',
@@ -2548,6 +2723,7 @@ class PropertyApiController extends Controller
                 'state',
                 'country',
                 'price',
+                'currency',
                 'propery_type',
                 'title',
                 'title_image',
@@ -2564,7 +2740,7 @@ class PropertyApiController extends Controller
                     'category.translations',
                     'translations',
 
-                    // 🔥 IMPORTANT: customer relations
+                    // IMPORTANT: customer relations
                     'customer.verifyCustomer',
                     'customer.verifyAgent',
                     'customer.becomeAgent',
@@ -2574,109 +2750,109 @@ class PropertyApiController extends Controller
                 ->onlyActive()
                 ->whereIn('propery_type', [0, 1]);
 
-            // ✅ Filters
+            // Filters
 
-            if ($request->filled('role_context')) {
-                $propertyQuery->where('role_context', $request->role_context);
+            if (! empty($addedAs)) {
+                $propertyQuery->where('role_context', $addedAs);
             }
 
-            if ($request->has('property_type') && $request->property_type !== '') {
-                $propertyQuery->where('propery_type', $request->property_type);
+            if (isset($propertyType) && ($propertyType !== '' && $propertyType !== null)) {
+                $propertyQuery->where('propery_type', $propertyType);
             }
 
-            if ($request->filled('category_id')) {
-                $propertyQuery->where('category_id', $request->category_id);
+            if (! empty($categoryId)) {
+                $propertyQuery->where('category_id', $categoryId);
             }
 
-            if ($request->filled('parameter_id')) {
-                $ids = explode(',', $request->parameter_id);
-
-                $propertyQuery->whereHas('assignParameter', function ($q) use ($ids) {
-                    $q->whereIn('parameter_id', $ids)->whereNotNull('value');
+            if (! empty($categorySlugId)) {
+                $propertyQuery->whereHas('category', function ($q) use ($categorySlugId) {
+                    $q->where('slug_id', $categorySlugId);
                 });
             }
 
-            if ($request->filled('category_slug_id')) {
-                $propertyQuery->whereHas('category', function ($q) use ($request) {
-                    $q->where('slug_id', $request->category_slug_id);
-                });
+            if (! empty($parameters)) {
+                foreach ($parameters as $parameter) {
+                    $parameterId = $parameter['id'];
+                    $propertyQuery->whereHas('assignParameter', function ($q) use ($parameterId) {
+                        $q->where('parameter_id', $parameterId)->whereNotNull('value');
+                    });
+                }
             }
 
-            if ($request->filled('country')) {
-                $propertyQuery->where('country', $request->country);
+            if (! empty($nearbyPlaces)) {
+                foreach ($nearbyPlaces as $nearbyPlace) {
+                    $nearbyPlaceId    = $nearbyPlace['id'];
+                    $nearbyPlaceValue = $nearbyPlace['value'] ?? null;
+                    if (! empty($nearbyPlaceValue)) {
+                        $propertyQuery->whereHas('assignfacilities', function ($q) use ($nearbyPlaceId, $nearbyPlaceValue) {
+                            $q->where('facility_id', $nearbyPlaceId)->where('distance', '<=', $nearbyPlaceValue);
+                        });
+                    } else {
+                        $propertyQuery->whereHas('assignfacilities', function ($q) use ($nearbyPlaceId) {
+                            $q->where('facility_id', $nearbyPlaceId);
+                        });
+                    }
+                }
             }
 
-            if ($request->filled('state')) {
-                $propertyQuery->where('state', $request->state);
+            if (! empty($country)) {
+                $propertyQuery->where('country', 'like', '%'.$country.'%');
             }
 
-            if ($request->filled('city')) {
-                $propertyQuery->where('city', $request->city);
+            if (! empty($state)) {
+                $propertyQuery->where('state', 'like', '%'.$state.'%');
             }
 
-            // ✅ Place ID
-            if ($request->filled('place_id')) {
-                $location = $this->resolvePlaceIdToLocation($request->place_id);
+            if (! empty($city)) {
+                $propertyQuery->where('city', 'like', '%'.$city.'%');
+            }
 
+            if (! empty($placeId)) {
+                $location = $this->resolvePlaceIdToLocation($placeId);
                 if ($location) {
-                    if ($location['city']) {
-                        $propertyQuery->where('city', $location['city']);
-                    }
-                    if ($location['state']) {
-                        $propertyQuery->where('state', $location['state']);
-                    }
-                    if ($location['country']) {
-                        $propertyQuery->where('country', $location['country']);
-                    }
+                    if ($location['city'])    $propertyQuery->where('city', $location['city']);
+                    if ($location['state'])   $propertyQuery->where('state', $location['state']);
+                    if ($location['country']) $propertyQuery->where('country', $location['country']);
                 }
-            } else {
-                if ($request->filled('latitude') && $request->filled('longitude')) {
-                    $propertyQuery->where('latitude', $request->latitude)
-                        ->where('longitude', $request->longitude);
-                }
-            }
-
-            // ✅ Price
-            if ($request->filled('min_price')) {
-                $propertyQuery->where('price', '>=', $request->min_price);
-            }
-
-            if ($request->filled('max_price')) {
-                $propertyQuery->where('price', '<=', $request->max_price);
-            }
-
-            // ✅ Posted Since
-            if ($request->has('posted_since')) {
-
-                switch ($request->posted_since) {
-                    case 0:
-                        $propertyQuery->whereBetween('created_at', [Carbon::now()->subWeek(), now()]);
-                        break;
-
-                    case 1:
-                        $propertyQuery->whereDate('created_at', Carbon::yesterday());
-                        break;
-
-                    case 2:
-                        $propertyQuery->whereBetween('created_at', [Carbon::now()->subMonth(), now()]);
-                        break;
-
-                    case 3:
-                        $propertyQuery->whereBetween('created_at', [Carbon::now()->subMonths(3), now()]);
-                        break;
-
-                    case 4:
-                        $propertyQuery->whereBetween('created_at', [Carbon::now()->subMonths(6), now()]);
-                        break;
+            } elseif (! empty($latitude) && ! empty($longitude) && $latitude != 'null' && $longitude != 'null') {
+                if (! empty($range) && $range != 'null') {
+                    $this->applyBoundingBox($propertyQuery, $latitude, $longitude, $range);
+                    $propertyQuery->selectRaw("
+                        (6371 * acos(cos(radians(?))
+                        * cos(radians(latitude))
+                        * cos(radians(longitude) - radians(?))
+                        + sin(radians(?))
+                        * sin(radians(latitude)))) AS distance", [$latitude, $longitude, $latitude])
+                        ->where('latitude', '!=', 0)
+                        ->where('longitude', '!=', 0)
+                        ->having('distance', '<', $range);
+                } else {
+                    $propertyQuery->where('latitude', $latitude)->where('longitude', $longitude);
                 }
             }
 
-            // ✅ Search
-            if ($request->filled('search')) {
-                $search = $request->search;
+            if (! empty($minPrice)) {
+                $propertyQuery->where('price', '>=', $minPrice);
+            }
 
+            if (! empty($maxPrice)) {
+                $propertyQuery->where('price', '<=', $maxPrice);
+            }
+
+            if (isset($postedSince) && $postedSince !== '') {
+                $now = Carbon::now();
+                switch ((int) $postedSince) {
+                    case 0: $propertyQuery->where('created_at', '>=', $now->copy()->subDays(7)); break;
+                    case 1: $propertyQuery->whereDate('created_at', $now->copy()->subDay()); break;
+                    case 2: $propertyQuery->where('created_at', '>=', $now->copy()->subMonth()); break;
+                    case 3: $propertyQuery->where('created_at', '>=', $now->copy()->subMonths(3)); break;
+                    case 4: $propertyQuery->where('created_at', '>=', $now->copy()->subMonths(6)); break;
+                }
+            }
+
+            if (! empty($search)) {
                 $propertyQuery->where(function ($q) use ($search) {
-                    $q->where('title', 'LIKE', "%$search%")
+                    $this->applyTitleSearchFilter($q, $search)
                         ->orWhere('address', 'LIKE', "%$search%")
                         ->orWhereHas('category', function ($q1) use ($search) {
                             $q1->where('category', 'LIKE', "%$search%");
@@ -2684,34 +2860,32 @@ class PropertyApiController extends Controller
                 });
             }
 
-            // ✅ Promoted
-            if ($request->promoted == 1) {
+            if (! empty($promoted) && $promoted == 1) {
                 $propertyQuery->whereHas('advertisement', function ($q) {
                     $q->where(['status' => 0, 'is_enable' => 1]);
                 });
             }
 
-            // ✅ Premium
-            if ($request->get_all_premium_properties == 1) {
+            if (! empty($getPremium) && $getPremium == 1) {
                 $propertyQuery->where('is_premium', 1);
             }
 
-            // ✅ Sorting
-            if ($request->most_viewed == 1) {
+            // Sorting
+            if (! empty($mostViewed) && $mostViewed == 1) {
                 $propertyQuery->orderBy('total_click', 'DESC');
-            } elseif ($request->most_liked == 1) {
+            } elseif (! empty($mostLiked) && $mostLiked == 1) {
                 $propertyQuery->orderBy('favourite_count', 'DESC');
             } else {
                 $propertyQuery->orderBy('id', 'DESC');
             }
 
-            // ✅ Final Data
+            // Final Data
             $properties = $propertyQuery->get()->map(function ($property) use ($propertyMapper) {
 
                 $property = $propertyMapper($property);
                 $customer = $property->customer;
 
-                // 🔥 ADD YOUR 6 PARAMS
+                // ADD YOUR 6 PARAMS
                 $property->is_agent = $customer?->is_agent ?? false;
 
                 $property->is_user_verified =
@@ -2768,7 +2942,7 @@ class PropertyApiController extends Controller
 
             $propertyBaseQuery = Property::where(['status' => 1, 'request_status' => 'approved'])->where(function ($q) {
                 $q->where('expiry_date', '>=', now())->orWhereNull('expiry_date');
-            })->select('id', 'category_id', 'title', 'city', 'state', 'country', 'address', 'price', 'propery_type', 'total_click', 'rentduration', 'is_premium', 'title_image')->with('category:id,slug_id,image,category', 'category.translations', 'translations');
+            })->select('id', 'category_id', 'title', 'city', 'state', 'country', 'address', 'price', 'currency', 'propery_type', 'total_click', 'rentduration', 'is_premium', 'title_image')->with('category:id,slug_id,image,category', 'category.translations', 'translations');
             $sourceProperty = $propertyBaseQuery->clone()->where('id', $sourcePropertyId)->first();
             $targetProperty = $propertyBaseQuery->clone()->where('id', $targetPropertyId)->first();
             if (empty($sourceProperty)) {
@@ -2891,7 +3065,7 @@ class PropertyApiController extends Controller
                 )
                 ->with('category:id,slug_id,image,category', 'category.translations', 'translations')
                 ->when($request->has('search'), function ($query) use ($request) {
-                    $query->where('title', 'like', '%'.$request->search.'%');
+                    $this->applyTitleSearchFilter($query, $request->search);
                 })
                 ->when($request->has('offset'), function ($query) use ($offset) {
                     $query->offset($offset);
@@ -3008,7 +3182,22 @@ class PropertyApiController extends Controller
                 $property = Property::where('slug_id', $request->slug_id)->first();
                 $property_id = $property->id;
             } else {
+                $property = Property::find($request->property_id);
                 $property_id = $request->property_id;
+            }
+
+            // Authorization: only the owner of the property or an admin may view interested users (leads PII)
+            if (! $property || ! Auth::check()) {
+                ApiResponseService::validationError(trans('Unauthorized'));
+            }
+            $currentUser = Auth::user();
+            $isAdmin = isset($currentUser->type) && intval($currentUser->type) === 0;
+            $isOwner = intval($property->added_by) === intval($currentUser->id);
+            if (! $isAdmin && ! $isOwner) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Unauthorized',
+                ], 403);
             }
 
             $interestedUserQuery = InterestedUser::has('customer')->with('customer:id,name,profile,email,mobile')->where('property_id', $property_id);
@@ -3072,73 +3261,349 @@ class PropertyApiController extends Controller
 
     public function get_user_recommendation(Request $request)
     {
-        $offset = isset($request->offset) ? $request->offset : 0;
-        $limit = isset($request->limit) ? $request->limit : 10;
-        $current_user = Auth::user()->id;
+        try {
+            $validator = Validator::make($request->all(), [
+                'offset' => 'nullable|numeric',
+                'limit' => 'nullable|numeric',
+                'filters' => 'nullable|string',
+            ]);
+            if ($validator->fails()) {
+                return ApiResponseService::validationError($validator->errors()->first());
+            }
 
-        $user_interest = UserInterest::where('user_id', $current_user)->first();
-        if (collect($user_interest)->isNotEmpty()) {
+            $offset = isset($request->offset) ? $request->offset : 0;
+            $limit = isset($request->limit) ? $request->limit : 10;
+            $current_user = Auth::user()->id;
 
-            $property = Property::with('customer')->with('user')->with('category:id,category,image', 'category.translations')->with('assignfacilities.outdoorfacilities')->with('favourite')->with('parameters')->with('interested_users')->onlyActive();
+            // First decode filters from base64 (same payload format as getPropertyList)
+            $filters = $request->filters;
+            if (! empty($filters)) {
+                $filters = base64_decode($filters);
+                if (json_validate($filters)) {
+                    $filters = json_decode($filters, true);
+                } else {
+                    $filters = [];
+                }
+            } else {
+                $filters = [];
+            }
 
-            $property_type = $request->property_type;
-            if ($user_interest->category_ids != '') {
+            $filterValidator = Validator::make(
+                collect($filters)->toArray(),
+                [
+                    'property_type' => 'nullable|in:0,1',
+                    'category_id' => 'nullable|exists:categories,id',
+                    'category_slug_id' => 'nullable|exists:categories,slug_id',
+                    'location.country' => 'nullable',
+                    'location.state' => 'nullable',
+                    'location.city' => 'nullable',
+                    'location.place_id' => 'nullable',
+                    'location.latitude' => 'nullable|numeric|between:-90,90',
+                    'location.longitude' => 'nullable|numeric|between:-180,180',
+                    'location.radius' => 'nullable|numeric|min:0',
+                    'price.min_price' => 'nullable|numeric',
+                    'price.max_price' => 'nullable|numeric',
+                    'posted_since' => 'nullable|in:0,1,2,3,4',
+                    'flags.promoted' => 'nullable',
+                    'flags.most_viewed' => 'nullable',
+                    'flags.most_liked' => 'nullable',
+                    'flags.get_all_premium_properties' => 'nullable',
+                    'parameters' => 'nullable|array',
+                    'parameters.*.id' => 'nullable|exists:parameters,id',
+                    'parameters.*.value' => 'nullable',
+                    'nearby_places' => 'nullable|array',
+                    'nearby_places.*.id' => 'nullable|exists:outdoor_facilities,id',
+                    'nearby_places.*.value' => 'nullable|integer',
+                    'role_context' => 'nullable|in:user,agent',
+                    'project_id' => 'nullable|exists:projects,id',
+                    'is_project_unit' => 'nullable|in:0,1',
+                    'availability.check_in' => 'nullable|date',
+                    'availability.check_out' => 'nullable|date|after_or_equal:availability.check_in',
+                ],
+                [
+                    'property_type.in' => trans('Property type is not valid'),
+                    'category_id.exists' => trans('Category id is not valid'),
+                    'category_slug_id.exists' => trans('Category slug id is not valid'),
+                    'price.min_price.numeric' => trans('Min price is not valid'),
+                    'price.max_price.numeric' => trans('Max price is not valid'),
+                    'posted_since.in' => trans('Posted since is not valid'),
+                    'parameters.array' => trans('Parameters is not valid'),
+                    'parameters.*.id.exists' => trans('Parameter id is not valid'),
+                    'nearby_places.array' => trans('Nearby place is not valid'),
+                    'nearby_places.*.id.exists' => trans('Nearby place id is not valid'),
+                    'nearby_places.*.value.integer' => trans('Nearby place value is not valid'),
+                ]
+            );
+            if ($filterValidator->fails()) {
+                return ApiResponseService::validationError($filterValidator->errors()->first());
+            }
 
+            // Get Filters Variables from request payload
+            $propertyType = isset($filters['property_type']) ? $filters['property_type'] : null;
+            $categoryId = isset($filters['category_id']) ? $filters['category_id'] : null;
+            $categorySlugId = isset($filters['category_slug_id']) ? $filters['category_slug_id'] : null;
+            $country = isset($filters['location']['country']) ? $filters['location']['country'] : null;
+            $state = isset($filters['location']['state']) ? $filters['location']['state'] : null;
+            $city = isset($filters['location']['city']) ? $filters['location']['city'] : null;
+            $placeId = isset($filters['location']['place_id']) ? $filters['location']['place_id'] : null;
+            $latitude = isset($filters['location']['latitude']) ? $filters['location']['latitude'] : null;
+            $longitude = isset($filters['location']['longitude']) ? $filters['location']['longitude'] : null;
+            $minPrice = isset($filters['price']['min_price']) ? $filters['price']['min_price'] : null;
+            $maxPrice = isset($filters['price']['max_price']) ? $filters['price']['max_price'] : null;
+            $postedSince = $filters['posted_since'] ?? null;
+            $range = isset($filters['location']['radius']) ? $filters['location']['radius'] : null;
+            $promoted = isset($filters['flags']['promoted']) ? $filters['flags']['promoted'] : null;
+            $getPremiumProperties = isset($filters['flags']['get_all_premium_properties']) ? $filters['flags']['get_all_premium_properties'] : null;
+            $mostViewed = isset($filters['flags']['most_views']) ? $filters['flags']['most_views'] : null;
+            $mostLiked = isset($filters['flags']['most_liked']) ? $filters['flags']['most_liked'] : null;
+            $parameters = isset($filters['parameters']) ? $filters['parameters'] : null;
+            $nearbyPlaces = isset($filters['nearby_places']) ? $filters['nearby_places'] : null;
+            $search = isset($filters['search']) ? $filters['search'] : null;
+            $addedAs = isset($filters['role_context']) ? $filters['role_context'] : null;
+
+            $user_interest = UserInterest::where('user_id', $current_user)->first();
+            if (collect($user_interest)->isEmpty()) {
+                return response()->json([
+                    'error' => false,
+                    'message' => trans('No Data Found'),
+                    'data' => [],
+                ]);
+            }
+
+            $property = Property::with(['customer' => fn ($q) => $q->withStoryStatus()])->with('user')->with('category:id,category,image', 'category.translations')->with('assignfacilities.outdoorfacilities')->with('favourite')->with('parameters')->with('interested_users')->onlyActive()
+                ->when($addedAs, function ($query) use ($addedAs) {
+                    return $query->where('role_context', $addedAs);
+                });
+
+            // ---- Base recommendation from saved interests ----
+            // Request filters take precedence per dimension; interest is used only when the
+            // matching request filter is not provided.
+
+            // Category (interest) - skip when request supplies category_id / category_slug_id
+            if ($user_interest->category_ids != '' && empty($categoryId) && empty($categorySlugId)) {
                 $category_ids = explode(',', $user_interest->category_ids);
-
                 $property = $property->whereIn('category_id', $category_ids);
             }
 
-            if ($user_interest->price_range != '') {
+            // Price range (interest) - skip when request supplies min/max price
+            if ($user_interest->price_range != '' && empty($minPrice) && empty($maxPrice)) {
+                $interest_min_price = explode(',', $user_interest->price_range)[0] ?? null;
+                $interest_max_price = explode(',', $user_interest->price_range)[1] ?? null;
 
-                $max_price = explode(',', $user_interest->price_range)[1];
+                if (isset($interest_max_price) && isset($interest_min_price)) {
+                    $interest_min_price = floatval($interest_min_price);
+                    $interest_max_price = floatval($interest_max_price);
 
-                $min_price = explode(',', $user_interest->price_range)[0];
-
-                if (isset($max_price) && isset($min_price)) {
-                    $min_price = floatval($min_price);
-                    $max_price = floatval($max_price);
-
-                    $property = $property->where(function ($query) use ($min_price, $max_price) {
-                        $query->whereRaw('CAST(price AS DECIMAL(10, 2)) >= ?', [$min_price])
-                            ->whereRaw('CAST(price AS DECIMAL(10, 2)) <= ?', [$max_price]);
+                    $property = $property->where(function ($query) use ($interest_min_price, $interest_max_price) {
+                        $query->whereRaw('CAST(price AS DECIMAL(10, 2)) >= ?', [$interest_min_price])
+                            ->whereRaw('CAST(price AS DECIMAL(10, 2)) <= ?', [$interest_max_price]);
                     });
                 }
             }
 
-            if ($user_interest->city != '') {
-                $city = $user_interest->city;
-                $property = $property->where('city', $city);
+            // City (interest) - skip when request supplies any location filter
+            if ($user_interest->city != '' && empty($city) && empty($state) && empty($country) && empty($placeId)) {
+                $property = $property->where('city', $user_interest->city);
             }
-            if ($user_interest->property_type != '') {
-                $property_type = explode(',', $user_interest->property_type);
-            }
-            if ($user_interest->outdoor_facilitiy_ids != '') {
 
+            // Property type (interest) - skip when request supplies property_type
+            if ($user_interest->property_type != '' && ! (isset($propertyType) && ($propertyType !== null && $propertyType !== ''))) {
+                $interest_property_type = explode(',', $user_interest->property_type);
+                if (count($interest_property_type) == 2) {
+                    $property = $property->where(function ($query) use ($interest_property_type) {
+                        $query->where('propery_type', $interest_property_type[0])->orWhere('propery_type', $interest_property_type[1]);
+                    });
+                } elseif (isset($interest_property_type[0]) && in_array($interest_property_type[0], [0, 1, '0', '1'])) {
+                    $property = $property->where('propery_type', $interest_property_type[0]);
+                }
+            }
+
+            // Outdoor facilities (interest) - skip when request supplies nearby_places
+            if ($user_interest->outdoor_facilitiy_ids != '' && empty($nearbyPlaces)) {
                 $outdoor_facilitiy_ids = explode(',', $user_interest->outdoor_facilitiy_ids);
                 $property = $property->whereHas('assignfacilities.outdoorfacilities', function ($q) use ($outdoor_facilitiy_ids) {
                     $q->whereIn('id', $outdoor_facilitiy_ids);
                 });
             }
 
-            if (isset($property_type)) {
-                if (count($property_type) == 2) {
-                    $property_type = $property->where(function ($query) use ($property_type) {
-                        $query->where('propery_type', $property_type[0])->orWhere('propery_type', $property_type[1]);
+            // ---- Request filters (same handling as getPropertyList) ----
+
+            // If Property Type Passed
+            if (isset($propertyType) && (! empty($propertyType) || $propertyType == 0)) {
+                $property = $property->where('propery_type', $propertyType);
+            }
+
+            // If Category Id is Passed
+            if (isset($categoryId) && ! empty($categoryId)) {
+                $property = $property->where('category_id', $categoryId);
+            }
+
+            // If Category Slug is Passed
+            if (isset($categorySlugId) && ! empty($categorySlugId)) {
+                $property = $property->whereHas('category', function ($query) use ($categorySlugId) {
+                    $query->where('slug_id', $categorySlugId);
+                });
+            }
+
+            // If Search is passed
+            if (isset($search) && $search !== '') {
+                $property = $property->where(function ($whereCondition) use ($search) {
+                    $this->applyTitleSearchFilter($whereCondition, $search)
+                        ->orWhere('address', 'like', '%'.$search.'%')
+                        ->orWhereHas('category', function ($query) use ($search) {
+                            $query->where('category', 'like', '%'.$search.'%');
+                        })
+                        ->orWhere(function ($query) use ($search) {
+                            $query->searchInAnyTranslation($search);
+                        });
+                });
+            }
+
+            // If parameter id passed
+            if (isset($parameters) && ! empty($parameters)) {
+                foreach ($parameters as $parameter) {
+                    $parameterId = $parameter['id'];
+                    $property = $property->whereHas('assignParameter', function ($query) use ($parameterId) {
+                        $query->where('parameter_id', $parameterId)
+                            ->where(function ($q) {
+                                $q->whereNotNull('value')
+                                    ->orWhere('value', '!=', '')
+                                    ->orWhere('value', '!=', 'null');
+                            });
                     });
-                } else {
-                    if (isset($property_type[0]) && $property_type[0] == 0) {
+                }
+            }
 
-                        $property = $property->where('propery_type', $property_type[0]);
-                    }
-                    if (isset($property_type[0]) && $property_type[0] == 1) {
-
-                        $property = $property->where('propery_type', $property_type[0]);
+            // If nearby places passed
+            if (isset($nearbyPlaces) && ! empty($nearbyPlaces)) {
+                foreach ($nearbyPlaces as $nearbyPlace) {
+                    $nearbyPlaceId = $nearbyPlace['id'];
+                    $nearbyPlaceValue = $nearbyPlace['value'] ?? null;
+                    if (isset($nearbyPlace['value']) && ! empty($nearbyPlace['value'])) {
+                        $property = $property->whereHas('assignfacilities', function ($query) use ($nearbyPlaceId, $nearbyPlaceValue) {
+                            $query->where('facility_id', $nearbyPlaceId)->where('distance', '<=', $nearbyPlaceValue);
+                        });
+                    } else {
+                        $property = $property->whereHas('assignfacilities', function ($query) use ($nearbyPlaceId) {
+                            $query->where('facility_id', $nearbyPlaceId);
+                        });
                     }
                 }
             }
 
-            $total = $property->get()->count();
+            // If Country is passed
+            if (isset($country) && ! empty($country)) {
+                $property = $property->where('country', 'like', '%'.$country.'%');
+            }
+
+            // If State is passed
+            if (isset($state) && ! empty($state)) {
+                $property = $property->where('state', 'like', '%'.$state.'%');
+            }
+
+            // If City is passed
+            if (isset($city) && ! empty($city)) {
+                $property = $property->where('city', 'like', '%'.$city.'%');
+            }
+
+            // If place ID is passed, resolve it to city name
+            if (isset($placeId) && ! empty($placeId)) {
+                $locationData = $this->resolvePlaceIdToLocation($placeId);
+                if ($locationData) {
+                    if ($locationData['city']) {
+                        $property = $property->where('city', $locationData['city']);
+                    }
+                    if ($locationData['state']) {
+                        $property = $property->where('state', $locationData['state']);
+                    }
+                    if ($locationData['country']) {
+                        $property = $property->where('country', $locationData['country']);
+                    }
+                }
+            }
+
+            // If Max Price And Min Price passed
+            if (isset($minPrice) && ! empty($minPrice)) {
+                $property = $property->where('price', '>=', $minPrice);
+            }
+            if (isset($maxPrice) && ! empty($maxPrice)) {
+                $property = $property->where('price', '<=', $maxPrice);
+            }
+
+            // If Posted Since is passed
+            if (isset($postedSince) && $postedSince !== '') {
+                $now = Carbon::now();
+                switch ((int) $postedSince) {
+                    case 0: // Last 7 days
+                        $property->where('created_at', '>=', $now->copy()->subDays(7));
+                        break;
+                    case 1: // Yesterday
+                        $property->whereDate('created_at', $now->copy()->subDay());
+                        break;
+                    case 2: // Last 1 month
+                        $property->where('created_at', '>=', $now->copy()->subMonth());
+                        break;
+                    case 3: // Last 3 months
+                        $property->where('created_at', '>=', $now->copy()->subMonths(3));
+                        break;
+                    case 4: // Last 6 months
+                        $property->where('created_at', '>=', $now->copy()->subMonths(6));
+                        break;
+                }
+            }
+
+            // If Promoted Passed
+            if (isset($promoted) && ! empty($promoted) && $promoted == 1) {
+                $property = $property->whereHas('advertisement', function ($query) {
+                    $query->where(['status' => 0, 'is_enable' => 1]);
+                });
+            }
+
+            // If get_all_premium_properties is passed
+            if (isset($getPremiumProperties) && ! empty($getPremiumProperties) && $getPremiumProperties == 1) {
+                $property = $property->where('is_premium', 1);
+            }
+
+            // Add promoted_count and favourite_count for ordering
+            $property = $property->withCount([
+                'advertisement as promoted_count' => function ($query) {
+                    $query->where('status', 0)
+                        ->where('is_enable', 1)
+                        ->where('for', 'property')
+                        ->groupBy('property_id');
+                },
+            ])->withCount('favourite');
+
+            // Always group promoted properties first
+            $property = $property->orderByRaw('CASE WHEN promoted_count > 0 THEN 0 ELSE 1 END');
+
+            if (isset($mostViewed) && ! empty($mostViewed) && $mostViewed == 1) {
+                $property = $property->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - total_click) END');
+            } elseif (isset($mostLiked) && ! empty($mostLiked) && $mostLiked == 1) {
+                $property = $property->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - favourite_count) END');
+            } else {
+                $property = $property->orderByRaw('CASE WHEN promoted_count > 0 THEN RAND() ELSE (999999999 - id) END');
+            }
+
+            // Latitude and Longitude
+            if (isset($latitude) && ! empty($latitude) && isset($longitude) && ! empty($longitude) && $latitude != 'null' && $longitude != 'null') {
+                if (isset($range) && ! empty($range) && $range != 'null') {
+                    $this->applyBoundingBox($property, $latitude, $longitude, $range);
+                    $property = $property->selectRaw("
+                            (6371 * acos(cos(radians(?))
+                            * cos(radians(latitude))
+                            * cos(radians(longitude) - radians(?))
+                            + sin(radians(?))
+                            * sin(radians(latitude)))) AS distance", [$latitude, $longitude, $latitude])
+                        ->where('latitude', '!=', 0)
+                        ->where('longitude', '!=', 0)
+                        ->having('distance', '<', $range);
+                } else {
+                    $property = $property->where('latitude', $latitude)->where('longitude', $longitude);
+                }
+            }
+
+            $total = $property->clone()->count();
 
             $result = $property->skip($offset)->take($limit)->get()->map(function ($item) {
                 if ($item->category) {
@@ -3149,24 +3614,79 @@ class PropertyApiController extends Controller
             });
             $property_details = get_property_details($result, $current_user, true);
 
-            if (! empty($result)) {
-                $response['error'] = false;
-                $response['message'] = trans('Data Fetched Successfully');
-                $response['total'] = $total;
-                $response['data'] = $property_details;
-            } else {
+            return response()->json([
+                'error' => false,
+                'message' => ! empty($property_details) ? trans('Data Fetched Successfully') : trans('No Data Found'),
+                'total' => $total,
+                'data' => $property_details,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
-                $response['error'] = false;
-                $response['message'] = trans('No Data Found');
-                $response['data'] = [];
-            }
-        } else {
-            $response['error'] = false;
-            $response['message'] = trans('No Data Found');
-            $response['data'] = [];
+    /**
+     * FASE 7 (T2) — Calcula un score de afinidad (0-100) entre una propiedad y
+     * los intereses guardados del usuario (UserInterest). Refuerza el matching
+     * de recomendaciones de forma determinística, sin depender de la API de IA.
+     */
+    private function computeAffinityScore($item, $interest): int
+    {
+        if (empty($interest)) {
+            return 0;
         }
 
-        return $response;
+        $score = 0;
+        $weights = 0;
+
+        // Categoría (peso 40) — máxima relevancia
+        if (! empty($interest->category_ids)) {
+            $weights += 40;
+            $categoryIds = array_filter(explode(',', $interest->category_ids));
+            if (! empty($item->category_id) && in_array((string) $item->category_id, array_map('trim', $categoryIds), true)) {
+                $score += 40;
+            }
+        }
+
+        // Ciudad (peso 25)
+        if (! empty($interest->city)) {
+            $weights += 25;
+            if (mb_strtolower(trim((string) $item->city)) === mb_strtolower(trim($interest->city))) {
+                $score += 25;
+            }
+        }
+
+        // Tipo de propiedad (peso 20)
+        if (! empty($interest->property_type)) {
+            $weights += 20;
+            $types = array_filter(explode(',', $interest->property_type));
+            if (in_array((string) $item->propery_type, array_map('trim', $types), true)) {
+                $score += 20;
+            }
+        }
+
+        // Rango de precio (peso 15)
+        if (! empty($interest->price_range)) {
+            $weights += 15;
+            $range = explode(',', $interest->price_range);
+            if (count($range) === 2) {
+                $min = floatval($range[0]);
+                $max = floatval($range[1]);
+                $price = floatval($item->price ?? 0);
+                if ($price >= $min && $price <= $max) {
+                    $score += 15;
+                }
+            }
+        }
+
+        if ($weights === 0) {
+            return 40;
+        }
+
+        return (int) round(($score / $weights) * 100);
     }
 
     public function propertyAdvanceFilterData()
@@ -3295,6 +3815,46 @@ class PropertyApiController extends Controller
         return $propertyData;
     }
 
+    /**
+     * Pre-filtro por bounding-box (cuadro alrededor del punto) usando los valores
+     * mín/máx de latitud/longitud para un radio dado. Reduce drásticamente las filas
+     * sobre las que se calcula la distancia exacta (Haversine). FASE 2 (T4).
+     */
+    private function applyBoundingBox($query, $lat, $lon, $rangeKm)
+    {
+        $lat = (float) $lat;
+        $lon = (float) $lon;
+        $rangeKm = (float) $rangeKm;
+        if ($rangeKm <= 0) {
+            return;
+        }
+        // 1 grado de latitud ≈ 111.32 km
+        $latDelta = $rangeKm / 111.32;
+        // 1 grado de longitud varía con el coseno de la latitud
+        $lonDelta = $rangeKm / (111.32 * cos(deg2rad($lat)));
+        $query->whereBetween('latitude', [$lat - $latDelta, $lat + $latDelta])
+              ->whereBetween('longitude', [$lon - $lonDelta, $lon + $lonDelta]);
+    }
+
+    /**
+     * Búsqueda por texto con FULLTEXT (title + description) y fallback a LIKE
+     * para términos con los que FULLTEXT no funciona (short tail / operadores).
+     * FASE 2 (T2): evita LIKE '%...%' en tablas grandes.
+     */
+    private function applyTitleSearchFilter(\Illuminate\Database\Eloquent\Builder $query, $search)
+    {
+        $search = trim((string) $search);
+        $query->where(function ($q) use ($search) {
+            // Fallback a LIKE para términos cortos o con caracteres que romperían FULLTEXT
+            if (mb_strlen($search) < 3 || preg_match('/[+\-><()~*"@]/', $search)) {
+                $q->where('title', 'LIKE', "%{$search}%")
+                    ->orWhere('description', 'LIKE', "%{$search}%");
+            } else {
+                $q->whereRaw('MATCH(title, description) AGAINST(? IN NATURAL LANGUAGE MODE)', [$search]);
+            }
+        });
+    }
+
     private function resolvePlaceIdToLocation($placeId)
     {
         $googleApiKey = env('PLACE_API_KEY');
@@ -3337,5 +3897,59 @@ class PropertyApiController extends Controller
         }
 
         return null;
+    }
+
+    public function updateUnitStatus(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'property_ids' => 'required|string',
+            'unit_status' => 'required|in:available,low_stock,sold_out,inactive',
+        ]);
+
+        if ($validator->fails()) {
+            return ApiResponseService::errorResponse($validator->errors()->first());
+        }
+
+        try {
+            $propertyIds = explode(',', $request->property_ids);
+            $unitStatus = $request->unit_status;
+            $updated = 0;
+
+            foreach ($propertyIds as $id) {
+                $property = Property::find($id);
+                if (! $property) {
+                    continue;
+                }
+
+                $property->unit_status = $unitStatus;
+
+                switch ($unitStatus) {
+                    case 'sold_out':
+                        $property->available_units = 0;
+                        break;
+                    case 'available':
+                        $property->available_units = $property->total_units ?? 1;
+                        break;
+                    case 'low_stock':
+                        if (($property->available_units ?? 0) > 3) {
+                            $property->available_units = 3;
+                        } elseif ($property->available_units === null) {
+                            $property->available_units = 1;
+                        }
+                        break;
+                }
+
+                $property->save();
+                $updated++;
+            }
+
+            return ApiResponseService::successResponse('Unit status updated successfully', [
+                'updated' => $updated,
+            ]);
+        } catch (Exception $e) {
+            Log::error('Error updating unit status: '.$e->getMessage());
+
+            return ApiResponseService::errorResponse('Failed to update unit status');
+        }
     }
 }

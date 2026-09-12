@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Projects;
+use App\Models\Property;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 

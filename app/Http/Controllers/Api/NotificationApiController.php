@@ -33,7 +33,10 @@ class NotificationApiController extends Controller
                         ->where('created_at', '>=', $loggedInCreatedAt);
                 });
         })
-            ->where('role_context', $request->user_active_role)
+            ->where(function ($q) use ($request) {
+                $q->where('role_context', $request->user_active_role ?? 'user')
+                    ->orWhere('role_context', 'general');
+            })
             ->with('property:id,title_image')
             ->select('id', 'title', 'message', 'image', 'type', 'send_type', 'customers_id', 'propertys_id', 'role_context', 'created_at')
             ->orderBy('id', 'DESC');

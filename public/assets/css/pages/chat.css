@@ -136,3 +136,36 @@
         padding: 0 2rem
     }
 }
+
+/* Empty state when there are no conversations */
+.chat-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 60vh;
+    padding: 2rem;
+    text-align: center;
+    color: #6c757d;
+}
+
+.chat-empty-state-icon {
+    font-size: 4rem;
+    line-height: 1;
+    margin-bottom: 1rem;
+    color: var(--bs-primary, #5e72e4);
+    opacity: .7;
+}
+
+.chat-empty-state-title {
+    margin: 0 0 .5rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.chat-empty-state-text {
+    margin: 0;
+    max-width: 360px;
+    font-size: .95rem;
+}

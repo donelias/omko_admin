@@ -6,11 +6,11 @@ use App\Models\Category;
 use App\Models\parameter;
 use App\Models\Property;
 use App\Services\ResponseService;
-use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class DemoDataController extends Controller
 {
@@ -47,9 +47,15 @@ class DemoDataController extends Controller
             ]);
             DB::commit();
             ResponseService::successResponse('Demo data seeded successfully');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            ResponseService::errorResponse();
+            Log::error('[DemoData] seedDemoData failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            ResponseService::errorResponse($e->getMessage());
         }
     }
 
@@ -88,9 +94,15 @@ class DemoDataController extends Controller
             DB::commit();
 
             ResponseService::successResponse('Demo data cleared successfully');
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            ResponseService::errorResponse();
+            Log::error('[DemoData] clearDemoData failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            ResponseService::errorResponse($e->getMessage());
         }
     }
 
@@ -116,8 +128,14 @@ class DemoDataController extends Controller
                 'success' => true,
                 'message' => 'Demo data reset successfully! Fresh demo data has been seeded.',
             ]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
+            Log::error('[DemoData] resetDemoData failed', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
 
             return response()->json([
                 'success' => false,

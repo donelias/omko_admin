@@ -2,17 +2,12 @@
 
 namespace App\Models;
 
-use App\Traits\HasAppTimezone;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProjectUnitInventoryMovement extends Model
 {
-    use HasAppTimezone, HasFactory;
-
     protected $table = 'project_unit_inventory_movements';
-
-    protected $dates = ['created_at', 'updated_at'];
 
     protected $fillable = [
         'property_id',
@@ -28,27 +23,25 @@ class ProjectUnitInventoryMovement extends Model
     ];
 
     protected $casts = [
-        'property_id' => 'integer',
-        'project_id' => 'integer',
         'delta_units' => 'integer',
         'before_units' => 'integer',
         'after_units' => 'integer',
-        'appointment_id' => 'integer',
-        'actor_id' => 'integer',
     ];
 
-    public function property()
+    public const RESERVE = 'reserve';
+    public const CONFIRM = 'confirm';
+    public const CANCEL = 'cancel';
+    public const EXPIRE = 'expire';
+    public const REJECT = 'reject';
+    public const MANUAL_ADJUST = 'manual_adjust';
+
+    public function property(): BelongsTo
     {
-        return $this->belongsTo(Property::class, 'property_id', 'id');
+        return $this->belongsTo(Property::class, 'property_id');
     }
 
-    public function project()
+    public function project(): BelongsTo
     {
-        return $this->belongsTo(Projects::class, 'project_id', 'id');
-    }
-
-    public function appointment()
-    {
-        return $this->belongsTo(Appointment::class, 'appointment_id', 'id');
+        return $this->belongsTo(Projects::class, 'project_id');
     }
 }

@@ -52,7 +52,7 @@ class NotifyExpiringSubscriptions extends Command
 
         // Get Data of email type
         $emailTypeData = HelperService::getEmailTemplatesTypes('subscription_expiring_soon');
-        $appName = env('APP_NAME') ?? 'eBroker';
+        $appName = env('APP_NAME') ?? 'omko';
         foreach ($userPackages as $userPackage) {
             $variables = [
                 'app_name' => $appName,

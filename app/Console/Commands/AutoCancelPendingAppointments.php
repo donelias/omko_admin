@@ -75,6 +75,12 @@ class AutoCancelPendingAppointments extends Command
                         $appt->last_status_updated_by = 'system';
                         $appt->save();
 
+                        AppointmentCancellation::create([
+                            'appointment_id' => $appt->id,
+                            'reason' => $reason,
+                            'cancelled_by' => 'system',
+                        ]);
+
                         $inventoryService = app(ProjectUnitInventoryService::class);
                         $inventoryService->releaseForAppointment(
                             $appt,
@@ -83,12 +89,6 @@ class AutoCancelPendingAppointments extends Command
                             null,
                             $reason
                         );
-
-                        AppointmentCancellation::create([
-                            'appointment_id' => $appt->id,
-                            'reason' => $reason,
-                            'cancelled_by' => 'system',
-                        ]);
 
                         DB::commit();
 

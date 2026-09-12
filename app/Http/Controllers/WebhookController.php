@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Notifications;
 use App\Models\Package;
 use App\Models\PackageFeature;
+use App\Models\PayAsYouGo;
 use App\Models\PaymentTransaction;
+use App\Models\Projects;
+use App\Models\Property;
 use App\Models\UserPackage;
 use App\Models\UserPackageLimit;
 use App\Models\UserPayAsYouGoCredit;
@@ -18,6 +21,7 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use KingFlamez\Rave\Facades\Rave as Flutterwave;
 use Razorpay\Api\Api;
 use Stripe\Exception\SignatureVerificationException;
@@ -89,6 +93,13 @@ class WebhookController extends Controller
             $razorPayApiKey = $razorPayConfigData['razor_key'];
             $razorPaySecretKey = $razorPayConfigData['razor_secret'];
             $webhookSecret = $razorPayConfigData['razor_webhook_secret'];
+
+            // Fail closed: reject if credentials are not configured
+            if (empty($razorPayApiKey) || empty($razorPaySecretKey) || empty($webhookSecret)) {
+                Log::error('Razorpay Webhook: credentials are not configured, rejecting request');
+
+                return response()->json(['error' => 'Gateway not available'], 503);
+            }
 
             // Validate webhook signature
             $webhookSignature = $request->header('X-Razorpay-Signature');
@@ -405,19 +416,25 @@ class WebhookController extends Controller
             // Verify webhook signature using client secret
             $clientSecret = HelperService::getSettingData('cashfree_secret_key') ?? '';
 
-            if (! empty($clientSecret)) {
-                $receivedSignature = $request->header('x-webhook-signature');
-                $timestamp = $request->header('x-webhook-timestamp');
+            // Fail closed: reject if credentials are not configured
+            if (empty($clientSecret)) {
+                Log::error('Cashfree Webhook: credentials are not configured, rejecting request');
 
-                if ($receivedSignature && $timestamp) {
-                    $signatureData = $timestamp.$payload;
-                    $calculatedSignature = base64_encode(hash_hmac('sha256', $signatureData, $clientSecret, true));
+                return response()->json(['error' => 'Gateway not available'], 503);
+            }
 
-                    if (! hash_equals($calculatedSignature, $receivedSignature)) {
-                        Log::error('Cashfree Webhook: Signature verification failed');
+            // Verify webhook signature
+            $receivedSignature = $request->header('x-webhook-signature');
+            $timestamp = $request->header('x-webhook-timestamp');
 
-                        return response()->json(['error' => 'Invalid signature'], 401);
-                    }
+            if ($receivedSignature && $timestamp) {
+                $signatureData = $timestamp.$payload;
+                $calculatedSignature = base64_encode(hash_hmac('sha256', $signatureData, $clientSecret, true));
+
+                if (! hash_equals($calculatedSignature, $receivedSignature)) {
+                    Log::error('Cashfree Webhook: Signature verification failed');
+
+                    return response()->json(['error' => 'Invalid signature'], 401);
                 }
             }
 
@@ -526,27 +543,31 @@ class WebhookController extends Controller
 
             // Authorization Validation
             $authorizationHeader = $request->header('authorization');
-            $isAuthorizationValid = true;
+            $isAuthorizationValid = false;
 
             // Get credentials
             $phonePeConfig = HelperService::getMultipleSettingData(['phonepe_merchant_id', 'phonepe_webhook_username', 'phonepe_webhook_password']);
             $userName = $phonePeConfig['phonepe_webhook_username'] ?? null;
             $password = $phonePeConfig['phonepe_webhook_password'] ?? null;
-            // Verify Checksum if credentials are configured
-            if (! empty($userName) && ! empty($password)) {
-                if (empty($authorizationHeader)) {
-                    Log::error('PhonePe Webhook: authorization header missing');
-                    $isAuthorizationValid = false;
-                } else {
-                    $calculatedChecksum = hash('sha256', $userName.':'.$password);
-                    $isAuthorizationValid = ($calculatedChecksum == $authorizationHeader);
-                    if (! $isAuthorizationValid) {
-                        Log::error('PhonePe Webhook: Invalid authorization webhook');
+            // Webhooks are validated only if credentials are configured. Fail closed otherwise.
+            if (empty($userName) || empty($password)) {
+                Log::error('PhonePe Webhook: webhook credentials are not configured, rejecting request');
 
-                        return response()->json(['error' => 'Invalid authorization'], 401);
-                    } else {
-                        Log::info('PhonePe Webhook: authorization webhook matched');
-                    }
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
+            // Verify Checksum
+            if (empty($authorizationHeader)) {
+                Log::error('PhonePe Webhook: authorization header missing');
+                $isAuthorizationValid = false;
+            } else {
+                $calculatedChecksum = hash('sha256', $userName.':'.$password);
+                $isAuthorizationValid = ($calculatedChecksum == $authorizationHeader);
+                if (! $isAuthorizationValid) {
+                    Log::error('PhonePe Webhook: Invalid authorization webhook');
+
+                    return response()->json(['error' => 'Invalid authorization'], 401);
+                } else {
+                    Log::info('PhonePe Webhook: authorization webhook matched');
                 }
             }
 
@@ -601,6 +622,14 @@ class WebhookController extends Controller
             Log::info('Midtrans Webhook Received');
 
             $serverKey = HelperService::getSettingData('midtrans_server_key');
+
+            // Fail closed: reject if credentials are not configured
+            if (empty($serverKey)) {
+                Log::error('Midtrans Webhook: credentials are not configured, rejecting request');
+
+                return response()->json(['error' => 'Gateway not available'], 503);
+            }
+
             $signatureKey = hash(
                 'sha512',
                 $payload['order_id'].
@@ -640,6 +669,86 @@ class WebhookController extends Controller
     }
 
     /**
+     * Mock Gateway Webhook — simulates a successful payment confirmation
+     * without contacting a real gateway. Used by the MockPayment driver.
+     */
+    public function mock(Request $request)
+    {
+        try {
+            Log::info('Mock Webhook Called');
+            $orderId = $request->input('order_id') ?? $request->query('order_id');
+
+            if (empty($orderId)) {
+                return response()->json(['error' => 'order_id is required'], 400);
+            }
+
+            $transaction = PaymentTransaction::where('order_id', $orderId)->first();
+            if (! $transaction) {
+                Log::error('Mock Webhook: transaction not found for '.$orderId);
+
+                return response()->json(['error' => 'Transaction not found'], 404);
+            }
+
+            if ($transaction->payment_status != 'success') {
+                DB::beginTransaction();
+                try {
+                    $transaction->update([
+                        'transaction_id' => 'MOCK-'.Str::upper(Str::random(16)),
+                        'payment_status' => 'success',
+                    ]);
+
+                    if ($transaction->pay_as_you_go_id) {
+                        UserPayAsYouGoCredit::create([
+                            'user_id' => $transaction->user_id,
+                            'pay_as_you_go_id' => $transaction->pay_as_you_go_id,
+                            'payment_transaction_id' => $transaction->id,
+                            'used' => 0,
+                        ]);
+
+                        $payAsYouGo = PayAsYouGo::find($transaction->pay_as_you_go_id);
+                        if ($payAsYouGo && $payAsYouGo->type === 'premium') {
+                            $premiumExpiresAt = Carbon::now()->addDays($payAsYouGo->duration_days ?? 30);
+                            if (! empty($transaction->property_id)) {
+                                Property::where('id', $transaction->property_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                            }
+                            if (! empty($transaction->project_id)) {
+                                Projects::where('id', $transaction->project_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                            }
+                        }
+                    } elseif ($transaction->package_id) {
+                        // FASE 8 (T6 restante): el webhook mock también asigna
+                        // paquetes/planes (Developer/Agencia) con sus límites.
+                        $this->assignPackageToUser($transaction);
+                    }
+                    DB::commit();
+                } catch (Throwable $e) {
+                    DB::rollBack();
+                    Log::error('Mock Webhook assign error: '.$e->getMessage());
+
+                    return response()->json(['error' => 'Could not complete mock payment'], 500);
+                }
+            }
+
+            $webUrl = config('app.url');
+
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 'success', 'payment_status' => 'success']);
+            }
+
+            return view('payments.status', [
+                'gateway' => 'mock',
+                'status' => 'success',
+                'txnRefId' => $orderId,
+                'webUrl' => $webUrl,
+            ]);
+        } catch (Throwable $e) {
+            Log::error('Mock Webhook Error: '.$e->getMessage());
+
+            return response()->json(['error' => 'Internal Server Error'], 500);
+        }
+    }
+
+    /**
      * Success Business Login
      *
      * @param  $payment_transaction_id
@@ -664,54 +773,9 @@ class WebhookController extends Controller
             DB::beginTransaction();
             $paymentTransactionData->update(['transaction_id' => $transactionId, 'payment_status' => 'success']);
 
-            $packageId = $paymentTransactionData->package_id;
-            $payAsYouGoId = $paymentTransactionData->pay_as_you_go_id;
-            $userId = $paymentTransactionData->user_id;
+            $this->assignPackageToUser($paymentTransactionData);
 
-            if ($payAsYouGoId) {
-                // Assign Pay As You Go Credit to user
-                UserPayAsYouGoCredit::create([
-                    'user_id' => $userId,
-                    'pay_as_you_go_id' => $payAsYouGoId,
-                    'payment_transaction_id' => $paymentTransactionData->id,
-                    'used' => 0,
-                ]);
-            } elseif ($packageId) {
-                $package = Package::findOrFail($packageId);
-
-                if (! empty($package)) {
-                    // Assign Package to user
-                    $userPackage = UserPackage::create([
-                        'package_id' => $packageId,
-                        'user_id' => $userId,
-                        'start_date' => Carbon::now(),
-                        'end_date' => $package->package_type == 'unlimited' ? null : Carbon::now()->addHours($package->duration),
-                        'role_context' => $package->user_type,
-                    ]);
-
-                    // Assign limited count feature to user with limits
-                    $packageFeatures = PackageFeature::where(['package_id' => $packageId, 'limit_type' => 'limited'])->get();
-                    if (collect($packageFeatures)->isNotEmpty()) {
-                        $userPackageLimitData = [];
-                        foreach ($packageFeatures as $key => $feature) {
-                            $userPackageLimitData[] = [
-                                'user_package_id' => $userPackage->id,
-                                'package_feature_id' => $feature->id,
-                                'total_limit' => $feature->limit,
-                                'used_limit' => 0,
-                                'created_at' => now(),
-                                'updated_at' => now(),
-                            ];
-                        }
-
-                        if (! empty($userPackageLimitData)) {
-                            UserPackageLimit::insert($userPackageLimitData);
-                        }
-                    }
-                }
-            }
-
-            $userFcmTokensDB = Usertokens::where('customer_id', $userId)->pluck('fcm_id');
+            $userFcmTokensDB = Usertokens::where('customer_id', $paymentTransactionData->user_id)->pluck('fcm_id');
             if (collect($userFcmTokensDB)->isNotEmpty()) {
                 $translatedTitle = 'Package Purchased';
                 $translatedBody = 'Amount :- :amount';
@@ -741,7 +805,8 @@ class WebhookController extends Controller
                     'image' => '',
                     'type' => '2',
                     'send_type' => '0',
-                    'customers_id' => $userId,
+                    'customers_id' => $paymentTransactionData->user_id,
+                    'role_context' => $paymentTransactionData->role_context ?? 'user',
                 ]);
             }
             DB::commit();
@@ -751,6 +816,73 @@ class WebhookController extends Controller
             DB::rollBack();
             Log::error($th->getMessage().'WebhookController -> assignPackage');
             ResponseService::errorResponse();
+        }
+    }
+
+    /**
+     * Crea el crédito (pay-as-you-go) o el paquete/plan + límites (package)
+     * a partir de una transacción de pago ya confirmada. Debe ejecutarse
+     * dentro de una transacción DB por el llamador.
+     */
+    private function assignPackageToUser(PaymentTransaction $paymentTransactionData)
+    {
+        $packageId = $paymentTransactionData->package_id;
+        $payAsYouGoId = $paymentTransactionData->pay_as_you_go_id;
+        $userId = $paymentTransactionData->user_id;
+
+        if ($payAsYouGoId) {
+            // Assign Pay As You Go Credit to user
+            UserPayAsYouGoCredit::create([
+                'user_id' => $userId,
+                'pay_as_you_go_id' => $payAsYouGoId,
+                'payment_transaction_id' => $paymentTransactionData->id,
+                'used' => 0,
+            ]);
+
+            // Premium Destaque: activate is_premium on the referenced property/project
+            $payAsYouGo = PayAsYouGo::find($payAsYouGoId);
+            if ($payAsYouGo && $payAsYouGo->type === 'premium') {
+                $premiumExpiresAt = Carbon::now()->addDays($payAsYouGo->duration_days ?? 30);
+                if (! empty($paymentTransactionData->property_id)) {
+                    Property::where('id', $paymentTransactionData->property_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                }
+                if (! empty($paymentTransactionData->project_id)) {
+                    Projects::where('id', $paymentTransactionData->project_id)->update(['is_premium' => 1, 'premium_expiry_date' => $premiumExpiresAt]);
+                }
+            }
+        } elseif ($packageId) {
+            $package = Package::findOrFail($packageId);
+
+            if (! empty($package)) {
+                // Assign Package to user
+                $userPackage = UserPackage::create([
+                    'package_id' => $packageId,
+                    'user_id' => $userId,
+                    'start_date' => Carbon::now(),
+                    'end_date' => $package->package_type == 'unlimited' ? null : Carbon::now()->addHours($package->duration),
+                    'role_context' => $package->user_type,
+                ]);
+
+                // Assign limited count feature to user with limits
+                $packageFeatures = PackageFeature::where(['package_id' => $packageId, 'limit_type' => 'limited'])->get();
+                if (collect($packageFeatures)->isNotEmpty()) {
+                    $userPackageLimitData = [];
+                    foreach ($packageFeatures as $key => $feature) {
+                        $userPackageLimitData[] = [
+                            'user_package_id' => $userPackage->id,
+                            'package_feature_id' => $feature->id,
+                            'total_limit' => $feature->limit,
+                            'used_limit' => 0,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                    }
+
+                    if (! empty($userPackageLimitData)) {
+                        UserPackageLimit::insert($userPackageLimitData);
+                    }
+                }
+            }
         }
     }
 
@@ -811,6 +943,7 @@ class WebhookController extends Controller
                 'type' => '2',
                 'send_type' => '0',
                 'customers_id' => $userId,
+                'role_context' => $paymentTransactionData->role_context ?? 'user',
             ]);
 
             DB::commit();

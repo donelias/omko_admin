@@ -14,7 +14,6 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Request as RequestFacades;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
@@ -55,150 +54,6 @@ class SettingController extends Controller
         return view('settings.'.$type, compact('type', 'translationLanguages', 'settingData'));
     }
 
-
-
- /*
-  public function settings(Request $request)
-    {
-        try {
-            $permissionType = str_replace('-', '_', $request->type);
-
-            if (! has_permissions('update', $permissionType)) {
-                return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
-            } else {
-                DB::beginTransaction();
-                
-                // Forzamos la validación del tipo de configuración
-                $type1 = $request->type;
-                if ($type1 != '') {
-                    
-                    // Capturamos el array de inputs de texto (aquí vienen redes sociales, colores, etc.)
-                    // Si viene vacío por alguna razón, inicializamos un array para que no rompa
-                    $input = $request->data ?? $request->except(['_token', 'type', 'btnAdd1']); 
-
-                    $logoDestinationPath = public_path('assets/images/logo');
-                    if (!file_exists($logoDestinationPath)) {
-                        mkdir($logoDestinationPath, 0775, true);
-                    }
-
-                    // 1. Procesar Web Favicon
-                    if ($request->hasFile('web_favicon')) {
-                        $filename = 'web_favicon_'.time().'.'.$request->file('web_favicon')->getClientOriginalExtension();
-                        $currentDb = system_setting('web_favicon');
-                        $databaseData = ! empty($currentDb) ? $currentDb : null;
-
-                        if (config('app.env') === 'local') {
-                            $request->file('web_favicon')->move($logoDestinationPath, $filename);
-                            $input['web_favicon'] = $filename; 
-                        } else {
-                            $input['web_favicon'] = handleFileUpload($request, 'web_favicon', $logoDestinationPath, $filename, $databaseData);
-                        }
-                    } else {
-                        // Si no se subió archivo nuevo, mantenemos el valor actual de la BD para que no se borre
-                        $input['web_favicon'] = system_setting('web_favicon') ?? '';
-                    }
-
-                    // 2. Procesar Web Logo (Main Logo)
-                    if ($request->hasFile('web_logo')) {
-                        $filename = 'web_logo_'.time().'.'.$request->file('web_logo')->getClientOriginalExtension();
-                        $currentDb = system_setting('web_logo');
-                        $databaseData = ! empty($currentDb) ? $currentDb : null;
-
-                        if (config('app.env') === 'local') {
-                            $request->file('web_logo')->move($logoDestinationPath, $filename);
-                            $input['web_logo'] = $filename;
-                        } else {
-                            $input['web_logo'] = handleFileUpload($request, 'web_logo', $logoDestinationPath, $filename, $databaseData);
-                        }
-                    } else {
-                        $input['web_logo'] = system_setting('web_logo') ?? '';
-                    }
-
-                    // 3. Procesar Web Placeholder Logo
-                    if ($request->hasFile('web_placeholder_logo')) {
-                        $filename = 'web_placeholder_logo_'.time().'.'.$request->file('web_placeholder_logo')->getClientOriginalExtension();
-                        $currentDb = system_setting('web_placeholder_logo');
-                        $databaseData = ! empty($currentDb) ? $currentDb : null;
-
-                        if (config('app.env') === 'local') {
-                            $request->file('web_placeholder_logo')->move($logoDestinationPath, $filename);
-                            $input['web_placeholder_logo'] = $filename;
-                        } else {
-                            $input['web_placeholder_logo'] = handleFileUpload($request, 'web_placeholder_logo', $logoDestinationPath, $filename, $databaseData);
-                        }
-                    } else {
-                        $input['web_placeholder_logo'] = system_setting('web_placeholder_logo') ?? '';
-                    }
-
-                    // 4. Procesar Web Footer Logo
-                    if ($request->hasFile('web_footer_logo')) {
-                        $filename = 'web_footer_logo_'.time().'.'.$request->file('web_footer_logo')->getClientOriginalExtension();
-                        $currentDb = system_setting('web_footer_logo');
-                        $databaseData = ! empty($currentDb) ? $currentDb : null;
-
-                        if (config('app.env') === 'local') {
-                            $request->file('web_footer_logo')->move($logoDestinationPath, $filename);
-                            $input['web_footer_logo'] = $filename;
-                        } else {
-                            $input['web_footer_logo'] = handleFileUpload($request, 'web_footer_logo', $logoDestinationPath, $filename, $databaseData);
-                        }
-                    } else {
-                        $input['web_footer_logo'] = system_setting('web_footer_logo') ?? '';
-                    }
-
-                    // Mezclamos cualquier otro campo suelto del request que no esté en 'data' (por si acaso)
-                    foreach ($request->except(['_token', 'type', 'btnAdd1', 'data', 'web_favicon', 'web_logo', 'web_placeholder_logo', 'web_footer_logo']) as $key => $value) {
-                        $input[$key] = $value;
-                    }
-
-                    // Guardado/Actualización en la tabla Settings
-                    $message = Setting::where('type', $type1)->first();
-                    if (empty($message)) {
-                        Setting::create([
-                            'type' => $type1,
-                            'data' => $input,
-                        ]);
-                    } else {
-                        Setting::where('type', $type1)->update(['data' => $input]);
-                    }
-                    
-                    $setting = Setting::where('type', $type1)->first();
-                    
-                    // START :: Add Translations
-                    if (isset($request->translations) && ! empty($request->translations)) {
-                        $translationData = [];
-                        foreach ($request->translations as $translation) {
-                            if (isset($translation['value']) && ! empty($translation['value'])) {
-                                $translationData[] = [
-                                    'id' => $translation['id'] ?? null,
-                                    'translatable_id' => $setting->id,
-                                    'translatable_type' => 'App\Models\Setting',
-                                    'language_id' => $translation['language_id'],
-                                    'key' => 'data',
-                                    'value' => $translation['value'],
-                                ];
-                            }
-                        }
-                        if (! empty($translationData)) {
-                            HelperService::storeTranslations($translationData);
-                        }
-                    }
-                    
-                    DB::commit();
-                    Artisan::call('cache:clear');
-
-                    return redirect(str_replace('_', '-', $type1))->with('success', trans('Data Updated Successfully'));
-                } else {
-                    return redirect(str_replace('_', '-', $type1))->with('error', 'Something Wrong');
-                }
-            }
-        } catch (Exception $e) {
-            DB::rollBack();
-            return redirect()->back()->with('error', trans('Something Went Wrong'));
-        }
-    }
- */
-   
     public function settings(Request $request)
     {
         try {
@@ -259,7 +114,6 @@ class SettingController extends Controller
             return redirect()->back()->with('error', trans('Something Went Wrong'));
         }
     }
-   
 
     public function paymentGatewaySettingsIndex()
     {
@@ -544,6 +398,8 @@ class SettingController extends Controller
             'timezone',
             'min_radius_range',
             'max_radius_range',
+            'map_service_provider',
+            'geonames_username',
             'map_api_key',
             'place_api_key',
             'unsplash_api_key',
@@ -554,7 +410,6 @@ class SettingController extends Controller
             'distance_option',
             'system_color',
             'web_url',
-            'text_property_submission',
             'auto_approve_edited_listings',
             'number_with_otp_login',
             'otp_service_provider',
@@ -570,10 +425,14 @@ class SettingController extends Controller
             'default_language',
             'notify_user_for_subscription_expiry',
             'show_direct_video_upload',
+            'show_whatsapp_button',
+            'story_max_duration',
+            'story_video_max_size',
             'days_before_subscription_expiry',
             'homepage_location_alert_status',
             'show_premium_toggle',
             'show_exact_location',
+            'audit_log_enabled',
         ];
         $systemSettings = HelperService::getMultipleSettingData($settingsArray, true);
 
@@ -769,7 +628,7 @@ class SettingController extends Controller
 
     public function show_privacy_policy()
     {
-        $appName = env('APP_NAME', 'eBroker');
+        $appName = env('APP_NAME', 'omko');
         $privacy_policy = Setting::select('data')->where('type', 'privacy_policy')->first();
 
         return view('settings.show_privacy_policy', compact('privacy_policy', 'appName'));
@@ -802,7 +661,7 @@ class SettingController extends Controller
 
     //     $curl = curl_init();
     //     curl_setopt_array($curl, array(
-    //         CURLOPT_URL => 'https://validator.wrteam.in/ebroker_validator?purchase_code=' . $request->purchase_code . '&domain_url=' . $app_url . '',
+    //         CURLOPT_URL => 'https://validator.wrteam.in/omko_validator?purchase_code=' . $request->purchase_code . '&domain_url=' . $app_url . '',
     //         CURLOPT_RETURNTRANSFER => true,
     //         CURLOPT_MAXREDIRS => 10,
     //         CURLOPT_FOLLOWLOCATION => true,
@@ -918,6 +777,28 @@ class SettingController extends Controller
             return redirect()->back()->with('error', $validator->errors()->first());
         }
 
+        // Validate purchase code
+        $app_url = (string) url('/');
+        $app_url = preg_replace('#^https?://#i', '', $app_url);
+
+        $curl = curl_init();
+        curl_setopt_array($curl, [
+            CURLOPT_URL => 'https://validator.wrteam.in/omko_validator?purchase_code='.$request->purchase_code.'&domain_url='.$app_url.'',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'GET',
+        ]);
+        $response = curl_exec($curl);
+        curl_close($curl);
+
+        $response = json_decode($response, true);
+
+        if (empty($response) || ! empty($response['error'])) {
+            return redirect()->back()->with('error', $response['message'] ?? trans('Something Went Wrong'));
+        }
+
         $destinationPath = public_path('update/tmp');
         $target_path = base_path();
 
@@ -967,7 +848,7 @@ class SettingController extends Controller
             return redirect()->back()->with('error', 'Please update to nearest version first');
         }
 
-        // 🔥 OPEN SOURCE ZIP
+        //  OPEN SOURCE ZIP
         $zip1 = new ZipArchive;
 
         if ($zip1->open($source_path1) !== true) {
@@ -977,7 +858,7 @@ class SettingController extends Controller
             return redirect()->back()->with('error', 'Unable to open source zip');
         }
 
-        // 🔥 FORCE OVERWRITE FILES
+        //  FORCE OVERWRITE FILES
         for ($i = 0; $i < $zip1->numFiles; $i++) {
 
             $originalName = $zip1->getNameIndex($i);
@@ -1006,7 +887,7 @@ class SettingController extends Controller
                 mkdir($dir, 0777, true);
             }
 
-            // 🔴 Check writable
+            //  Check writable
             if (! is_writable($dir)) {
                 unlink($source_path1);
                 unlink($ver_file1);
@@ -1014,7 +895,7 @@ class SettingController extends Controller
                 return redirect()->back()->with('error', 'Permission denied: '.$dir);
             }
 
-            // 🔥 FORCE overwrite
+            //  FORCE overwrite
             if (! copy('zip://'.$source_path1.'#'.$originalName, $filePath)) {
                 unlink($source_path1);
                 unlink($ver_file1);
@@ -1128,7 +1009,7 @@ class SettingController extends Controller
             if ($request->hasFile('dark_mode_logo') && $request->file('dark_mode_logo')->isValid()) {
 
                 $filename = 'dark_mode_logo.'.$request->file('dark_mode_logo')->getClientOriginalExtension();
-                // Get Data from Settings table
+                // Get Data from Settings tableweb
                 $darkModeLogoDatabaseData = HelperService::getSettingData('dark_mode_logo');
                 $databaseData = ! empty($darkModeLogoDatabaseData) ? $darkModeLogoDatabaseData : null;
 
@@ -1158,193 +1039,12 @@ class SettingController extends Controller
         if (! has_permissions('read', 'web_settings')) {
             return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
         }
-        $settingsArray = ['web_favicon', 'web_logo', 'web_placeholder_logo', 'web_footer_logo', 'iframe_link', 'facebook_id', 'instagram_id', 'twitter_id', 'youtube_id', 'category_background', 'sell_web_color', 'sell_web_background_color', 'rent_web_color', 'rent_web_background_color', 'buy_web_color', 'buy_web_background_color', 'web_maintenance_mode', 'allow_cookies'];
+        $settingsArray = ['web_favicon', 'web_logo', 'web_placeholder_logo', 'web_footer_logo', 'iframe_link', 'facebook_id', 'instagram_id','linkedin_id', 'twitter_id', 'youtube_id', 'category_background', 'sell_web_color', 'sell_web_background_color', 'rent_web_color', 'rent_web_background_color', 'buy_web_color', 'buy_web_background_color', 'web_maintenance_mode', 'allow_cookies'];
         $getWebSettings = HelperService::getMultipleSettingData($settingsArray);
 
         return view('settings.web-settings', compact('getWebSettings'));
     }
 
-    public function web_settings(Request $request)
-    {
-        $debugTrace = 'WEB_SETTINGS_DEBUG_' . now()->format('Ymd_His') . '_' . substr((string) Str::uuid(), 0, 8);
-
-        Log::info($debugTrace . ' Request received', [
-            'url' => $request->fullUrl(),
-            'method' => $request->method(),
-            'content_type' => $request->header('Content-Type'),
-            'has_files' => $request->hasFile('web_favicon') || $request->hasFile('web_logo') || $request->hasFile('web_placeholder_logo') || $request->hasFile('web_footer_logo'),
-            'file_keys' => array_keys($request->allFiles()),
-            'input_keys' => array_keys($request->except(['_token'])),
-        ]);
-
-        if (! has_permissions('update', 'web_settings')) {
-            return ResponseService::errorResponse(PERMISSION_ERROR_MSG);
-        } else {
-            $validator = Validator::make($request->all(), [
-                'web_logo' => 'nullable|image|mimes:png,jpg,jpeg,webp,svg|max:3000',
-                'web_placeholder_logo' => 'nullable|image|mimes:png,jpg,jpeg,webp,svg|max:3000',
-                'web_footer_logo' => 'nullable|image|mimes:png,jpg,jpeg,webp,svg|max:3000',
-                'web_favicon' => 'nullable|image|mimes:png,jpg,jpeg,ico,webp|max:3000',
-            ], [
-                'web_logo.mimes' => trans('Image must be JPG, JPEG, PNG, WebP or SVG'),
-                'web_placeholder_logo.mimes' => trans('Image must be JPG, JPEG, PNG, WebP or SVG'),
-                'web_footer_logo.mimes' => trans('Image must be JPG, JPEG, PNG, WebP or SVG'),
-                'web_favicon.mimes' => trans('Image must be JPG, JPEG, PNG, ICO or WebP'),
-            ]);
-
-            if ($validator->fails()) {
-                Log::warning($debugTrace . ' Validation failed', [
-                    'errors' => $validator->errors()->toArray(),
-                ]);
-                return redirect()->back()->with('error', $validator->errors()->first());
-            }
-
-            // Capturamos todos los inputs excepto tokens y botones
-            $input = $request->except(['_token', 'btnAdd', 'btnAdd1']);
-            $destinationPath = public_path('assets/images/logo');
-
-            // Asegurar que el directorio exista físicamente
-            if (!file_exists($destinationPath)) {
-                mkdir($destinationPath, 0775, true);
-            }
-
-            foreach (['web_favicon', 'web_logo', 'web_placeholder_logo', 'web_footer_logo'] as $field) {
-                $hasFile = $request->hasFile($field);
-                $meta = [
-                    'has_file' => $hasFile,
-                ];
-
-                if ($hasFile) {
-                    $uploaded = $request->file($field);
-                    $meta['is_valid'] = $uploaded ? $uploaded->isValid() : false;
-                    $meta['original_name'] = $uploaded ? $uploaded->getClientOriginalName() : null;
-                    $meta['client_mime'] = $uploaded ? $uploaded->getClientMimeType() : null;
-                    $meta['size_bytes'] = $uploaded ? $uploaded->getSize() : null;
-                }
-
-                Log::info($debugTrace . ' Upload field state: ' . $field, $meta);
-            }
-
-            // 1. Procesar Web Logo
-            if ($request->hasFile('web_logo') && $request->file('web_logo')->isValid()) {
-                $file = $request->file('web_logo');
-                $filename = 'web_logo_' . time() . '.' . $file->getClientOriginalExtension();
-                
-                if (config('app.env') === 'local') {
-                    $file->move($destinationPath, $filename);
-                    $input['web_logo'] = $filename;
-                    Log::info($debugTrace . ' web_logo moved', [
-                        'saved_as' => $filename,
-                        'saved_path' => $destinationPath . DIRECTORY_SEPARATOR . $filename,
-                        'exists_after_move' => file_exists($destinationPath . DIRECTORY_SEPARATOR . $filename),
-                    ]);
-                } else {
-                    $webLogoDatabaseData = system_setting('web_logo');
-                    $input['web_logo'] = handleFileUpload($request, 'web_logo', $destinationPath, $filename, !empty($webLogoDatabaseData) ? $webLogoDatabaseData : null);
-                    Log::info($debugTrace . ' web_logo handled via handleFileUpload', [
-                        'saved_as' => $input['web_logo'] ?? null,
-                    ]);
-                }
-            }
-
-            // 2. Procesar Web Placeholder Logo
-            if ($request->hasFile('web_placeholder_logo') && $request->file('web_placeholder_logo')->isValid()) {
-                $file = $request->file('web_placeholder_logo');
-                $filename = 'web_placeholder_logo_' . time() . '.' . $file->getClientOriginalExtension();
-
-                if (config('app.env') === 'local') {
-                    $file->move($destinationPath, $filename);
-                    $input['web_placeholder_logo'] = $filename;
-                    Log::info($debugTrace . ' web_placeholder_logo moved', [
-                        'saved_as' => $filename,
-                        'saved_path' => $destinationPath . DIRECTORY_SEPARATOR . $filename,
-                        'exists_after_move' => file_exists($destinationPath . DIRECTORY_SEPARATOR . $filename),
-                    ]);
-                } else {
-                    $webPlaceholderLogoDatabaseData = system_setting('web_placeholder_logo');
-                    $input['web_placeholder_logo'] = handleFileUpload($request, 'web_placeholder_logo', $destinationPath, $filename, !empty($webPlaceholderLogoDatabaseData) ? $webPlaceholderLogoDatabaseData : null);
-                    Log::info($debugTrace . ' web_placeholder_logo handled via handleFileUpload', [
-                        'saved_as' => $input['web_placeholder_logo'] ?? null,
-                    ]);
-                }
-            }
-
-            // 3. Procesar Web Favicon
-            if ($request->hasFile('web_favicon') && $request->file('web_favicon')->isValid()) {
-                $file = $request->file('web_favicon');
-                $filename = 'web_favicon_' . time() . '.' . $file->getClientOriginalExtension();
-
-                if (config('app.env') === 'local') {
-                    $file->move($destinationPath, $filename);
-                    $input['web_favicon'] = $filename;
-                    Log::info($debugTrace . ' web_favicon moved', [
-                        'saved_as' => $filename,
-                        'saved_path' => $destinationPath . DIRECTORY_SEPARATOR . $filename,
-                        'exists_after_move' => file_exists($destinationPath . DIRECTORY_SEPARATOR . $filename),
-                    ]);
-                } else {
-                    $webFavicon = system_setting('web_favicon');
-                    $input['web_favicon'] = handleFileUpload($request, 'web_favicon', $destinationPath, $filename, !empty($webFavicon) ? $webFavicon : null);
-                    Log::info($debugTrace . ' web_favicon handled via handleFileUpload', [
-                        'saved_as' => $input['web_favicon'] ?? null,
-                    ]);
-                }
-            }
-
-            // 4. Procesar Web Footer Logo
-            if ($request->hasFile('web_footer_logo') && $request->file('web_footer_logo')->isValid()) {
-                $file = $request->file('web_footer_logo');
-                $filename = 'web_footer_logo_' . time() . '.' . $file->getClientOriginalExtension();
-
-                if (config('app.env') === 'local') {
-                    $file->move($destinationPath, $filename);
-                    $input['web_footer_logo'] = $filename;
-                    Log::info($debugTrace . ' web_footer_logo moved', [
-                        'saved_as' => $filename,
-                        'saved_path' => $destinationPath . DIRECTORY_SEPARATOR . $filename,
-                        'exists_after_move' => file_exists($destinationPath . DIRECTORY_SEPARATOR . $filename),
-                    ]);
-                } else {
-                    $webFooterLogo = system_setting('web_footer_logo');
-                    $input['web_footer_logo'] = handleFileUpload($request, 'web_footer_logo', $destinationPath, $filename, !empty($webFooterLogo) ? $webFooterLogo : null);
-                    Log::info($debugTrace . ' web_footer_logo handled via handleFileUpload', [
-                        'saved_as' => $input['web_footer_logo'] ?? null,
-                    ]);
-                }
-            }
-
-            // Guardar y normalizar filas duplicadas por tipo (legacy data issue).
-            foreach ($input as $key => $value) {
-                // Evitamos meter objetos binarios crudos que no fueron procesados
-                if ($value instanceof \Illuminate\Http\UploadedFile) {
-                    continue;
-                }
-
-                $normalizedValue = $value ?? '';
-                $updatedRows = Setting::where('type', $key)->update(['data' => $normalizedValue]);
-
-                if ($updatedRows === 0) {
-                    Setting::create([
-                        'type' => $key,
-                        'data' => $normalizedValue,
-                    ]);
-                }
-            }
-
-            Log::info($debugTrace . ' Settings persisted', [
-                'web_favicon' => system_setting('web_favicon'),
-                'web_logo' => system_setting('web_logo'),
-                'web_placeholder_logo' => system_setting('web_placeholder_logo'),
-                'web_footer_logo' => system_setting('web_footer_logo'),
-            ]);
-
-            Artisan::call('cache:clear');
-        }
-
-        return redirect()->back()->with('success', trans('Data Updated Successfully'));
-    }
-
-    /*
     public function web_settings(Request $request)
     {
         if (! has_permissions('update', 'web_settings')) {
@@ -1354,7 +1054,7 @@ class SettingController extends Controller
                 'web_logo' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:3000',
                 'web_placeholder_logo' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:3000',
                 'web_footer_logo' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:3000',
-                'web_favicon' => 'nullable|image|mimes:png,jpg,jpeg,ico,webp|max:3000',
+                'web_favicon' => 'nullable|mimes:png,jpg,jpeg,ico,webp|max:3000',
             ], [
                 'web_logo.mimes' => trans('Image must be JPG, JPEG, PNG or WebP'),
                 'web_placeholder_logo.mimes' => trans('Image must be JPG, JPEG, PNG or WebP'),
@@ -1412,7 +1112,6 @@ class SettingController extends Controller
 
         return redirect()->back()->with('success', trans('Data Updated Successfully'));
     }
-    */
 
     public function notificationSettingIndex()
     {
@@ -1568,7 +1267,6 @@ class SettingController extends Controller
                     'MAIL_FROM_ADDRESS' => $request->mail_send_from,
                 ];
                 updateEnv($envUpdates);
-                Artisan::call('config:clear');
                 ResponseService::successResponse(trans('Data Updated Successfully'));
             } catch (Exception $e) {
                 ResponseService::errorResponse(trans('Something Went Wrong'));
@@ -1618,19 +1316,13 @@ class SettingController extends Controller
             ResponseService::successResponse(trans('Email Sent Successfully'));
         } catch (Exception $e) {
             DB::rollback();
-            Log::error('Email configuration verification failed: '.$e->getMessage());
             if (Str::contains($e->getMessage(), [
                 'Failed',
                 'Mail',
                 'Mailer',
                 'MailManager',
                 'Connection could not be established',
-                'authenticate',
-                'Expected response code',
             ])) {
-                if (config('app.debug')) {
-                    ResponseService::validationError($e->getMessage());
-                }
                 ResponseService::validationError('There is issue with mail configuration, kindly contact admin regarding this');
             }
             ResponseService::errorResponse('Something Went Wrong');
@@ -1703,7 +1395,7 @@ class SettingController extends Controller
                 'rotation' => 'nullable|numeric|min:0|max:360',
             ], [
                 'watermark_image.mimes' => trans('Image must be JPG, JPEG or PNG'),
-                'watermark_image.max' => trans('Image size must be less than 3MB'),
+                'watermark_image.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
             ]);
 
             if ($validator->fails()) {

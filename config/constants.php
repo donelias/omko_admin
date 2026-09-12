@@ -33,6 +33,8 @@ return [
         'MORTGAGE_CALCULATOR_DETAIL' => ['NAME' => 'Mortgage Calculator Detail Access', 'TYPE' => 'mortgage_calculator_detail'],
         'PREMIUM_PROPERTIES' => ['NAME' => 'Premium Properties Access',         'TYPE' => 'premium_properties'],
         'PREMIUM_PROJECTS' => ['NAME' => 'Premium Projects Access',           'TYPE' => 'premium_projects'],
+        'AGENT_WATERMARK' => ['NAME' => 'Agent Watermark',                    'TYPE' => 'agent_watermark'],
+        'CRM_LEADS_ACCESS' => ['NAME' => 'Lead Contact Access',               'TYPE' => 'crm_leads_access'],
     ],
 
     'HOMEPAGE_SECTION_TYPES' => [
@@ -46,6 +48,7 @@ return [
         'MOST_VIEWED_PROPERTIES_SECTION' => ['TYPE' => 'most_viewed_properties_section', 'TITLE' => 'Most Viewed Properties Sections List'],
         'NEARBY_PROPERTIES_SECTION' => ['TYPE' => 'nearby_properties_section',      'TITLE' => 'Nearby Properties Sections List'],
         'PROJECTS_SECTION' => ['TYPE' => 'projects_section',               'TITLE' => 'Project Sections List'],
+        'PREMIUM_PROJECTS_SECTION' => ['TYPE' => 'premium_projects_section',       'TITLE' => 'Premium Projects Sections List'],
         'PREMIUM_PROPERTIES_SECTION' => ['TYPE' => 'premium_properties_section',     'TITLE' => 'Premium Properties Sections List'],
         'USER_RECOMMENDATIONS_SECTION' => ['TYPE' => 'user_recommendations_section',   'TITLE' => 'User Recommendations Sections List'],
         'PROPERTIES_BY_CITIES_SECTION' => ['TYPE' => 'properties_by_cities_section',   'TITLE' => 'Properties by Cities Sections List'],

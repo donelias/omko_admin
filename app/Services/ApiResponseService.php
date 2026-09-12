@@ -4,33 +4,21 @@ namespace App\Services;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class ApiResponseService
 {
-    private static function applyCorsHeaders(JsonResponse $response): JsonResponse
+    /**
+     * Responses sent via Response::send() + exit bypass the HandleCors middleware,
+     * so the CORS headers must be emitted manually (mirrors the Apache .htaccess rules).
+     */
+    public static function corsHeaders()
     {
-        try {
-            $request = request();
-            $origin = $request->headers->get('Origin');
-            if (! $origin) {
-                return $response;
-            }
-
-            $allowedOrigins = (array) config('cors.allowed_origins', []);
-            if (in_array('*', $allowedOrigins, true) || in_array($origin, $allowedOrigins, true)) {
-                $response->headers->set('Access-Control-Allow-Origin', $origin);
-                $response->headers->set('Access-Control-Allow-Credentials', 'true');
-                $response->headers->set('Vary', 'Origin');
-            }
-        } catch (\Throwable $e) {
-            // Avoid breaking API responses if request/context is unavailable.
-        }
-
-        return $response;
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: POST, GET, DELETE, PUT, PATCH, OPTIONS');
+        header('Access-Control-Allow-Headers: token, Content-Type, authorization, x-active-role, content-language');
     }
 
     /**
@@ -123,14 +111,13 @@ class ApiResponseService
      */
     public static function successResponse(string $message = 'Success', $data = null, array $customData = [], $code = null)
     {
-        $response = response()->json(array_merge([
+        self::corsHeaders();
+        response()->json(array_merge([
             'error' => false,
             'message' => trans($message),
             'data' => $data,
             'code' => $code ?? config('constants.RESPONSE_CODE.SUCCESS'),
-        ], $customData), $code ?? config('constants.RESPONSE_CODE.SUCCESS'));
-
-        self::applyCorsHeaders($response)->send();
+        ], $customData), $code ?? config('constants.RESPONSE_CODE.SUCCESS'))->send();
         exit();
     }
 
@@ -164,16 +151,15 @@ class ApiResponseService
             }
         }
 
-        $response = response()->json(array_merge([
+        self::corsHeaders();
+        response()->json(array_merge([
             'error' => true,
             'message' => trans($message),
             'data' => $data,
             'code' => $code ?? config('constants.RESPONSE_CODE.EXCEPTION_ERROR'),
             'details' => $details,
             'key' => $key,
-        ], $customData), $code ?? config('constants.RESPONSE_CODE.EXCEPTION_ERROR'));
-
-        self::applyCorsHeaders($response)->send();
+        ], $customData), $code ?? config('constants.RESPONSE_CODE.EXCEPTION_ERROR'))->send();
         exit();
     }
 
@@ -194,25 +180,25 @@ class ApiResponseService
      */
     public static function warningResponse(string $message = 'Error Occurred', $data = null, $code = null)
     {
-        $response = response()->json([
+        self::corsHeaders();
+        response()->json([
             'error' => false,
             'warning' => true,
             'code' => $code,
             'message' => trans($message),
             'data' => $data,
-        ], $code);
-
-        self::applyCorsHeaders($response)->send();
+        ], $code)->send();
         exit();
     }
 
     /**
      * @param  null  $data
+     * @param  null  $code
      * @return void
      */
     public static function validationError(string $message = 'Error Occurred', $data = null, $customData = [])
     {
-        self::errorResponse($message, '', $data, config('constants.RESPONSE_CODE.VALIDATION_ERROR'), null, $customData);
+        return self::errorResponse($message, '', $data, config('constants.RESPONSE_CODE.VALIDATION_ERROR'), null, $customData);
     }
 
     /**
@@ -233,7 +219,7 @@ class ApiResponseService
     {
         Log::error($logMessage.' '.$e->getMessage().'---> '.$e->getFile().' At Line : '.$e->getLine());
         if ($jsonResponse && config('app.debug')) {
-            self::errorResponse($responseMessage, '', null, null, $e, $customData);
+            return self::errorResponse($responseMessage, '', null, null, $e, $customData);
         }
     }
 

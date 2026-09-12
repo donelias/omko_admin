@@ -24,7 +24,6 @@ class parameter extends Model
         'is_required',
         'image',
         'is_demo',
-        'type',
     ];
 
     protected $hidden = ['created_at', 'updated_at'];

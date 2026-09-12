@@ -42,7 +42,7 @@ class DatabaseSeeder extends Seeder
             [
                 [
                     'type' => 'company_name',
-                    'data' => 'eBroker',
+                    'data' => 'omko',
                 ],
                 [
                     'type' => 'currency_symbol',
@@ -102,7 +102,7 @@ class DatabaseSeeder extends Seeder
                 ],
                 [
                     'type' => 'system_version',
-                    'data' => '1.4.1',
+                    'data' => '1.6.0',
                 ],
                 [
                     'type' => 'company_logo',
@@ -178,7 +178,7 @@ class DatabaseSeeder extends Seeder
                 ],
                 [
                     'type' => 'playstore_id',
-                    'data' => 'https://play.google.com/store/apps/details?id=com.ebroker.wrteam',
+                    'data' => 'https://play.google.com/store/apps/details?id=com.omko.wrteam',
                 ],
                 [
                     'type' => 'appstore_id',

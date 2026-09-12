@@ -66,13 +66,7 @@ class PackageFeatureController extends Controller
 
         if (request()->has('user_type') && ! empty(request('user_type'))) {
             $userType = request('user_type');
-            if ($userType == 'user') {
-                $sql->whereIn('user_type', ['user', 'all']);
-            } elseif ($userType == 'agent') {
-                $sql->whereIn('user_type', ['agent', 'all']);
-            } else {
-                $sql->where('user_type', $userType);
-            }
+            $sql->whereIn('user_type', [$userType, 'all']);
         }
 
         $total = $sql->count();

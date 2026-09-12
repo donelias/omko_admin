@@ -16,6 +16,7 @@ use App\Http\Middleware\LanguageManager;
 use App\Http\Middleware\PreventBackHistory;
 use App\Http\Middleware\PreventRequestsDuringMaintenance;
 use App\Http\Middleware\RedirectIfAuthenticated;
+use App\Http\Middleware\TenantMiddleware;
 use App\Http\Middleware\TrimStrings;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\UserMiddleware;
@@ -70,6 +71,7 @@ class Kernel extends HttpKernel
             DemoMiddleware::class,
             CheckLoginApi::class,
             ActiveRoleMiddleware::class,
+            TenantMiddleware::class,
         ],
     ];
 
@@ -90,6 +92,6 @@ class Kernel extends HttpKernel
         'user' => UserMiddleware::class,
         'agent' => AgentMiddleware::class,
         'active-role' => ActiveRoleMiddleware::class,
-        // 'checkAuth' => \App\Http\Middleware\CheckAuth::class,
+        'checkAuth' => \App\Http\Middleware\CheckAuth::class,
     ];
 }

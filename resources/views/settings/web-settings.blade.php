@@ -46,7 +46,7 @@
                                         <div class="col-md-6 mt-3">
                                             <div class="col-12 form-group mandatory card title_card">
                                                 {{ Form::label('web_logo', __('Main Logo'), ['class' => 'form-label col-12 ']) }}
-                                                <input type="file" class="filepond" id="web_logo" name="web_logo" {{ isset($getWebSettings['web_logo']) && $getWebSettings['web_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg,image/webp,image/svg+xml">
+                                                <input type="file" class="filepond" id="web_logo" name="web_logo" {{ isset($getWebSettings['web_logo']) && $getWebSettings['web_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg,image/webp">
                                                 @if (isset($getWebSettings['web_logo']) && $getWebSettings['web_logo'] != '')
                                                     <div class="title_img mt-2">
                                                         <img src="{{ url('assets/images/logo/'.$getWebSettings['web_logo']) }}" alt="Image" class="img-fluid" width="100" height="100">
@@ -59,7 +59,7 @@
                                         <div class="col-md-6 mt-3">
                                             <div class="col-12 form-group mandatory card title_card">
                                                 {{ Form::label('web_placeholder_logo', __('Placeholder Image'), ['class' => 'form-label col-12 ']) }}
-                                                <input type="file" class="filepond" id="web_placeholder_logo" name="web_placeholder_logo" {{ isset($getWebSettings['web_placeholder_logo']) && $getWebSettings['web_placeholder_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg,image/webp,image/svg+xml">
+                                                <input type="file" class="filepond" id="web_placeholder_logo" name="web_placeholder_logo" {{ isset($getWebSettings['web_placeholder_logo']) && $getWebSettings['web_placeholder_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg,image/webp">
                                                 @if (isset($getWebSettings['web_placeholder_logo']) && $getWebSettings['web_placeholder_logo'] != '')
                                                     <div class="title_img mt-2">
                                                         <img src="{{ url('assets/images/logo/'.$getWebSettings['web_placeholder_logo']) }}" alt="Image" class="img-fluid" width="100" height="100">
@@ -72,7 +72,7 @@
                                         <div class="col-md-6 mt-3">
                                             <div class="col-12 form-group mandatory card title_card">
                                                 {{ Form::label('web_footer_logo', __('Footer Logo'), ['class' => 'form-label col-12 ']) }}
-                                                <input type="file" class="filepond" id="web_footer_logo" name="web_footer_logo" {{ isset($getWebSettings['web_footer_logo']) && $getWebSettings['web_footer_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg,image/webp,image/svg+xml">
+                                                <input type="file" class="filepond" id="web_footer_logo" name="web_footer_logo" {{ isset($getWebSettings['web_footer_logo']) && $getWebSettings['web_footer_logo'] == '' ? 'required' : '' }} accept="image/png,image/jpg,image/jpeg,image/webp">
                                                 @if (isset($getWebSettings['web_footer_logo']) && $getWebSettings['web_footer_logo'] != '')
                                                     <div class="title_img mt-2">
                                                         <img src="{{ url('assets/images/logo/'.$getWebSettings['web_footer_logo']) }}" alt="Image" class="img-fluid" width="100" height="100">
@@ -133,6 +133,12 @@
                                             <label class="form-label mt-2">{{ __('Youtube Id') }}</label>
                                             <div class="col-sm-12">
                                                 <input name="youtube_id" type="text" class="form-control" placeholder="{{ __('Youtube Id') }}" value="{{ isset($getWebSettings['youtube_id']) && $getWebSettings['youtube_id'] != '' ? $getWebSettings['youtube_id'] : '' }}">
+                                            </div>
+
+                                            {{-- LinkedIn ID --}}
+                                            <label class="form-label mt-2">{{ __('LinkedIn Id') }}</label>
+                                            <div class="col-sm-12">
+                                                <input name="linkedin_id" type="text" class="form-control" placeholder="{{ __('LinkedIn Id') }}" value="{{ isset($getWebSettings['linkedin_id']) && $getWebSettings['linkedin_id'] != '' ? $getWebSettings['linkedin_id'] : '' }}">
                                             </div>
                                         </div>
                                     </div>
@@ -241,38 +247,7 @@
         });
 
 
-        function syncFilePondToInput(inputId) {
-            const input = document.getElementById(inputId);
-            if (!input || typeof FilePond === 'undefined') {
-                return;
-            }
-
-            const pond = FilePond.find(input);
-            if (!pond) {
-                return;
-            }
-
-            const files = pond.getFiles();
-            if (!files || files.length === 0) {
-                return;
-            }
-
-            const dt = new DataTransfer();
-            files.forEach(function(item) {
-                if (item && item.file) {
-                    dt.items.add(item.file);
-                }
-            });
-            input.files = dt.files;
-        }
-
         $('#myForm').submit(function(event) {
-            // Force FilePond files into native inputs to guarantee multipart upload.
-            syncFilePondToInput('web_favicon');
-            syncFilePondToInput('web_logo');
-            syncFilePondToInput('web_placeholder_logo');
-            syncFilePondToInput('web_footer_logo');
-
             const iframeContent = $('#iframe_tag').val();
             // Create a temporary element to extract the src attribute
             const tempElement = $('<div>').html(iframeContent);

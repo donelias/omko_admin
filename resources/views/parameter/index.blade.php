@@ -55,15 +55,6 @@
                                         </select>
                                     </div>
 
-                                    {{-- Feature / Amenity --}}
-                                    <div class="col-sm-12 col-md-6 col-lg-3 form-group">
-                                        {{ Form::label('parameter_type', __('Category Type'), ['class' => 'form-label text-center']) }}
-                                        <select name="parameter_type" id="parameter_type" class="form-select form-control-sm">
-                                            <option value="amenity">{{ __('Amenity') }}</option>
-                                            <option value="feature">{{ __('Feature (Unit Level)') }}</option>
-                                        </select>
-                                    </div>
-
                                     {{-- Image --}}
                                     <div class="col-sm-12 col-md-6 col-lg-3 form-group mandatory">
                                         {{ Form::label('image', __('Image'), ['class' => 'form-label text-center']) }}

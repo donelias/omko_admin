@@ -28,6 +28,7 @@ return [
         '.env.example',
         'README.md',
         'CHANGELOG.md',
+        'vendor.zip',
     ],
 
     /*
@@ -43,6 +44,8 @@ return [
         'vendor/autoload.php',
         'vendor/mahesh-kerai',
         'vendor/composer',
+        'vendor/league/csv',
+        'storage/app/example-csvs',
     ],
 
     /*

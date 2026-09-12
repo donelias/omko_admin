@@ -17,7 +17,7 @@ class CategoryApiController extends Controller
             'limit' => 'nullable|integer|min:1|max:200',
             'latitude' => 'nullable|numeric',
             'longitude' => 'nullable|numeric',
-            'range' => 'nullable|numeric|min:0',
+            'radius' => 'nullable|numeric|min:0',
             'id' => 'nullable|integer',
             'slug_id' => 'nullable|string',
         ]);
@@ -28,7 +28,8 @@ class CategoryApiController extends Controller
         $limit = isset($request->limit) ? $request->limit : 10;
         $latitude = $request->has('latitude') ? $request->latitude : null;
         $longitude = $request->has('longitude') ? $request->longitude : null;
-        $range = $request->has('range') ? $request->range : null;
+        // API param renamed to `radius`; internal $range kept to avoid touching the query
+        $range = $request->has('radius') ? $request->radius : null;
 
         $categories = Category::select(
             'id',

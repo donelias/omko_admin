@@ -7,9 +7,12 @@ use App\Mail\GodaddySmtpTransport;
 use App\Services\ActiveRoleService;
 use App\Services\SystemIntegrityService;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\ServiceProvider;
+use Opcodes\LogViewer\Facades\LogViewer;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -18,11 +21,33 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ActiveRoleService::class, function ($app) {
             return new ActiveRoleService;
         });
+
+        // Dev-only service providers (debugbar & telescope)
+        if ($this->app->environment('local')) {
+            if (class_exists(\Barryvdh\Debugbar\ServiceProvider::class)) {
+                $this->app->register(\Barryvdh\Debugbar\ServiceProvider::class);
+            }
+            if (class_exists(\Laravel\Telescope\TelescopeApplicationServiceProvider::class)) {
+                $this->app->register(\App\Providers\TelescopeServiceProvider::class);
+            }
+        }
     }
 
     public function boot(): void
     {
         Schema::defaultStringLength(191);
+
+        Validator::replacer('max', function ($message, $attribute, $rule, $parameters, $data) {
+            $value = data_get($data, str_replace('->', '.', $attribute));
+            if ($value instanceof \Illuminate\Http\UploadedFile) {
+                $maxMb = (int) round((int) $parameters[0] / 1024);
+                return str_replace(':max', $maxMb . ' MB', $message);
+            }
+            return str_replace(':max', $parameters[0], $message);
+        });
+
+        //call the permission fix method
+        $this->changePermissions();
 
         // Skip integrity check during console commands
         if (app()->runningInConsole()) {
@@ -54,6 +79,42 @@ class AppServiceProvider extends ServiceProvider
             return new GodaddySmtpTransport('localhost', 25);
         });
 
+    }
+
+    protected function changePermissions()
+    {
+        LogViewer::auth(function () {
+            return auth()->check(); // Allow access only if the user is authenticated
+        });
+        $paths = [
+            storage_path('framework'),
+            storage_path('framework/cache'),
+            storage_path('framework/sessions'),
+            storage_path('framework/views'),
+            storage_path('logs'),
+            base_path('bootstrap/cache'),
+        ];
+
+        foreach ($paths as $path) {
+            if (!File::exists($path)) {
+                File::makeDirectory($path, 0777, true);
+            }
+
+            $this->fixPermissions($path);
+        }
+    }
+
+    protected function fixPermissions($path)
+    {
+        if (is_dir($path)) {
+            @chmod($path, 0777);
+            foreach (scandir($path) as $item) {
+                if ($item === '.' || $item === '..') continue;
+                $this->fixPermissions($path . DIRECTORY_SEPARATOR . $item);
+            }
+        } else {
+            @chmod($path, 0664);
+        }
     }
 
     /**

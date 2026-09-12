@@ -31,16 +31,12 @@ class AgentVerificationValue extends Model
         if ($this->relationLoaded('verify_form')) {
             if ($this->verify_form->field_type == 'file') {
                 if (! empty($value)) {
-                    if (filter_var($value, FILTER_VALIDATE_URL)) {
-                        $fileName = basename($value);
+                    $fileName = filter_var($value, FILTER_VALIDATE_URL) ? basename($value) : $value;
 
-                        return url('').config('global.IMG_PATH').config('global.AGENT_VERIFICATION_DOC_PATH').$fileName;
-                    } else {
-                        return FileService::getFileUrl(config('global.AGENT_VERIFICATION_DOC_PATH').$value);
-                    }
-                } else {
-                    return null;
+                    return FileService::getFileUrl(config('global.AGENT_VERIFICATION_DOC_PATH').$fileName);
                 }
+
+                return null;
             } elseif ($this->verify_form->field_type == 'checkbox') {
                 $decodedValue = htmlspecialchars_decode($value, ENT_QUOTES | ENT_HTML5);
 

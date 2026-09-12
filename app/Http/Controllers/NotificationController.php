@@ -66,7 +66,7 @@ class NotificationController extends Controller
                     ],
                         [
                             'user_id.*' => trans('Select User From Table'),
-                            'file.max' => __('Maximum file size is 3MB.'),
+                            'file.max' => __('File size exceeds the :max limit. Please upload a smaller file.'),
                         ]);
 
                     $imageName = '';

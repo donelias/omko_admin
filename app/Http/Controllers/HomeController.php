@@ -242,7 +242,7 @@ class HomeController extends Controller
                     'profile_image.required' => trans('The profile image field is required.'),
                     'profile_image.image' => trans('The profile image must be an image.'),
                     'profile_image.mimes' => trans('The profile image must be a jpeg, png, jpg, gif, svg, or webp image.'),
-                    'profile_image.max' => trans('The profile image size should not exceed 2MB.'),
+                    'profile_image.max' => trans('File size exceeds the :max limit. Please upload a smaller image.'),
                 ]);
             if ($validator->fails()) {
                 return back()->with('error', $validator->errors()->first());

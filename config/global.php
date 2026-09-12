@@ -31,5 +31,34 @@ return [
     'ADBANNER_IMAGE_PATH' => 'adbanner_img/',
     'CUSTOM_PAGE_ICON_PATH' => 'custom_page_icons/',
     'AGENT_PROFILE_IMG_PATH' => 'agent_profile/',
+    'AGENT_PROFILE_BANNER_PATH' => 'agent_banner/',
+    'AGENT_WATERMARK_IMG_PATH' => 'agent_watermark/',
+    'CUSTOMER_PROFILE_IMG_PATH' => 'customer_profile/',
     'PRE_QUALIFICATION_PATH' => 'pre_qualification/',
+
+    // ============================================
+    // PRICE INTELLIGENCE / CONVERSIÓN DE PRECIOS
+    // ============================================
+    'PRICE_BASE_CURRENCY' => 'DOP',
+    'PRICE_EXCHANGE_RATES' => [
+        'DOP' => 1.0,
+        'USD' => 58.5,
+        'EUR' => 63.0,
+    ],
+    // Fuente de tasas "del día vigente".
+    // - 'google': página pública de Google Finance (USD/DOP). Sin API oficial; scraping
+    //   no documentado de https://www.google.com/finance/quote/USD-DOP (puede cambiar).
+    // - 'bcrd': proxy público de las tasas del Banco Central de RD (compra/venta USD)
+    //   vía PRICE_EXCHANGE_RATES_API (el de BSantander quedó inalcanzable).
+    // - 'allratestoday': servicio AllRatesToday (requiere PRICE_EXCHANGE_RATES_API_KEY).
+    // - 'setting': solo usa lo guardado en settings (type=price_exchange_rates), sin llamadas externas.
+    // - 'static': siempre usa el fallback PRICE_EXCHANGE_RATES.
+    'PRICE_EXCHANGE_RATES_SOURCE' => env('PRICE_EXCHANGE_RATES_SOURCE', 'google'),
+    'PRICE_EXCHANGE_RATES_API' => env('PRICE_EXCHANGE_RATES_API', 'https://apisantanderexpress.bhd.com.do/TasasCambioBCRD/api/TasasDeCambio/BuscarTasasCambio'),
+    'PRICE_EXCHANGE_RATES_API_KEY' => env('PRICE_EXCHANGE_RATES_API_KEY', ''),
+    // Ventana de días a consultar cuando el proveedor devuelve histórico (días no laborables/fines de semana).
+    'PRICE_EXCHANGE_RATES_RANGE_DAYS' => 10,
+    // TTL del caché en segundos (6 horas por defecto).
+    'PRICE_EXCHANGE_RATES_CACHE_TTL' => 21600,
+    'PRICE_SUGGESTION_VALID_DAYS' => 30,
 ];

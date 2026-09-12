@@ -136,13 +136,13 @@ class VerificationApiController extends Controller
     public function applyAgentVerification(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'form_type' => 'required|in:become_agent,verify_agent',
-            'form_fields' => 'required|array',
-            'form_fields.*.id' => 'required|exists:agent_verification_forms,id',
-            'form_fields.*.value' => 'required',
+            'form_type'             => 'required|in:become_agent,verify_agent',
+            'form_fields'           => 'required|array',
+            'form_fields.*.id'      => 'required|exists:agent_verification_forms,id',
+            'form_fields.*.value'   => 'required|max:3072',
         ], [
-            'form_fields.*.id' => ':positionth Form Field id is not valid',
-            'form_fields.*.value' => ':positionth Form Field Value is not valid',
+            'form_fields.*.id'       => ':positionth Form Field id is not valid',
+            'form_fields.*.value'    => trans('File size exceeds the limit. Please upload a file smaller than 3MB.'),
         ]);
 
         if ($validator->fails()) {
@@ -229,7 +229,7 @@ class VerificationApiController extends Controller
             //         try {
             //             $emailTypeData = HelperService::getEmailTemplatesTypes("agent_verification_status");
             //             $agentVerificationTemplateData = system_setting($emailTypeData['type']);
-            //             $appName = env("APP_NAME") ?? "eBroker";
+            //             $appName = env("APP_NAME") ?? "omko";
             //             $variables = array(
             //                 'app_name' => $appName,
             //                 'user_name' => $customer->name,
@@ -483,7 +483,7 @@ class VerificationApiController extends Controller
             //         try {
             //             $emailTypeData = HelperService::getEmailTemplatesTypes("user_verification_status");
             //             $userVerificationTemplateData = system_setting($emailTypeData['type']);
-            //             $appName = env("APP_NAME") ?? "eBroker";
+            //             $appName = env("APP_NAME") ?? "omko";
             //             $variables = array(
             //                 'app_name' => $appName,
             //                 'user_name' => $customer->name,

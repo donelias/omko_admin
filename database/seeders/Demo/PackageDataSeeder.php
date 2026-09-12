@@ -88,23 +88,34 @@ class PackageDataSeeder extends Seeder
     {
         // Check All Features Exists
         $featureNames = HelperService::getFeatureNames();
-        $featuresQuery = Feature::whereIn('name', $featureNames);
+        $featureTypes = collect($featureNames)->pluck('TYPE')->toArray();
+        $featuresQuery = Feature::whereIn('type', $featureTypes);
         $featuresCount = $featuresQuery->count();
         $features = $featuresQuery->get();
 
-        if (empty($features) || $featuresCount != 7) {
+        if (empty($features) || $featuresCount != count($featureNames)) {
             Log::error('No features found');
             /** Add Data */
-            $featureData = [
-                ['id' => 1, 'name' => $featureNames[0], 'status' => 1],
-                ['id' => 2, 'name' => $featureNames[1], 'status' => 1],
-                ['id' => 3, 'name' => $featureNames[2], 'status' => 1],
-                ['id' => 4, 'name' => $featureNames[3], 'status' => 1],
-                ['id' => 5, 'name' => $featureNames[4], 'status' => 1],
-                ['id' => 6, 'name' => $featureNames[5], 'status' => 1],
-                ['id' => 7, 'name' => $featureNames[6], 'status' => 1],
-            ];
-            Feature::upsert($featureData, ['id'], ['name', 'status']);
+            $featureData = collect($featureNames)->map(function ($feature, $index) {
+                $userType = in_array($feature['TYPE'], [
+                    config('constants.FEATURES.MORTGAGE_CALCULATOR_DETAIL.TYPE'),
+                    config('constants.FEATURES.PREMIUM_PROPERTIES.TYPE'),
+                    config('constants.FEATURES.PREMIUM_PROJECTS.TYPE'),
+                ]) ? 'user' : 'all';
+
+                if ($feature['TYPE'] === config('constants.FEATURES.AGENT_WATERMARK.TYPE')) {
+                    $userType = 'agent';
+                }
+
+                return [
+                    'id' => $index + 1,
+                    'name' => $feature['NAME'],
+                    'type' => $feature['TYPE'],
+                    'status' => 1,
+                    'user_type' => $userType,
+                ];
+            })->toArray();
+            Feature::upsert($featureData, ['id'], ['name', 'type', 'status', 'user_type']);
             $features = Feature::get();
         }
     }
@@ -116,7 +127,7 @@ class PackageDataSeeder extends Seeder
         $packageFeaturesData = [];
         foreach ($packagesId as $key => $packageId) {
             if ($key == 0) {
-                $packageFeaturesData[] = [
+                $packageFeaturesData = array_merge($packageFeaturesData, [
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('property_list'),
@@ -141,63 +152,73 @@ class PackageDataSeeder extends Seeder
                         'limit_type' => 'limited',
                         'limit' => 5,
                     ],
-                ];
+                ]);
             } elseif ($key == 1) {
-                $packageFeaturesData[] = [
+                $packageFeaturesData = array_merge($packageFeaturesData, [
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('mortgage_calculator_detail'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('premium_properties'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('premium_projects'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
-                ];
+                ]);
             } else {
-                $packageFeaturesData[] = [
+                $packageFeaturesData = array_merge($packageFeaturesData, [
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('property_list'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('project_list'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('property_feature'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('project_feature'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('mortgage_calculator_detail'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('premium_properties'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
                     [
                         'package_id' => $packageId,
                         'feature_id' => HelperService::getFeatureId('premium_projects'),
                         'limit_type' => 'unlimited',
+                        'limit' => null,
                     ],
-                ];
+                ]);
             }
         }
         PackageFeature::upsert($packageFeaturesData, ['package_id', 'feature_id'], ['limit_type', 'limit']);

@@ -4,12 +4,13 @@ namespace App\Models;
 
 use App\Services\FileService;
 use App\Traits\HasAppTimezone;
+use App\Traits\HasTenantFilter;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Slider extends Model
 {
-    use HasAppTimezone, HasFactory;
+    use HasAppTimezone, HasFactory, HasTenantFilter;
 
     protected $dates = ['created_at', 'updated_at', 'deleted_at'];
 
@@ -23,6 +24,7 @@ class Slider extends Model
         'show_property_details',
         'link',
         'default_data',
+        'agency_id',
     ];
 
     protected static function boot()

@@ -46,7 +46,7 @@
                                     <label class="form-label center" for="company_name">{{ __('Company Name') }}</label>
                                     <input name="company_name" type="text" class="form-control" id="company_name"
                                         placeholder="{{ __('Company Name') }}"
-                                        value="{{ isset($systemSettings['company_name']) && $systemSettings['company_name'] != '' ? $systemSettings['company_name'] : 'eBroker' }}">
+                                        value="{{ isset($systemSettings['company_name']) && $systemSettings['company_name'] != '' ? $systemSettings['company_name'] : 'omko' }}">
                                 </div>
 
                                 {{-- Email --}}
@@ -300,14 +300,6 @@
                                         value="{{ isset($systemSettings['web_url']) && $systemSettings['web_url'] != '' ? $systemSettings['web_url'] : '' }}">
                                 </div>
 
-                                {{-- Text after property submission --}}
-                                <div class="col-sm-12 col-md-6 mt-2 form-group mandatory">
-                                    <label
-                                        class="col-sm-12 form-label mt-3">{{ __('Text after property submission') }}</label>
-                                    <textarea name="text_property_submission" class="form-control" rows="2"
-                                        placeholder="{{ __('Text after property submission') }}" required>{{ isset($systemSettings['text_property_submission']) && $systemSettings['text_property_submission'] != '' ? $systemSettings['text_property_submission'] : '' }}</textarea>
-                                </div>
-
 
                                 {{-- Auto Approve Edited Listings --}}
                                 <div class="col-sm-12 col-md-6 mt-2">
@@ -387,6 +379,54 @@
                                         </div>
                                     </div>
                                 </div>
+                                {{-- Story Duration Limit --}}
+                                <div class="col-sm-12 col-md-6 mt-2">
+                                    <label class="form-label">{{ __('Story Duration Limit (Seconds)') }}</label>
+                                    <input name="story_max_duration" type="number" class="form-control"
+                                        placeholder="{{ __('Story Duration Limit (Seconds)') }}"
+                                        value="{{ isset($systemSettings['story_max_duration']) && $systemSettings['story_max_duration'] != '' ? $systemSettings['story_max_duration'] : 60 }}"
+                                        min="1" max="180">
+                                </div>
+
+                                {{-- Story Video Size Limit --}}
+                                <div class="col-sm-12 col-md-6 mt-2">
+                                    <label class="form-label">{{ __('Story Video Max Size (MB)') }}</label>
+                                    <input name="story_video_max_size" type="number" class="form-control"
+                                        placeholder="{{ __('Story Video Max Size (MB)') }}"
+                                        value="{{ isset($systemSettings['story_video_max_size']) && $systemSettings['story_video_max_size'] != '' ? $systemSettings['story_video_max_size'] : 50 }}"
+                                        min="1" max="500">
+                                </div>
+
+                                {{-- show whatapp button --}}
+                                  <div class="col-sm-12 col-md-6 mt-2">
+                                    <label class="form-check-label">{{ __('Show WhatsApp Button') }}</label>
+                                    <div>
+                                        <div class="form-check form-switch">
+                                            <input type="hidden" name="show_whatsapp_button"
+                                                id="show_whatsapp_button"
+                                                value="{{ isset($systemSettings['show_whatsapp_button']) && $systemSettings['show_whatsapp_button'] != '' ? $systemSettings['show_whatsapp_button'] : 0 }}">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                {{ isset($systemSettings['show_whatsapp_button']) && $systemSettings['show_whatsapp_button'] == '1' ? 'checked' : '' }}
+                                                id="switch_show_whatsapp_button">
+                                            <label class="form-check-label" for="switch_show_whatsapp_button"></label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Audit Log Enabled --}}
+                                <div class="col-sm-12 col-md-6 mt-2">
+                                    <label class="form-check-label">{{ __('Enable Audit Logs') }}</label>
+                                    <div>
+                                        <div class="form-check form-switch">
+                                            <input type="hidden" name="audit_log_enabled" id="audit_log_enabled"
+                                                value="{{ isset($systemSettings['audit_log_enabled']) && $systemSettings['audit_log_enabled'] != '' ? $systemSettings['audit_log_enabled'] : 0 }}">
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                {{ isset($systemSettings['audit_log_enabled']) && $systemSettings['audit_log_enabled'] == '1' ? 'checked' : '' }}
+                                                id="switch_audit_log_enabled">
+                                            <label class="form-check-label" for="switch_audit_log_enabled"></label>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 {{-- Show Premium Toggle --}}
                                 <div class="col-sm-12 col-md-6 mt-2">
@@ -424,18 +464,58 @@
             </div>
         </div>
 
-        {{-- Google Map API Key Settings --}}
+        {{-- Map Service Provider Settings --}}
         <div class="col-12">
             <div class="card">
                 <div class="card-body">
                     <div class="divider pt-3">
-                        <h6 class="divider-text">{{ __('Google Map API Key Settings') }} <i class="fa fa-info-circle"
+                        <h6 class="divider-text">{{ __('Map Service Provider Settings') }} <i class="fa fa-info-circle"
                                 data-bs-toggle="tooltip" data-bs-placement="top"
                                 title="{{ trans('Can use same api key for map and place api key if there is no restrictions in api key') }}"></i>
                         </h6>
                     </div>
                     <div class="card-body">
                         <div class="row">
+
+                            {{-- Map Service Provider --}}
+
+                            <div class="col-sm-12 col-md-6 mt-2 form-group mandatory">
+                                <label class="col-sm-12 form-label" for="map-service-provider">{{ __('Map Service Provider') }}</label>
+                                <select name="map_service_provider" id="map-service-provider"
+                                    class="choosen-select form-select form-control-sm">
+                                    <option
+                                        {{ isset($systemSettings['map_service_provider']) && $systemSettings['map_service_provider'] == 'google_maps' ? 'selected' : '' }}
+                                        value="google_maps">{{ __('Google Maps') }}</option>
+                                    <option
+                                        {{ isset($systemSettings['map_service_provider']) && $systemSettings['map_service_provider'] == 'open_street_maps' ? 'selected' : '' }}
+                                        value="open_street_maps">{{ __('Open Street Maps (Free)') }}</option>
+                                </select>
+                                <small id="open-street-maps-note" class="form-text text-muted mt-1" style="display: none">
+                                    <i class="fa fa-info-circle"></i>
+                                    {{ __('Note: Search results and place detail accuracy may be lower with OpenStreetMap compared to Google Maps.') }}
+                                </small>
+                            </div>
+
+                            {{-- Geonames Username --}} 
+                            <div class="col-sm-12 col-md-6 mt-2 form-group mandatory" id="geonames-username-div"
+                                style="display: none">
+                                <label class="col-sm-12 form-label" for="geonames-username">{{ __('Geonames Username') }} <i
+                                        class="fa fa-info-circle" data-bs-toggle="tooltip" data-bs-placement="top"
+                                        title="{{ trans('Geonames username for Open Street Maps') }}"></i></label>
+                                <input name="geonames_username" type="text" id="geonames-username" class="form-control"
+                                    placeholder="{{ __('Geonames Username') }}"
+                                    value="{{ env('DEMO_MODE') ? (env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? (isset($systemSettings['geonames_username']) && $systemSettings['geonames_username'] != '' ? $systemSettings['geonames_username'] : '') : '****************************') : (isset($systemSettings['geonames_username']) && $systemSettings['geonames_username'] != '' ? $systemSettings['geonames_username'] : '') }}">
+
+                                    <div class="mt-2">
+                                    <button type="button" id="clear-open-street-maps-cache"
+                                        class="btn btn-outline-secondary btn-sm">
+                                        {{ __('Clear Open Street Maps Cache') }}
+                                        <i class="fa fa-info-circle" data-bs-toggle="tooltip" data-bs-placement="top"
+                                            title="{{ __('Clears cached Open Street Maps responses') }}"></i>
+                                    </button>
+                                </div>
+                            </div>
+
                             {{-- Map API Key --}}
                             <div class="col-sm-12 col-md-6 mt-2 form-group">
                                 <label class="col-sm-12 form-label" for="map-api-key">{{ __('Map API Key') }} <i
@@ -597,7 +677,7 @@
                                 value="{{ env('DEMO_MODE') ? (env('DEMO_MODE') == true && Auth::user()->email == 'superadmin@gmail.com' ? (isset($systemSettings['schema_for_deeplink']) && $systemSettings['schema_for_deeplink'] != '' ? $systemSettings['schema_for_deeplink'] : '') : '') : (isset($systemSettings['schema_for_deeplink']) && $systemSettings['schema_for_deeplink'] != '' ? $systemSettings['schema_for_deeplink'] : '') }}"
                                 placeholder="{{ __('Your Schema') }}">
                             <small
-                                class="text-grey">{{ __('Note: Please add your scheme here using a single word in lowercase (e.g., ebroker).') }}</small>
+                                class="text-grey">{{ __('Note: Please add your scheme here using a single word in lowercase (e.g., omko).') }}</small>
                         </div>
                     </div>
                 </div>
@@ -803,6 +883,17 @@
                 "#show_direct_video_upload").val(0);
         });
 
+        $("#switch_show_whatsapp_button").on('change', function() {
+            $("#switch_show_whatsapp_button").is(':checked') ? $("#show_whatsapp_button").val(1) : $(
+                "#show_whatsapp_button").val(0);
+        });
+
+        $("#switch_audit_log_enabled").on('change', function() {
+            $("#switch_audit_log_enabled").is(':checked') ? $("#audit_log_enabled").val(1) : $(
+                "#audit_log_enabled").val(0);
+        });
+
+
         $("#switch_show_premium_toggle").on('change', function() {
             $("#switch_show_premium_toggle").is(':checked') ? $("#show_premium_toggle").val(1) : $(
                 "#show_premium_toggle").val(0);
@@ -875,6 +966,24 @@
             initLoginTogglesFromHidden();
             $("#number-with-otp-login-toggle").trigger('change');
 
+            // Map service provider selection change event
+            $("#map-service-provider").on('change', function() {
+                let mapServiceProviderValue = $(this).val();
+                if (mapServiceProviderValue == 'open_street_maps') {
+                    $("#geonames-username-div").show();
+                    $("#open-street-maps-note").show();
+                    $("#map-api-key").closest('.form-group').hide();
+                    $("#place-api-key").closest('.form-group').hide();
+                } else {
+                    $("#geonames-username-div").hide();
+                    $("#open-street-maps-note").hide();
+                    $("#map-api-key").closest('.form-group').show();
+                    $("#place-api-key").closest('.form-group').show();
+                }
+            });
+            // Apply the correct visibility on initial page load
+            $("#map-service-provider").trigger('change');
+
             // Clear only the Google Maps cache store
             $(document).on('click', '#clear-gmaps-cache', function(e) {
                 const button = $(this);
@@ -897,6 +1006,33 @@
                     },
                     error: function() {
                         alert('{{ __('Failed to clear Google Maps cache') }}');
+                        button.prop('disabled', false).html(originalHtml);
+                    }
+                });
+            });
+
+            // Clear only the Open Street Maps cache store
+            $(document).on('click', '#clear-open-street-maps-cache', function(e) {
+                const button = $(this);
+                const originalHtml = button.html();
+                button.prop('disabled', true).html(
+                    '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' +
+                    '{{ __('Clearing...') }}');
+
+                $.ajax({
+                    url: '{{ route('cache.osm.clear') }}',
+                    method: 'POST',
+                    data: {
+                        _token: '{{ csrf_token() }}'
+                    },
+                    success: function() {
+                        button.html('{{ __('Cleared') }}');
+                        setTimeout(function() {
+                            button.prop('disabled', false).html(originalHtml);
+                        }, 1200);
+                    },
+                    error: function() {
+                        alert('{{ __('Failed to clear Open Street Maps cache') }}');
                         button.prop('disabled', false).html(originalHtml);
                     }
                 });

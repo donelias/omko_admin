@@ -28,17 +28,4 @@ return [
         'image_with_gif' => 'image/jpg,image/png,image/jpeg,image/gif,image/webp',
     ],
 
-    /**
-     * Helper function to get backend mime string
-     */
-    'getBackendMimes' => function ($includeGif = false) {
-        return $includeGif ? config('image_mimes.backend.image_with_gif') : config('image_mimes.backend.image');
-    },
-
-    /**
-     * Helper function to get frontend accept string
-     */
-    'getFrontendAccept' => function ($includeGif = false) {
-        return $includeGif ? config('image_mimes.frontend.image_with_gif') : config('image_mimes.frontend.image');
-    },
 ];

@@ -15,17 +15,9 @@ class CustomPage extends Model
     protected $fillable = [
         'title',
         'slug_id',
-        'icon',
         'content',
         'status',
     ];
-
-    public function getIconAttribute($icon)
-    {
-        $path = $icon ? config('global.CUSTOM_PAGE_ICON_PATH').$icon : null;
-
-        return ! empty($path) ? FileService::getFileUrl($path) : null;
-    }
 
     public function getTranslatedTitleAttribute()
     {

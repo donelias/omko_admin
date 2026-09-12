@@ -74,11 +74,12 @@ class HomepageSectionController extends Controller
             }
             // Create new section
             $data = $validator->validated();
+            $data['app_title'] = $request->app_title;
             $homepageSection = HomepageSection::create($data);
 
-            // Add Translations
+            // Add Translations (web title + app title)
+            $translationData = [];
             if (isset($request->translations) && ! empty($request->translations)) {
-                $translationData = [];
                 foreach ($request->translations as $translation) {
                     $translationData[] = [
                         'translatable_id' => $homepageSection->id,
@@ -88,9 +89,20 @@ class HomepageSectionController extends Controller
                         'language_id' => $translation['language_id'],
                     ];
                 }
-                if (! empty($translationData)) {
-                    HelperService::storeTranslations($translationData);
+            }
+            if (isset($request->app_translations) && ! empty($request->app_translations)) {
+                foreach ($request->app_translations as $translation) {
+                    $translationData[] = [
+                        'translatable_id' => $homepageSection->id,
+                        'translatable_type' => 'App\Models\HomepageSection',
+                        'key' => 'app_title',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
+            }
+            if (! empty($translationData)) {
+                HelperService::storeTranslations($translationData);
             }
             DB::commit();
             ResponseService::successResponse(trans('Data Updated Successfully'));
@@ -169,19 +181,27 @@ class HomepageSectionController extends Controller
                 return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
             }
 
+            $validator = Validator::make($request->all(), [
+                'title' => 'required',
+                'section_type' => 'required',
+            ]);
+            if ($validator->fails()) {
+                ResponseService::validationError($validator->errors()->first());
+            }
+
             DB::beginTransaction();
             // Check if section already exists
             $section = HomepageSection::where('section_type', $request->section_type)->where('id', '!=', $id)->first();
             if ($section) {
                 ResponseService::errorResponse(trans('Section already exists'));
             }
-            $data = $request->except('_token', '_method', 'edit_id', 'translations');
+            $data = $request->except('_token', '_method', 'edit_id', 'translations', 'app_translations');
             $section = HomepageSection::find($id);
             $section->update($data);
 
-            // Add Translations
+            // Add Translations (web title + app title)
+            $translationData = [];
             if (isset($request->translations) && ! empty($request->translations)) {
-                $translationData = [];
                 foreach ($request->translations as $translation) {
                     $translationData[] = [
                         'id' => $translation['id'] ?? null,
@@ -192,9 +212,21 @@ class HomepageSectionController extends Controller
                         'language_id' => $translation['language_id'],
                     ];
                 }
-                if (! empty($translationData)) {
-                    HelperService::storeTranslations($translationData);
+            }
+            if (isset($request->app_translations) && ! empty($request->app_translations)) {
+                foreach ($request->app_translations as $translation) {
+                    $translationData[] = [
+                        'id' => $translation['id'] ?? null,
+                        'translatable_id' => $id,
+                        'translatable_type' => 'App\Models\HomepageSection',
+                        'key' => 'app_title',
+                        'value' => $translation['value'],
+                        'language_id' => $translation['language_id'],
+                    ];
                 }
+            }
+            if (! empty($translationData)) {
+                HelperService::storeTranslations($translationData);
             }
             DB::commit();
             ResponseService::successResponse(trans('Data Updated Successfully'));
@@ -275,4 +307,24 @@ class HomepageSectionController extends Controller
             ResponseService::logErrorResponse($e);
         }
     }
+
+    public function updateToggles(Request $request)
+    {
+        try {
+            if (! has_permissions('update', 'homepage-sections')) {
+                return redirect()->back()->with('error', trans(PERMISSION_ERROR_MSG));
+            }
+
+            $settings = ['slider_section', 'search_section', 'all_properties_section'];
+            foreach ($settings as $setting) {
+                $value = $request->input($setting, 0);
+                \App\Models\Setting::updateOrCreate(['type' => $setting], ['data' => $value]);
+            }
+
+            return redirect()->back()->with('success', trans('Data Updated Successfully'));
+        } catch (Exception $e) {
+            return redirect()->back()->with('error', trans('Something Went Wrong'));
+        }
+    }
+
 }
