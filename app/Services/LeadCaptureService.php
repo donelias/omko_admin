@@ -230,6 +230,7 @@ class LeadCaptureService
                 'send_type' => '0',
                 'customers_id' => $property->added_by,
                 'propertys_id' => $property->id,
+                'role_context' => 'agent',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
