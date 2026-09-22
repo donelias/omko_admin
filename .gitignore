@@ -17,6 +17,10 @@ public_html/hot
 
 storage/*.key
 .env
+
+# Laravel runtime cache (regenerada en cada deploy, no versionar)
+bootstrap/cache/*.php
+bootstrap/cache/.*.php
 Homestead.yaml
 Homestead.json
 /.vagrant
