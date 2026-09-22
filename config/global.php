@@ -61,4 +61,17 @@ return [
     // TTL del caché en segundos (6 horas por defecto).
     'PRICE_EXCHANGE_RATES_CACHE_TTL' => 21600,
     'PRICE_SUGGESTION_VALID_DAYS' => 30,
+
+    // ============================================
+    // INVESTMENT ANALYSIS (ROI / RENTA ESTIMADA)
+    // ============================================
+    // Yield bruto anualizado por mercado: cuando no hay propiedades de alquiler
+    // reales, se estima la renta mensual como price * GROSS_YIELD / 12.
+    'INVESTMENT_GROSS_YIELD' => 5.0,
+    // Gastos operativos anuales % del valor (Cap Rate = yield - gastos).
+    'INVESTMENT_MAINTENANCE_RATE' => 0.5,
+    'INVESTMENT_PROPERTY_TAX_RATE' => 0.5,
+    'INVESTMENT_INSURANCE_RATE' => 0.25,
+    // Tope de apreciación anual proyectada (% +/-) para el escenario futuro.
+    'INVESTMENT_MAX_APPRECIATION' => 10.0,
 ];

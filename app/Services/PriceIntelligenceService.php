@@ -643,6 +643,7 @@ class PriceIntelligenceService
         $stdDeviation = $this->stddev($prices);
 
         $priceChange = $this->marketPriceTrend($location, $transactionType);
+        $avgDaysOnMarket = $this->averageDaysOnMarket($properties);
 
         $data = [
             'metric_type' => 'market_avg',
@@ -655,7 +656,7 @@ class PriceIntelligenceService
             'std_deviation' => round($stdDeviation, 2),
             'sample_count' => $properties->count(),
             'price_trend' => $priceChange['percentage'],
-            'avg_days_on_market' => 0,
+            'avg_days_on_market' => $avgDaysOnMarket,
             'market_demand' => $this->estimateMarketDemand($properties),
             'price_distribution' => $this->priceDistribution($prices),
             'top_amenities' => [],
@@ -705,6 +706,139 @@ class PriceIntelligenceService
             ->filter(fn ($price) => $price > 0)
             ->values()
             ->toArray();
+    }
+
+    /**
+     * Promedio de días en el mercado: edad (días desde created_at) de las
+     * propiedades activas de la muestra. El campo original quedaba en 0.
+     */
+    protected function averageDaysOnMarket($properties)
+    {
+        if ($properties->isEmpty()) {
+            return 0;
+        }
+
+        $days = $properties
+            ->map(fn ($property) => $property->created_at ? max(0, (int) $property->created_at->diffInDays(now())) : 0)
+            ->filter(fn ($d) => $d > 0);
+
+        if ($days->isEmpty()) {
+            return 0;
+        }
+
+        return round($days->avg(), 0);
+    }
+
+    /**
+     * Precios (en moneda base) de las propiedades activas del área, usado para
+     * calcular el percentil de precios de la propiedad.
+     */
+    public function marketBasePrices($location = null, $transactionType = 'sale')
+    {
+        if (empty($location)) {
+            return [];
+        }
+
+        return Property::query()
+            ->where('status', 1)
+            ->where('request_status', 'approved')
+            ->where('price', '>', 0)
+            ->whereIn('propery_type', $transactionType === 'rental' ? [1, 3] : [0, 2])
+            ->where(function ($query) use ($location) {
+                $query->where('state', $location)->orWhere('city', $location);
+            })
+            ->limit(500)
+            ->get(['price', 'currency'])
+            ->map(fn ($property) => $this->toBaseCurrency($property->price, $property->currency ?: 'DOP'))
+            ->filter(fn ($price) => $price > 0)
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * ---------------------------------------------------------------------
+     * INVESTMENT ANALYSIS (ROI / RENTA ESTIMADA / CAP RATE)
+     * ---------------------------------------------------------------------
+     * Cuando no hay propiedades de alquiler en el mercado, la renta mensual
+     * se estima con un yield bruto configurable sobre el precio sugerido.
+     */
+    public function getInvestmentAnalysis($price, $currency = 'DOP')
+    {
+        $price = (float) $price;
+        if ($price <= 0) {
+            return null;
+        }
+
+        $grossYield = (float) config('global.INVESTMENT_GROSS_YIELD', 5.0);
+        $maintenance = (float) config('global.INVESTMENT_MAINTENANCE_RATE', 0.5) / 100;
+        $tax = (float) config('global.INVESTMENT_PROPERTY_TAX_RATE', 0.5) / 100;
+        $insurance = (float) config('global.INVESTMENT_INSURANCE_RATE', 0.25) / 100;
+
+        $annualRent = $price * ($grossYield / 100);
+        $monthlyRent = $annualRent / 12;
+        $annualExpenses = $price * ($maintenance + $tax + $insurance);
+        $netAnnualIncome = $annualRent - $annualExpenses;
+        $netYield = $price > 0 ? ($netAnnualIncome / $price) * 100 : 0.0;
+
+        $paybackYears = $netAnnualIncome > 0 ? ($price / $netAnnualIncome) : null;
+        $paybackYears = $paybackYears !== null ? min(50, round($paybackYears, 1)) : null;
+
+        return [
+            'gross_yield_percent' => round($grossYield, 2),
+            'estimated_monthly_rent' => round($monthlyRent, 2),
+            'estimated_annual_rent' => round($annualRent, 2),
+            'estimated_annual_expenses' => round($annualExpenses, 2),
+            'net_annual_income' => round($netAnnualIncome, 2),
+            'net_yield_percent' => round($netYield, 2),
+            'cap_rate' => round($capRate ?? $netYield, 2),
+            'payback_years' => $paybackYears,
+            'payback_months' => $paybackYears !== null ? round($paybackYears * 12, 0) : null,
+            'expense_rates' => [
+                'maintenance' => $maintenance * 100,
+                'property_tax' => $tax * 100,
+                'insurance' => $insurance * 100,
+            ],
+            'currency' => $currency,
+        ];
+    }
+
+    /**
+     * Posición del precio de la propiedad dentro de su mercado (percentil)
+     * y proyección de apreciación usando el price_trend del análisis.
+     */
+    public function getMarketPosition($price, $currency = 'DOP', $marketAnalysis = null, array $marketPricesBase = [])
+    {
+        $price = (float) $price;
+        if ($price <= 0) {
+            return null;
+        }
+
+        $percentile = null;
+        if (! empty($marketPricesBase)) {
+            $basePrice = $this->toBaseCurrency($price, $currency ?: 'DOP');
+            $sorted = $marketPricesBase;
+            sort($sorted);
+            $lessOrEqual = count(array_filter($sorted, fn ($p) => $p <= $basePrice));
+            $percentile = round(($lessOrEqual / count($sorted)) * 100, 1);
+        }
+
+        $trend = $marketAnalysis ? (float) $marketAnalysis->price_trend : 0.0;
+        $maxApp = (float) config('global.INVESTMENT_MAX_APPRECIATION', 10.0) / 100;
+        $annualAppreciation = max(-$maxApp, min($maxApp, ($trend / 100) * 12));
+
+        $appreciation1y = $price * (1 + $annualAppreciation) - $price;
+        $appreciation5y = $price * pow(1 + $annualAppreciation, 5) - $price;
+
+        return [
+            'price_percentile' => $percentile,
+            'annual_appreciation_percent' => round($annualAppreciation * 100, 2),
+            'price_trend_source' => round($trend, 2),
+            'projected_price_1y' => round($price + $appreciation1y, 2),
+            'projected_price_5y' => round($price + $appreciation5y, 2),
+            'appreciation_value_1y' => round($appreciation1y, 2),
+            'appreciation_value_5y' => round($appreciation5y, 2),
+            'currency' => $currency,
+        ];
     }
 
     protected function estimateMarketDemand($properties)

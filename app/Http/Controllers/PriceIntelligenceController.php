@@ -33,9 +33,16 @@ class PriceIntelligenceController extends Controller
                 FILTER_VALIDATE_BOOLEAN
             );
 
+            $suggestion = $this->service->generatePriceSuggestion($property, $forceRefresh);
+            $suggestionData = $suggestion->toArray();
+            $suggestionData['investment_analysis'] = $this->service->getInvestmentAnalysis(
+                $suggestion->suggested_price ?: $property->price,
+                $property->currency ?: 'DOP'
+            );
+
             return ApiResponseService::successResponse(
                 'Price suggestion generated',
-                $this->service->generatePriceSuggestion($property, $forceRefresh)
+                $suggestionData
             );
         } catch (Throwable $e) {
             if ($e->getCode() == 422) {
@@ -74,12 +81,23 @@ class PriceIntelligenceController extends Controller
                 $transactionType
             );
 
+            $currency = $property->currency ?: 'DOP';
+            $price = $suggestion->suggested_price ?: $property->price;
+
+            $investment = $this->service->getInvestmentAnalysis($price, $currency);
+            $marketPosition = $this->service->getMarketPosition(
+                $price,
+                $currency,
+                $marketAnalysis,
+                $this->service->marketBasePrices($property->state ?: $property->city, $transactionType)
+            );
+
             $data = [
                 'property' => [
                     'id' => $property->id,
                     'title' => $property->title,
                     'price' => $property->price,
-                    'currency' => $property->currency ?: 'DOP',
+                    'currency' => $currency,
                     'area' => $metrics['area'],
                     'bedrooms' => $metrics['bedrooms'],
                     'bathrooms' => $metrics['bathrooms'],
@@ -89,6 +107,8 @@ class PriceIntelligenceController extends Controller
                 ],
                 'suggestion' => $suggestion,
                 'market_analysis' => $marketAnalysis,
+                'investment_analysis' => $investment,
+                'market_position' => $marketPosition,
                 'comparable_properties' => $comparables->map(fn ($comparable) => [
                     'id' => $comparable->id,
                     'title' => $comparable->title,
@@ -235,6 +255,10 @@ class PriceIntelligenceController extends Controller
                         'suggested_price' => $suggestion->suggested_price,
                         'confidence_score' => $suggestion->confidence_score,
                         'recommendation' => $suggestion->recommendation,
+                        'investment_analysis' => $this->service->getInvestmentAnalysis(
+                            $suggestion->suggested_price ?: $property->price,
+                            $property->currency ?: 'DOP'
+                        ),
                     ];
                 } catch (Throwable $ignored) {
                     $suggestions[] = [
