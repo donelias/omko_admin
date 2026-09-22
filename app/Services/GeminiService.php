@@ -849,4 +849,105 @@ class GeminiService
     {
         return $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
     }
+
+    /**
+     * FASE 9 — Análisis de calificación de cliente (depuración) por IA.
+     *
+     * Analiza las respuestas del formulario de depuración junto con el
+     * contexto de la propiedad y devuelve una recomendación de solvencia.
+     * La IA SOLO recomienda; la decisión final es del agente.
+     *
+     * @param  array  $data  cliente, propiedad, respuestas, precio
+     * @return array ['success' => bool, 'data' => [recomendacion, nivel_riesgo, resumen, observaciones]|null, 'error' => string|null]
+     */
+    public function analyzeClientScreening(array $data): array
+    {
+        try {
+            $prompt = $this->buildClientScreeningPrompt($data);
+            $cacheKey = 'gemini_screening_'.md5($prompt);
+
+            $cached = Cache::store('gemini')->get($cacheKey);
+            if ($cached) {
+                return [
+                    'success' => true,
+                    'data' => $cached,
+                    'cached' => true,
+                ];
+            }
+
+            $result = $this->generateContent($prompt);
+
+            if (! is_array($result) || empty($result['success'])) {
+                return $result;
+            }
+
+            $text = $this->getGeminiText($result['data'] ?? []);
+            $text = $this->cleanResponse($text);
+            $parsed = json_decode($text, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE || ! is_array($parsed)) {
+                if (preg_match('/\{[^}]+\}/s', $text, $matches)) {
+                    $parsed = json_decode($matches[0], true);
+                }
+            }
+
+            if (! is_array($parsed)) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to parse client screening analysis from Gemini response',
+                ];
+            }
+
+            $payload = [
+                'recomendacion' => (string) ($parsed['recomendacion'] ?? 'revisar'),
+                'nivel_riesgo' => (string) ($parsed['nivel_riesgo'] ?? 'medio'),
+                'resumen' => (string) ($parsed['resumen'] ?? ''),
+                'observaciones' => (string) ($parsed['observaciones'] ?? ''),
+            ];
+
+            Cache::store('gemini')->put($cacheKey, $payload, 86400);
+
+            return [
+                'success' => true,
+                'data' => $payload,
+                'cached' => false,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Gemini Client Screening Analysis Error: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'error' => 'Failed to analyze client screening: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Construye el prompt de análisis de depuración del cliente en español.
+     */
+    public function buildClientScreeningPrompt(array $data): string
+    {
+        $nombre = $data['customer_name'] ?? 'Cliente';
+        $propiedad = $data['property_title'] ?? 'N/A';
+        $ciudad = $data['property_city'] ?? '';
+        $precio = $data['property_price'] ?? 'N/A';
+        $responses = $data['responses'] ?? [];
+
+        $questionsText = '';
+        foreach ($responses as $key => $value) {
+            $questionsText .= "- $key: $value\n";
+        }
+
+        $prompt = "Eres un analista de riesgos inmobiliario senior. Evalúa la SOLVENCIA e IDONEIDAD de un cliente para alquilar una propiedad en República Dominicana.\n\n";
+        $prompt .= "Cliente: {$nombre}\n";
+        $prompt .= "Propiedad de interés: {$propiedad}".($ciudad ? " ({$ciudad})" : '')."\n";
+        $prompt .= "Precio de la propiedad: {$precio}\n\n";
+        $prompt .= "Respuestas del formulario de depuración:\n{$questionsText}\n";
+        $prompt .= "Analiza: capacidad de pago vs precio del alquiler, estabilidad laboral/ingresos, señales de riesgo (desalojos, problemas legales, mascotas, fumar), tamaño del grupo familiar vs la propiedad y urgencia de mudanza.\n";
+        $prompt .= "Responde ÚNICAMENTE con JSON válido, sin markdown ni explicaciones, con esta estructura exacta:\n";
+        $prompt .= "{\n  \"recomendacion\": \"recomendar\"|\"no_recomendar\"|\"condicional\",\n  \"nivel_riesgo\": \"bajo\"|\"medio\"|\"alto\",\n  \"resumen\": \"2-3 frases en español\",\n  \"observaciones\": \"2-3 puntos concretos en español\"\n}\n";
+        $prompt .= "Reglas: ingreso mensual menor a 3x el alquiler → riesgo alto; desalojo o problemas legales previos → no_recomendar; garante solidario compensa ingresos bajos → condicional. Sé estricto pero justo. NO decidas tú: solo recomiendas.";
+
+        return $prompt;
+    }
 }

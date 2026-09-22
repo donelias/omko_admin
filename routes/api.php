@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\ShortTermApiController;
 use App\Http\Controllers\Api\AuthApiController;
 use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\ChatApiController;
+use App\Http\Controllers\Api\ClientScreeningApiController;
 use App\Http\Controllers\Api\ContentApiController;
 use App\Http\Controllers\Api\FavouriteApiController;
 use App\Http\Controllers\Api\FinancialEntityApiController;
@@ -463,4 +464,20 @@ Route::withoutMiddleware(ActiveRoleMiddleware::class)->group(function () {
 
 /** Tasa de cambio */
 Route::get('/exchange-rate', [ExchangeRateController::class, 'getUsdToDop']);
+/*********************************************************************** */
+
+/** Flujo de depuración de clientes (client screening) */
+Route::prefix('screening')->group(function () {
+    /** Preguntas del formulario (público) */
+    Route::get('form/{propertyId}', [ClientScreeningApiController::class, 'formQuestions'])->name('screening.form');
+    /** Envío del formulario (público) */
+    Route::post('submit', [ClientScreeningApiController::class, 'submit'])->name('screening.submit');
+});
+
+/** Evaluación del agente sobre los screenings (auth + rol agente) */
+Route::middleware(['auth:sanctum', 'agent'])->prefix('agent')->group(function () {
+    Route::get('screenings', [ClientScreeningApiController::class, 'myScreenings'])->name('screening.mine');
+    Route::get('screenings/{id}', [ClientScreeningApiController::class, 'show'])->name('screening.show');
+    Route::post('screenings/{id}/decide', [ClientScreeningApiController::class, 'decide'])->name('screening.decide');
+});
 /*********************************************************************** */
