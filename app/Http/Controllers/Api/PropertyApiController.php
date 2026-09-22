@@ -3853,6 +3853,8 @@ class PropertyApiController extends Controller
                 $q->whereRaw('MATCH(title, description) AGAINST(? IN NATURAL LANGUAGE MODE)', [$search]);
             }
         });
+
+        return $query;
     }
 
     private function resolvePlaceIdToLocation($placeId)
