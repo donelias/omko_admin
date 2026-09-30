@@ -646,10 +646,15 @@ Route::get('deep-link', function () {
 Route::get('/js/lang', static function () {
     //    https://medium.com/@serhii.matrunchyk/using-laravel-localization-with-javascript-and-vuejs-23064d0c210e
     header('Content-Type: text/javascript');
-    $labels = Cache::remember('lang.js', 3600, static function () {
-        $lang = Session::get('locale') ?? 'en';
-        $files = resource_path('lang/'.$lang.'.json');
-
+    $lang = Session::get('locale') ?: 'en';
+    $files = resource_path('lang/'.$lang.'.json');
+    // The session locale can be a language that has no JSON file shipped in
+    // resources/lang (e.g. "es"). Falling back keeps window.trans defined,
+    // otherwise every table formatter throws and lists render empty.
+    if (! File::exists($files)) {
+        $files = resource_path('lang/en.json');
+    }
+    $labels = Cache::remember('lang.js.'.$lang.'.'.md5($files), 3600, static function () use ($files) {
         return File::get($files);
     });
     echo 'window.trans = '.$labels;
