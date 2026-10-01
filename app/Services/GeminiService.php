@@ -837,7 +837,7 @@ class GeminiService
         $prompt .= "Analiza: urgencia, presupuesto implícito/explícito, intención de compra real vs curiosidad, y calidad de la información aportada.\n";
         $prompt .= "Responde ÚNICAMENTE con JSON válido, sin markdown ni explicaciones, con esta estructura exacta:\n";
         $prompt .= "{\n  \"score\": 0-100,\n  \"nivel\": \"alto\"|\"medio\"|\"bajo\",\n  \"resumen\": \"2 frases cortas en español\",\n  \"sugerencia\": \"1 acción de seguimiento concreta en español\"\n}\n";
-        $prompt .= "Reglas: score alto (80-100) si hay presupuesto claro/urgencia; medio (50-79) si hay interés real pero falta dato; bajo (0-49) si es curiosidad sin intención. Sé estricto y objetivo.";
+        $prompt .= 'Reglas: score alto (80-100) si hay presupuesto claro/urgencia; medio (50-79) si hay interés real pero falta dato; bajo (0-49) si es curiosidad sin intención. Sé estricto y objetivo.';
 
         return $prompt;
     }
@@ -923,6 +923,139 @@ class GeminiService
     }
 
     /**
+     * Analiza la inteligencia de precios de una propiedad (sugerencia AI,
+     * análisis de inversión y posición de mercado) y genera un razonamiento
+     * narrativo que complementa los cálculos estadísticos.
+     *
+     * @param  array  $data  property, suggestion, investment_analysis, market_position, market_analysis, language
+     * @return array ['success' => bool, 'data' => [resumen, puntos_fuertes, riesgos, validacion]|null, 'error' => string|null]
+     */
+    public function analyzePriceIntelligence(array $data): array
+    {
+        try {
+            $prompt = $this->buildPriceIntelligencePrompt($data);
+            $cacheKey = 'gemini_price_intelligence_'.md5($prompt);
+
+            $cached = Cache::store('gemini')->get($cacheKey);
+            if ($cached) {
+                return [
+                    'success' => true,
+                    'data' => $cached,
+                    'cached' => true,
+                ];
+            }
+
+            $result = $this->generateContent($prompt);
+
+            if (! is_array($result) || empty($result['success'])) {
+                return $result;
+            }
+
+            $text = $this->getGeminiText($result['data'] ?? []);
+            $text = $this->cleanResponse($text);
+            $parsed = json_decode($text, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE || ! is_array($parsed)) {
+                if (preg_match('/\{[^}]+\}/s', $text, $matches)) {
+                    $parsed = json_decode($matches[0], true);
+                }
+            }
+
+            if (! is_array($parsed)) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to parse price intelligence analysis from Gemini response',
+                ];
+            }
+
+            $payload = [
+                'resumen' => (string) ($parsed['resumen'] ?? ''),
+                'puntos_fuertes' => (array) ($parsed['puntos_fuertes'] ?? []),
+                'riesgos' => (array) ($parsed['riesgos'] ?? []),
+                'validacion' => (string) ($parsed['validacion'] ?? ''),
+            ];
+
+            Cache::store('gemini')->put($cacheKey, $payload, 86400);
+
+            return [
+                'success' => true,
+                'data' => $payload,
+                'cached' => false,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Gemini Price Intelligence Analysis Error: '.$e->getMessage());
+
+            return [
+                'success' => false,
+                'error' => 'Failed to analyze price intelligence: '.$e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Construye el prompt del análisis de inteligencia de precios.
+     */
+    public function buildPriceIntelligencePrompt(array $data): string
+    {
+        $property = $data['property'] ?? [];
+        $suggestion = $data['suggestion'] ?? [];
+        $investment = $data['investment_analysis'] ?? [];
+        $position = $data['market_position'] ?? [];
+        $market = $data['market_analysis'] ?? [];
+        $language = $data['language'] ?? 'English';
+
+        $title = $property['title'] ?? 'N/A';
+        $location = $property['city'] ?? ($property['location'] ?? 'N/A');
+        $currentPrice = $property['price'] ?? 0;
+        $suggestedPrice = $suggestion['suggested_price'] ?? $suggestion['price'] ?? $currentPrice;
+        $recommendation = $suggestion['recommendation'] ?? 'review';
+        $confidence = $suggestion['confidence_score'] ?? 0;
+
+        $currency = $property['currency'] ?? 'DOP';
+        $netYield = $investment['net_yield_percent'] ?? null;
+        $paybackYears = $investment['payback_years'] ?? null;
+        $percentile = $position['price_percentile'] ?? null;
+        $appreciation = $position['annual_appreciation_percent'] ?? null;
+        $avgPrice = $market['average_price'] ?? null;
+        $trend = $market['price_trend'] ?? null;
+        $daysOnMarket = $market['avg_days_on_market'] ?? null;
+
+        $prompt = "Eres un analista inmobiliario senior especializado en el mercado de República Dominicana. Valida y contextualiza la siguiente inteligencia de precios calculada estadísticamente (NO inventes datos nuevos; usa exclusivamente los que se te dan).\n\n";
+        $prompt .= "Propiedad: {$title}"." (ubicación: {$location})\n";
+        $prompt .= "Precio actual: {$currentPrice} {$currency}\n";
+        $prompt .= "Precio sugerido por el motor: {$suggestedPrice} {$currency}\n";
+        $prompt .= "Recomendación del motor: {$recommendation}\n";
+        $prompt .= "Confianza del motor: {$confidence}%\n";
+        if ($netYield !== null) {
+            $prompt .= "Net yield estimado: {$netYield}%\n";
+        }
+        if ($paybackYears !== null) {
+            $prompt .= "Retorno de inversión estimado: {$paybackYears} años\n";
+        }
+        if ($percentile !== null) {
+            $prompt .= "Percentil de precio en la zona: {$percentile}%\n";
+        }
+        if ($appreciation !== null) {
+            $prompt .= "Apreciación anual proyectada: {$appreciation}%\n";
+        }
+        if ($avgPrice !== null) {
+            $prompt .= "Precio promedio de la zona: {$avgPrice} {$currency}\n";
+        }
+        if ($trend !== null) {
+            $prompt .= "Tendencia de precios: {$trend}%\n";
+        }
+        if ($daysOnMarket !== null) {
+            $prompt .= "Días promedio en el mercado: {$daysOnMarket}\n";
+        }
+
+        $prompt .= "\nEntrega un análisis breve y accionable para el agente inmobiliario. Responde ÚNICAMENTE con JSON válido, sin markdown, con esta estructura:\n";
+        $prompt .= "{\n  \"resumen\": \"2-3 frases resumiendo si el precio sugerido es razonable y por qué\",\n  \"puntos_fuertes\": [\"1-3 puntos a favor de la estrategia de precio\"],\n  \"riesgos\": [\"1-3 riesgos o señales de alerta\"],\n  \"validacion\": \"respuesta corta (2-3 frases) indicando si recomiendas proceder con la recomendación del motor, ajustar el precio, o revisar: algo como 'proceder', 'ajustar' o 'revisar'\"\n}\n";
+        $prompt .= "Reglas: la sugerencia del motor es una referencia, no una orden; si la confianza es baja (<50%) o faltan datos de mercado, sé cauto y sugiere revisar; no menciones a Google ni a Gemini. El texto final debe estar escrito en {$language}.";
+
+        return $prompt;
+    }
+
+    /**
      * Construye el prompt de análisis de depuración del cliente en español.
      */
     public function buildClientScreeningPrompt(array $data): string
@@ -946,7 +1079,7 @@ class GeminiService
         $prompt .= "Analiza: capacidad de pago vs precio del alquiler, estabilidad laboral/ingresos, señales de riesgo (desalojos, problemas legales, mascotas, fumar), tamaño del grupo familiar vs la propiedad y urgencia de mudanza.\n";
         $prompt .= "Responde ÚNICAMENTE con JSON válido, sin markdown ni explicaciones, con esta estructura exacta:\n";
         $prompt .= "{\n  \"recomendacion\": \"recomendar\"|\"no_recomendar\"|\"condicional\",\n  \"nivel_riesgo\": \"bajo\"|\"medio\"|\"alto\",\n  \"resumen\": \"2-3 frases en español\",\n  \"observaciones\": \"2-3 puntos concretos en español\"\n}\n";
-        $prompt .= "Reglas: ingreso mensual menor a 3x el alquiler → riesgo alto; desalojo o problemas legales previos → no_recomendar; garante solidario compensa ingresos bajos → condicional. Sé estricto pero justo. NO decidas tú: solo recomiendas.";
+        $prompt .= 'Reglas: ingreso mensual menor a 3x el alquiler → riesgo alto; desalojo o problemas legales previos → no_recomendar; garante solidario compensa ingresos bajos → condicional. Sé estricto pero justo. NO decidas tú: solo recomiendas.';
 
         return $prompt;
     }

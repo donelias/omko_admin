@@ -7,14 +7,20 @@ use App\Models\PriceHistory;
 use App\Models\Property;
 use App\Services\ApiResponseService;
 use App\Services\ExchangeRateService;
+use App\Services\GeminiService;
+use App\Services\HelperService;
 use App\Services\PriceIntelligenceService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class PriceIntelligenceController extends Controller
 {
-    public function __construct(protected PriceIntelligenceService $service) {}
+    public function __construct(
+        protected PriceIntelligenceService $service,
+        protected ?GeminiService $geminiService = null
+    ) {}
 
     /**
      * 1. GET /api/price-intelligence/suggestions/{propertyId}?force_refresh=false
@@ -124,6 +130,8 @@ class PriceIntelligenceController extends Controller
                 ]),
                 'price_history' => PriceHistory::getHistoryForProperty($property->id),
             ];
+
+            $data['ai_analysis'] = $this->aiAnalysisFor($data, $property);
 
             return ApiResponseService::successResponse('Price analysis generated', $data);
         } catch (Throwable $e) {
@@ -349,7 +357,7 @@ class PriceIntelligenceController extends Controller
                 if ($base <= 0) {
                     continue;
                 }
-                $date = (new \Carbon\Carbon($row->created_at))->toDateString();
+                $date = (new Carbon($row->created_at))->toDateString();
                 if (! isset($byDay[$date])) {
                     $byDay[$date] = ['sum' => 0, 'count' => 0, 'min' => $base, 'max' => $base];
                 }
@@ -418,5 +426,68 @@ class PriceIntelligenceController extends Controller
         } catch (Throwable $e) {
             return ApiResponseService::logErrorResponse($e, 'PriceIntelligenceController::exchangeRates error');
         }
+    }
+
+    /**
+     * Genera el razonamiento narrativo de IA para el análisis de precios.
+     * Devuelve null cuando Gemini no está habilitado o falla la generación.
+     */
+    protected function aiAnalysisFor(array $data, $property): ?array
+    {
+        try {
+            $enabled = HelperService::getSettingData('gemini_ai_enabled');
+            if ($enabled !== '1' || ! $this->geminiService) {
+                return null;
+            }
+
+            $language = request('language', 'es');
+
+            $result = $this->geminiService->analyzePriceIntelligence([
+                'property' => [
+                    'title' => $property->title ?? '',
+                    'city' => $property->city,
+                    'location' => $property->state,
+                    'price' => $property->price,
+                    'currency' => $property->currency ?: 'DOP',
+                ],
+                'suggestion' => is_object($data['suggestion'] ?? null)
+                    ? $data['suggestion']->toArray()
+                    : ($data['suggestion'] ?? []),
+                'investment_analysis' => $data['investment_analysis'] ?? [],
+                'market_position' => $data['market_position'] ?? [],
+                'market_analysis' => is_object($data['market_analysis'] ?? null)
+                    ? $data['market_analysis']->toArray()
+                    : ($data['market_analysis'] ?? []),
+                'language' => $this->languageNameFor($language),
+            ]);
+
+            if (empty($result['success']) || empty($result['data'])) {
+                return null;
+            }
+
+            return [
+                'resumen' => $result['data']['resumen'] ?? '',
+                'puntos_fuertes' => $result['data']['puntos_fuertes'] ?? [],
+                'riesgos' => $result['data']['riesgos'] ?? [],
+                'validacion' => $result['data']['validacion'] ?? '',
+                'cached' => ! empty($result['cached']),
+                'generated_at' => now()->toIso8601String(),
+            ];
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    protected function languageNameFor(string $code): string
+    {
+        return match (strtolower($code)) {
+            'es' => 'Español',
+            'en', 'en-new' => 'English',
+            'hi' => 'Hindi',
+            'ru' => 'Ruso',
+            default => 'Español',
+        };
     }
 }
