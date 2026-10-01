@@ -71,6 +71,7 @@ class ClientScreeningApiController extends Controller
         foreach ([
             'notificarAgente' => static fn () => self::notifyAgentInApp($screening, $property, $agentId),
             'correoAlAgente' => static fn () => ClientScreeningNotificationService::sendToAgent($screening),
+            'correoAlOmko' => static fn () => ClientScreeningNotificationService::sendToOmko($screening),
             'correoAlCliente' => static fn () => ClientScreeningNotificationService::sendToClient($screening),
             'whatsappAlAgente' => static fn () => self::notifyAgentWhatsApp($screening, $property, $agentId),
         ] as $name => $callback) {
@@ -89,6 +90,7 @@ class ClientScreeningApiController extends Controller
             'message' => 'Formulario enviado correctamente. El agente revisará su solicitud pronto.',
             'data' => [
                 'screening_id' => $screening->id,
+                'property_slug' => $property->slug_id,
             ],
         ]);
     }

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Mail;
  *
  *  - sendToClient():    confirmación de recepción al cliente.
  *  - sendToAgent():     aviso de nuevo screening al agente dueño.
+ *  - sendToOmko():      copia interna para el equipo de Omko.
  *  - sendDecisionToClient(): resultado final (aprobado/rechazado) al cliente.
  *
  * Cada envío está aislado en try/catch para nunca romper el flujo.
@@ -91,6 +92,43 @@ class ClientScreeningNotificationService
             Mail::to($email)->queue(new GenericMailTemplate($data, $ctx['adminMail'], $ctx['companyName']));
         } catch (Exception $e) {
             Log::error('ClientScreeningNotificationService: correo al agente falló: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Copia interna para el equipo de Omko, para que ninguna solicitud
+     * dependa de que el agente esté pendiente o tenga el correo correcto.
+     */
+    public static function sendToOmko(ClientScreening $screening): void
+    {
+        $email = HelperService::getSettingData('info_email')
+            ?: env('MAIL_FROM_ADDRESS', 'info@omko.do');
+
+        if (! $email || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Log::warning('ClientScreeningNotificationService: correo de Omko no configurado o inválido.');
+            $email = 'info@omko.do';
+        }
+
+        $ctx = self::context($screening);
+
+        try {
+            $data = [
+                'title' => 'Nueva solicitud de depuración - '.$screening->customer_name,
+                'email' => $email,
+                'email_template' => view('mail-templates.client-screening-omko', [
+                    'client_name' => $screening->customer_name,
+                    'client_email' => $screening->customer_email ?? 'N/A',
+                    'client_phone' => $screening->customer_phone ?? 'N/A',
+                    'property_name' => $ctx['propertyName'],
+                    'agent_name' => $ctx['agentName'],
+                    'score' => $screening->score,
+                    'nivel' => $screening->nivel,
+                    'date' => $screening->created_at->format('d/m/Y H:i'),
+                ])->render(),
+            ];
+            Mail::to($email)->queue(new GenericMailTemplate($data, $ctx['adminMail'], $ctx['companyName']));
+        } catch (Exception $e) {
+            Log::error('ClientScreeningNotificationService: correo a Omko falló: '.$e->getMessage());
         }
     }
 
