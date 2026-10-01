@@ -840,7 +840,7 @@ class PropertyApiController extends Controller
             // Eager-loads + columns needed for the listing rows
             $withListingColumns = function ($query) {
                 return $query->with('category:id,category,image,slug_id', 'category.translations', 'translations')
-                    ->addSelect('id', 'slug_id', 'propery_type', 'title_image', 'category_id', 'title', 'price', 'city', 'state', 'country', 'rentduration', 'added_by', 'is_premium', 'latitude', 'longitude', 'total_click');
+                    ->addSelect('id', 'slug_id', 'propery_type', 'title_image', 'category_id', 'title', 'price', 'currency', 'city', 'state', 'country', 'rentduration', 'added_by', 'is_premium', 'latitude', 'longitude', 'total_click');
             };
 
             // Active-advertisement constraint that marks a property as "featured/promoted"
@@ -955,6 +955,7 @@ class PropertyApiController extends Controller
                     $fail('The Price must not exceed more than 9223372036854775807.');
                 }
             }],
+            'currency' => ['nullable', 'in:USD,DOP'],
             'video_type' => 'nullable|in:0,1,2',
             'video_link' => [
                 'nullable',
@@ -1134,6 +1135,9 @@ class PropertyApiController extends Controller
             }
             if ($request->price) {
                 $saveProperty->price = $request->price;
+            }
+            if ($request->has('currency') && in_array(strtoupper($request->currency), ['USD', 'DOP'])) {
+                $saveProperty->currency = strtoupper($request->currency);
             }
             if ($request->country) {
                 $saveProperty->country = $request->country;
@@ -1526,6 +1530,7 @@ class PropertyApiController extends Controller
                     $fail('The Price must not exceed more than 9223372036854775807.');
                 }
             }],
+            'currency' => ['nullable', 'in:USD,DOP'],
             'video_type' => 'nullable|in:0,1,2',
             'video_link' => [
                 'nullable',
@@ -1619,6 +1624,9 @@ class PropertyApiController extends Controller
 
                     if (isset($request->price)) {
                         $property->price = $request->price;
+                    }
+                    if ($request->has('currency') && in_array(strtoupper($request->currency), ['USD', 'DOP'])) {
+                        $property->currency = strtoupper($request->currency);
                     }
                     if (isset($request->country)) {
                         $property->country = $request->country;
