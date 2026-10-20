@@ -57,6 +57,14 @@
                                         value="{{ isset($systemSettings['company_email']) && $systemSettings['company_email'] != '' ? $systemSettings['company_email'] : '' }}">
                                 </div>
 
+                                {{-- Correo de copia interna (notificaciones de la plataforma) --}}
+                                <div class="col-sm-12 col-md-6 mt-2">
+                                    <label class="form-label" for="info_email">{{ __('Internal Notification Email (Omko copy)') }}</label>
+                                    <input name="info_email" type="email" id="info_email" class="form-control"
+                                        placeholder="{{ __('Internal Notification Email (Omko copy)') }}"
+                                        value="{{ isset($systemSettings['info_email']) && $systemSettings['info_email'] != '' ? $systemSettings['info_email'] : '' }}">
+                                </div>
+
                                 {{-- Contact Number 1 --}}
                                 <div class="col-sm-12 col-md-6 mt-2">
                                     <label class="form-label" for="company-tel1">{{ __('Contact Number 1') }}</label>

@@ -388,6 +388,7 @@ class SettingController extends Controller
         $settingsArray = [
             'company_name',
             'company_email',
+            'info_email',
             'company_tel1',
             'company_tel2',
             'latitude',

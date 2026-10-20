@@ -22,6 +22,7 @@ $config = [
     'package' => ['create', 'read', 'update', 'delete'],
     'user_package' => ['read'],
     'payment' => ['read'],
+    'invoice' => ['create', 'read', 'update', 'delete'],
     'calculator' => ['read'],
     'faqs' => ['create', 'read', 'update', 'delete'],
     'users_accounts' => ['create', 'read', 'update'],

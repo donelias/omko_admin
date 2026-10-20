@@ -21,6 +21,7 @@ use App\Http\Controllers\GeminiSettingsController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\HomepageSectionController;
 use App\Http\Controllers\InstallerController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OutdoorFacilityController;
@@ -269,6 +270,17 @@ Route::middleware(['language'])->group(function () {
         Route::post('payment-status', [PaymentController::class, 'updateStatus'])->name('payment.status');
         Route::get('payment-receipt/{id}/view', [PaymentController::class, 'viewReceipt'])->name('payment.receipt.view');
         // / END :: PAYMENT ROUTE
+
+        // / START :: INVOICE ROUTE
+        // NCF / ITBIS / retención: `invoices.show` es el JSON de la
+        // bootstrap-table igual que en el resto de módulos, y el resto son las
+        // rutas de un recurso salvo PDF y reenvío.
+        Route::resource('invoices', InvoiceController::class);
+        Route::get('invoices/{id}/download', [InvoiceController::class, 'download'])->name('invoices.download');
+        Route::get('invoices/{id}/preview', [InvoiceController::class, 'preview'])->name('invoices.preview');
+        Route::post('invoices/{id}/resend', [InvoiceController::class, 'resend'])->name('invoices.resend');
+        Route::post('invoices-status', [InvoiceController::class, 'status'])->name('invoices.status');
+        // / END :: INVOICE ROUTE
 
         // / START :: USER ROUTE
 

@@ -359,6 +359,7 @@
                         has_permissions('create', 'package') ||
                         has_permissions('read', 'user_package') ||
                         has_permissions('read', 'payment') ||
+                        has_permissions('read', 'invoice') ||
                         has_permissions('read', 'assign_package') ||
                         has_permissions('read', 'calculator')
                     )
@@ -409,6 +410,13 @@
                             @if (has_permissions('read', 'payment'))
                                 <li class="submenu-item">
                                     <a href="{{ route('payment.index') }}">{{ __('Payment') }}</a>
+                                </li>
+                            @endif
+
+                            {{-- Facturación (NCF / ITBIS) --}}
+                            @if (has_permissions('read', 'invoice'))
+                                <li class="submenu-item">
+                                    <a href="{{ route('invoices.index') }}">{{ __('Invoices') }}</a>
                                 </li>
                             @endif
 
