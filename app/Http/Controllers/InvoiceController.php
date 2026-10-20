@@ -328,6 +328,7 @@ class InvoiceController extends Controller
             'client_city' => 'nullable|string|max:120',
             'client_address' => 'nullable|string|max:255',
             'client_email' => 'nullable|email|max:190',
+            'cc_emails' => 'nullable|string|max:1000',
             'concept' => 'required|string|max:1000',
             'quantity' => 'required|integer|min:1|max:1000000',
             'unit_price' => 'required|numeric|min:0|max:999999999',
@@ -350,7 +351,7 @@ class InvoiceController extends Controller
     {
         $data = $request->only([
             'ncf_type', 'client_name', 'client_rnc', 'client_phone', 'client_city',
-            'client_address', 'client_email', 'concept', 'quantity', 'unit_price',
+            'client_address', 'client_email', 'cc_emails', 'concept', 'quantity', 'unit_price',
             'itbis_rate', 'currency', 'issue_date', 'due_date', 'status', 'notes',
         ]);
 

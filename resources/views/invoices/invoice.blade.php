@@ -197,11 +197,12 @@
     <div style="position:absolute; left:131pt; top:734pt; width:136pt; border-top:0.5pt solid #231f20;"></div>
     <div style="position:absolute; left:345pt; top:734pt; width:136pt; border-top:0.5pt solid #231f20;"></div>
 
-    {{-- Firma manuscrita: la rúbrica (banda central de la imagen) queda justo
-         encima de la línea derecha (y=734); el resto de la imagen es aire. --}}
+    {{-- Firma manuscrita: la rúbrica queda justo encima de la línea derecha
+         (y=734). La imagen es apaisada (~4.26:1) y la tinta ocupa casi todo
+         el alto, así que se alinea por su base con la línea. --}}
     @if (!empty($settings['signature_image']))
         <img src="{{ $settings['signature_image'] }}" alt=""
-             style="position:absolute; left:343pt; top:657pt; width:140pt;">
+             style="position:absolute; left:328pt; top:699pt; width:170pt;">
     @endif
 
     {{-- Sello: centrado entre las dos firmas, atravesando la línea. --}}

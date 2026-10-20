@@ -138,6 +138,20 @@
     <small class="text-muted">{{ __('The PDF is sent here.') }}</small>
 </div>
 
+{{-- Copia (CC): correos adicionales que reciben la factura. Es distinto de la
+     copia interna de Omko, que siempre se envía aparte. --}}
+<div class="col-12 form-group">
+    {{ Form::label('cc_emails', __('CC (additional recipients)'), ['class' => 'form-label']) }}
+    {{ Form::text('cc_emails', $val('cc_emails'), [
+        'class' => 'form-control',
+        'placeholder' => 'correo1@ejemplo.com, correo2@ejemplo.com',
+        'id' => 'cc_emails',
+    ]) }}
+    <small class="text-muted">
+        {{ __('Separate several emails with commas. Separate from the internal Omko copy.') }}
+    </small>
+</div>
+
 {{-- Concepto y montos --}}
 <div class="col-12 form-group mandatory">
     {{ Form::label('concept', __('Concept'), ['class' => 'form-label']) }}

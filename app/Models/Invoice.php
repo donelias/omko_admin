@@ -19,6 +19,7 @@ class Invoice extends Model
         'client_city',
         'client_address',
         'client_email',
+        'cc_emails',
         'concept',
         'quantity',
         'unit_price',
@@ -114,5 +115,26 @@ class Invoice extends Model
     public function isVoided(): bool
     {
         return $this->status === 'anulada';
+    }
+
+    /**
+     * Correos CC válidos de la factura, normalizados y sin duplicados.
+     * Acepta varios separados por coma, punto y coma o salto de línea.
+     *
+     * @return array<int, string>
+     */
+    public function ccEmailList(): array
+    {
+        $raw = preg_split('/[,;\n\r]+/', (string) $this->cc_emails) ?: [];
+        $emails = [];
+
+        foreach ($raw as $email) {
+            $email = trim($email);
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails[strtolower($email)] = $email;
+            }
+        }
+
+        return array_values($emails);
     }
 }

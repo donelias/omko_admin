@@ -57,6 +57,15 @@ class InvoiceNotificationService
             $recipients[$omkoMail] = 'omko';
         }
 
+        // Copia (CC) adicional de la factura: correos extra que también reciben
+        // la factura. Es distinto de la copia interna de Omko. Se envían como
+        // CC real en el correo del cliente; se excluyen los que ya son
+        // destinatario principal para no duplicar.
+        $ccList = array_values(array_filter(
+            $invoice->ccEmailList(),
+            fn (string $email) => ! isset($recipients[$email])
+        ));
+
         foreach ($recipients as $email => $role) {
             try {
                 $body = view('mail-templates.invoice', $ctx + ['role' => $role, 'invoice' => $invoice])->render();
@@ -68,11 +77,18 @@ class InvoiceNotificationService
                     'email_template' => $body,
                 ];
 
+                // La CC solo acompaña al correo del cliente (el destinatario
+                // natural de la factura). La copia interna de Omko va sola.
+                $pending = Mail::to($email);
+                if ($role === 'client' && $ccList !== []) {
+                    $pending = $pending->cc($ccList);
+                }
+
                 // Se envía de forma SÍNCRONA a propósito: el PDF adjunto son
                 // bytes binarios y un Mailable en cola se serializa a JSON, lo
                 // que rompe con "Malformed UTF-8 characters". En envío directo
                 // el adjunto viaja tal cual al transporte.
-                Mail::to($email)->send(new GenericMailTemplate(
+                $pending->send(new GenericMailTemplate(
                     $data,
                     // config() en lugar de env(): con config:cache env() es null
                     HelperService::getSettingData('company_email') ?: config('mail.from.address'),
@@ -85,6 +101,32 @@ class InvoiceNotificationService
                 Log::error('InvoiceNotificationService: correo no enviado.', [
                     'invoice_id' => $invoice->id,
                     'recipient' => $email,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // Si no hubo destinatario principal (sin email de cliente) pero sí CC,
+        // se envía la factura directamente a los CC para que no se pierda.
+        if ($recipients === [] && $ccList !== []) {
+            try {
+                $body = view('mail-templates.invoice', $ctx + ['role' => 'client', 'invoice' => $invoice])->render();
+
+                Mail::to($ccList)->send(new GenericMailTemplate(
+                    [
+                        'title' => 'Factura '.$invoice->invoice_number,
+                        'email' => $ccList[0],
+                        'email_template' => $body,
+                    ],
+                    HelperService::getSettingData('company_email') ?: config('mail.from.address'),
+                    HelperService::getSettingData('company_name') ?: config('app.name'),
+                    $attachment
+                ));
+
+                $sent += count($ccList);
+            } catch (Exception $e) {
+                Log::error('InvoiceNotificationService: correo a CC no enviado.', [
+                    'invoice_id' => $invoice->id,
                     'error' => $e->getMessage(),
                 ]);
             }
