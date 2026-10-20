@@ -46,14 +46,23 @@ class InvoiceNotificationService
 
         $ctx = self::context($invoice);
 
-        $recipients = [];
-        if ($invoice->client_email && filter_var($invoice->client_email, FILTER_VALIDATE_EMAIL)) {
-            $recipients[$invoice->client_email] = 'client';
-        }
+        $clientEmail = ($invoice->client_email && filter_var($invoice->client_email, FILTER_VALIDATE_EMAIL))
+            ? $invoice->client_email
+            : null;
 
         $omkoMail = HelperService::getSettingData('info_email')
             ?: (HelperService::getSettingData('company_email') ?: config('mail.from.address'));
-        if ($omkoMail && filter_var($omkoMail, FILTER_VALIDATE_EMAIL)) {
+        if (! $omkoMail || ! filter_var($omkoMail, FILTER_VALIDATE_EMAIL)) {
+            $omkoMail = null;
+        }
+
+        // Si el email del cliente coincide con la copia interna de Omko, se
+        // marca como 'client' (tiene prioridad) para que la CC no se pierda.
+        $recipients = [];
+        if ($clientEmail !== null) {
+            $recipients[$clientEmail] = 'client';
+        }
+        if ($omkoMail !== null && ! isset($recipients[$omkoMail])) {
             $recipients[$omkoMail] = 'omko';
         }
 
