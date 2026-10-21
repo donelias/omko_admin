@@ -12,6 +12,7 @@ use App\Models\UserPayAsYouGoCredit;
 use App\Models\Usertokens;
 use App\Services\BootstrapTableService;
 use App\Services\HelperService;
+use App\Services\PaymentNotificationService;
 use App\Services\PDF\PaymentReceiptService;
 use App\Services\ResponseService;
 use Carbon\Carbon;
@@ -273,9 +274,16 @@ class PaymentController extends Controller
                 'image' => '',
                 'type' => '1',
                 'send_type' => '0',
-                'customers_id' => $payment->customer_id,
+                'customers_id' => $payment->user_id,
                 'role_context' => $payment->role_context ?? 'user',
             ]);
+
+            if ($request->status == 'success') {
+                PaymentNotificationService::sendSuccess($payment);
+            } else {
+                PaymentNotificationService::sendFailed($payment, (string) $payment->reject_reason);
+            }
+
             DB::commit();
 
             return ResponseService::successResponse(trans('Payment status updated successfully'));

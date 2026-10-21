@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\CheckSavedSearchAlerts;
 use App\Mail\GenericMailTemplate;
 use App\Models\AgentAvailability;
 use App\Models\AgentProfile;
@@ -21,8 +22,6 @@ use App\Models\Setting;
 use App\Models\Translation;
 use App\Models\User;
 use App\Models\UserInterest;
-use App\Models\SavedSearch;
-use App\Models\PropertyAlert;
 use App\Models\UserPackage;
 use App\Models\UserPackageLimit;
 use App\Models\UserPayAsYouGoCredit;
@@ -163,7 +162,7 @@ class HelperService
                     ];
                 case 'reset_password':
                     return [
-                        'title' => __('OTP for Reset Password'),
+                        'title' => __('Password Reset Mail'),
                         'type' => 'password_reset_mail_template',
                         'required_fields' => [
                             [
@@ -171,7 +170,11 @@ class HelperService
                                 'is_condition' => false,
                             ],
                             [
-                                'name' => 'otp',
+                                'name' => 'user_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'link',
                                 'is_condition' => false,
                             ],
                         ],
@@ -516,6 +519,95 @@ class HelperService
                             ],
                         ],
                     ];
+                case 'payment_success':
+                    return [
+                        'title' => __('Payment Success'),
+                        'type' => 'payment_success_mail_template',
+                        'required_fields' => [
+                            [
+                                'name' => 'app_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'user_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'package_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'currency',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'amount',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'transaction_id',
+                                'is_condition' => false,
+                            ],
+                        ],
+                    ];
+                case 'payment_failed':
+                    return [
+                        'title' => __('Payment Failed'),
+                        'type' => 'payment_failed_mail_template',
+                        'required_fields' => [
+                            [
+                                'name' => 'app_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'user_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'package_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'currency',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'amount',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'reason',
+                                'is_condition' => true,
+                            ],
+                        ],
+                    ];
+                case 'payment_review':
+                    return [
+                        'title' => __('Payment Under Review'),
+                        'type' => 'payment_review_mail_template',
+                        'required_fields' => [
+                            [
+                                'name' => 'app_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'user_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'package_name',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'currency',
+                                'is_condition' => false,
+                            ],
+                            [
+                                'name' => 'amount',
+                                'is_condition' => false,
+                            ],
+                        ],
+                    ];
             }
         }
 
@@ -577,12 +669,24 @@ class HelperService
                 'title' => __('Appointment Meeting Type Change'),
                 'type' => 'appointment_meeting_type_change',
             ],
+            [
+                'title' => __('Payment Success'),
+                'type' => 'payment_success',
+            ],
+            [
+                'title' => __('Payment Failed'),
+                'type' => 'payment_failed',
+            ],
+            [
+                'title' => __('Payment Under Review'),
+                'type' => 'payment_review',
+            ],
         ];
     }
 
     public static function replaceEmailVariables($templateContent, $variables)
     {
-        $templateContent = htmlspecialchars_decode($templateContent);
+        $templateContent = htmlspecialchars_decode((string) $templateContent);
         // First pass A: handle conditional blocks in legacy format {key}...{end_key}
         foreach ($variables as $key => $variable) {
             $startTag = '{'.$key.'}';
@@ -647,7 +751,7 @@ class HelperService
                 return;
             }
 
-            $adminMail = env('MAIL_FROM_ADDRESS');
+            $adminMail = HelperService::getSettingData('company_email') ?: config('mail.from.address');
             $companyName = HelperService::getSettingData('company_name');
 
             // Prepare the Mailable
@@ -871,8 +975,8 @@ class HelperService
     public static function getActivePackage($userId, $packageId, $role = null)
     {
         $userPackages = UserPackage::where(['user_id' => $userId, 'package_id' => $packageId])
-        ->forRole()    
-        ->onlyActive()
+            ->forRole()
+            ->onlyActive()
             ->first();
 
         return $userPackages;
@@ -1398,7 +1502,7 @@ class HelperService
             }
 
             // Also trigger saved search alerts
-            \App\Jobs\CheckSavedSearchAlerts::dispatch();
+            CheckSavedSearchAlerts::dispatch();
 
             return true;
         } catch (Exception $e) {
@@ -1694,7 +1798,7 @@ class HelperService
     {
         $feature = self::checkAgentWatermarkFeature($agentId);
 
-        log::info('Agent Watermark Feature Check', ['agent_id' => $agentId, 'feature_check_result' => $feature]);
+        Log::info('Agent Watermark Feature Check', ['agent_id' => $agentId, 'feature_check_result' => $feature]);
 
         return ! empty($feature['feature_available']) && ! empty($feature['limit_available']);
     }
@@ -1714,11 +1818,11 @@ class HelperService
             $fileExists = $watermarkPath ? file_exists($watermarkPath) : false;
 
             Log::info('Watermark: agent config resolved', [
-                'agent_id'        => $agentId,
+                'agent_id' => $agentId,
                 'watermark_enabled' => (bool) $agentProfile->watermark_enabled,
                 'watermark_image' => $watermarkImage,
-                'expected_path'   => $watermarkPath,
-                'file_exists'     => $fileExists,
+                'expected_path' => $watermarkPath,
+                'file_exists' => $fileExists,
             ]);
 
             return [
@@ -1745,10 +1849,10 @@ class HelperService
             $agentWatermarkConfig = self::getAgentWatermarkConfig($agentId);
 
             Log::info('Watermark: resolving for agent', [
-                'agent_id'       => $agentId,
-                'enabled'        => $agentWatermarkConfig['enabled'] ?? false,
+                'agent_id' => $agentId,
+                'enabled' => $agentWatermarkConfig['enabled'] ?? false,
                 'watermark_path' => $agentWatermarkConfig['watermark_path'] ?? null,
-                'result'         => (! empty($agentWatermarkConfig['enabled']) && ! empty($agentWatermarkConfig['watermark_path'])) ? 'agent_applied' : 'falling_back_to_admin',
+                'result' => (! empty($agentWatermarkConfig['enabled']) && ! empty($agentWatermarkConfig['watermark_path'])) ? 'agent_applied' : 'falling_back_to_admin',
             ]);
 
             if (! empty($agentWatermarkConfig['enabled']) && ! empty($agentWatermarkConfig['watermark_path'])) {

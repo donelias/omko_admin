@@ -15,6 +15,7 @@ use App\Models\UserPayAsYouGoCredit;
 use App\Models\Usertokens;
 use App\Services\HelperService;
 use App\Services\Payment\PayPalPayment;
+use App\Services\PaymentNotificationService;
 use App\Services\ResponseService;
 use Carbon\Carbon;
 use Exception;
@@ -809,6 +810,9 @@ class WebhookController extends Controller
                     'role_context' => $paymentTransactionData->role_context ?? 'user',
                 ]);
             }
+
+            PaymentNotificationService::sendSuccess($paymentTransactionData);
+
             DB::commit();
             ResponseService::successResponse('Transaction Verified Successfully');
 
@@ -945,6 +949,8 @@ class WebhookController extends Controller
                 'customers_id' => $userId,
                 'role_context' => $paymentTransactionData->role_context ?? 'user',
             ]);
+
+            PaymentNotificationService::sendFailed($paymentTransactionData);
 
             DB::commit();
             ResponseService::successResponse('Transaction Failed Successfully');

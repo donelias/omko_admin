@@ -346,6 +346,7 @@ Route::group(['middleware' => ['user']], function () {
 /** Auth */
 Route::post('user_signup', [AuthApiController::class, 'user_signup'])->name('user-signup');
 Route::post('user-register', [AuthApiController::class, 'userRegister'])->name('user-register');
+Route::post('forgot-password', [AuthApiController::class, 'forgotPassword'])->name('forgot-password');
 Route::get('check-number-password-exists', [AuthApiController::class, 'checkNumberPasswordExists'])->name('check-number-password-exists');
 Route::post('update-number-password', [AuthApiController::class, 'updateNumberPassword'])->name('update-number-password');
 Route::post('update-email-password', [AuthApiController::class, 'updateEmailPassword'])->name('update-email-password');

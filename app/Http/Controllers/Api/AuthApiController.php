@@ -18,7 +18,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Request as FacadesRequest;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Twilio\Exceptions\RestException;
@@ -381,6 +380,70 @@ class AuthApiController extends Controller
             ApiResponseService::successResponse('User Registered Successfully');
         } catch (Exception $e) {
             DB::rollback();
+            if (Str::contains($e->getMessage(), [
+                'Failed',
+                'Mail',
+                'Mailer',
+                'MailManager',
+                'Connection could not be established',
+            ])) {
+                ApiResponseService::validationError('There is issue with mail configuration, kindly contact admin regarding this');
+            } else {
+                ApiResponseService::errorResponse();
+            }
+        }
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|exists:customers,email',
+        ], [
+            'email.required' => trans('Email is required'),
+            'email.email' => trans('Email must be a valid email address'),
+            'email.exists' => trans('User Does Not Exist'),
+        ]);
+        if ($validator->fails()) {
+            ApiResponseService::validationError($validator->errors()->first());
+        }
+        try {
+            $email = $request->email;
+            $customer = Customer::where(['email' => $email, 'logintype' => 3])->first();
+            if (! $customer) {
+                ApiResponseService::validationError('User Does Not Exist');
+            }
+            if ($customer->isActive == 0) {
+                ApiResponseService::validationError('User is not active');
+            }
+
+            $token = HelperService::generateToken();
+            HelperService::storeToken($email, $token);
+
+            $link = route('reset-password', ['token' => $token]);
+
+            $emailTypeData = HelperService::getEmailTemplatesTypes('reset_password');
+            $templateData = HelperService::getSettingData($emailTypeData['type']);
+            $appName = config('app.name') ?? 'omko';
+            $variables = [
+                'app_name' => $appName,
+                'user_name' => ! empty($customer->name) ? $customer->name : "$appName User",
+                'email' => $email,
+                'link' => $link,
+            ];
+            if (empty($templateData)) {
+                $templateData = "Reset your $appName password: $link";
+            }
+            $template = HelperService::replaceEmailVariables($templateData, $variables);
+
+            $data = [
+                'email_template' => $template,
+                'email' => $email,
+                'title' => $emailTypeData['title'],
+            ];
+            HelperService::sendMail($data, false, true);
+
+            ApiResponseService::successResponse('Password Reset Link Sent Successfully');
+        } catch (Exception $e) {
             if (Str::contains($e->getMessage(), [
                 'Failed',
                 'Mail',

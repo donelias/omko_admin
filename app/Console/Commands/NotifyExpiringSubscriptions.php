@@ -52,17 +52,20 @@ class NotifyExpiringSubscriptions extends Command
 
         // Get Data of email type
         $emailTypeData = HelperService::getEmailTemplatesTypes('subscription_expiring_soon');
-        $appName = env('APP_NAME') ?? 'omko';
+        $appName = config('app.name') ?? 'omko';
+        $subscriptionExpiringSoonTemplateData = HelperService::getSettingData($emailTypeData['type']);
         foreach ($userPackages as $userPackage) {
+            if (empty($userPackage->customer->email)) {
+                continue;
+            }
             $variables = [
                 'app_name' => $appName,
                 'user_name' => ! empty($userPackage->customer->name) ? $userPackage->customer->name : "$appName User",
                 'email' => $userPackage->customer->email,
-                'package_name' => $userPackage->package->name,
-                'subscription_end_date' => $userPackage->end_date,
+                'package_name' => $userPackage->package->name ?? '',
+                'subscription_end_date' => optional($userPackage->end_date)->format('d/m/Y'),
             ];
-            $subscriptionExpiringSoonTemplateData = HelperService::getSettingData($emailTypeData['type']);
-            $subscriptionExpiringSoonTemplate = HelperService::replaceEmailVariables($subscriptionExpiringSoonTemplateData, $variables);
+            $subscriptionExpiringSoonTemplate = HelperService::replaceEmailVariables($subscriptionExpiringSoonTemplateData ?? '', $variables);
 
             $data = [
                 'email_template' => $subscriptionExpiringSoonTemplate,

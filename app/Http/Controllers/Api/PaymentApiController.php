@@ -12,6 +12,7 @@ use App\Services\ApiResponseService;
 use App\Services\FileService;
 use App\Services\HelperService;
 use App\Services\Payment\PaymentService;
+use App\Services\PaymentNotificationService;
 use App\Services\PDF\PaymentReceiptService;
 use App\Services\ResponseService;
 use Exception;
@@ -234,9 +235,9 @@ class PaymentApiController extends Controller
                 'package_id' => 'required_if:pay_as_you_go_id,null|exists:packages,id',
                 'pay_as_you_go_id' => 'required_without:package_id|exists:pay_as_you_gos,id',
                 'file' => 'required|file|mimes:jpeg,png,jpg,pdf,doc,docx,webp|max:3072',
-            ],[
+            ], [
 
-            'file.max' => __('File size exceeds the :max limit. Please upload a smaller file.'),
+                'file.max' => __('File size exceeds the :max limit. Please upload a smaller file.'),
             ]);
 
             if ($validator->fails()) {
@@ -322,6 +323,9 @@ class PaymentApiController extends Controller
             } else {
                 $bankDetailsFields = [];
             }
+
+            PaymentNotificationService::sendReview($paymentTransactionData);
+
             DB::commit();
 
             ResponseService::successResponse('Transaction Initiated Successfully', $paymentTransactionData, ['bank_details' => $bankDetailsFields]);

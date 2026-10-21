@@ -24,7 +24,7 @@ class ClientScreeningNotificationService
     {
         $screening->loadMissing(['property', 'agent']);
 
-        $adminMail = env('MAIL_FROM_ADDRESS', 'info@omko.do');
+        $adminMail = HelperService::getSettingData('company_email') ?: config('mail.from.address');
         $companyName = HelperService::getSettingData('company_name') ?? config('app.name');
         $agent = $screening->agent;
 
@@ -33,8 +33,8 @@ class ClientScreeningNotificationService
             'adminMail' => $adminMail,
             'companyName' => $companyName,
             'agentName' => $agent
-                ? ($agent->name ?? trim(($agent->first_name ?? '').' '.($agent->last_name ?? '')) ?: 'el agente')
-                : 'el agente',
+                ? ($agent->name ?? trim(($agent->first_name ?? '').' '.($agent->last_name ?? '')) ?: 'Nuestro equipo')
+                : 'Nuestro equipo',
             'propertyName' => $screening->property->title ?? $screening->property->name ?? ('Propiedad #'.$screening->property_id),
         ];
     }

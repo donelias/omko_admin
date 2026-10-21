@@ -27,7 +27,7 @@ class PreQualificationNotificationService
         $entityName = $entity?->name ?? 'N/A';
         $projectName = $preQualification->project?->title ?? 'N/A';
         $advisor = $preQualification->financialAdvisor;
-        $adminMail = env('MAIL_FROM_ADDRESS');
+        $adminMail = HelperService::getSettingData('company_email') ?: config('mail.from.address');
         $companyName = HelperService::getSettingData('company_name') ?? config('app.name');
 
         $clientName = $customer ? ($customer->name ?? ($customer->first_name . ' ' . $customer->last_name)) : 'Cliente';
@@ -105,7 +105,8 @@ class PreQualificationNotificationService
         }
 
         try {
-            $infoEmail = env('MAIL_FROM_ADDRESS', 'info@omko.do');
+            $infoEmail = HelperService::getSettingData('info_email')
+                ?: (HelperService::getSettingData('company_email') ?: config('mail.from.address'));
             $data = [
                 'title' => '[Admin] Nueva Precalificación - ' . $clientName,
                 'email' => $infoEmail,
