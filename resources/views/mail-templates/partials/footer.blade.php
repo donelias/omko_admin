@@ -1,5 +1,5 @@
 @php($brand = \App\Services\MailBrandService::variables())
-<div style="border: 1px solid #e2e8f0; border-top: none; background: #1a1a1a; padding: 22px 24px; border-radius: 0 0 8px 8px; text-align: center;">
+<div style="background: #1a1a1a; padding: 22px 24px; text-align: center;">
     @if ($brand['mail_social_icons'])
         <div style="margin-bottom: 18px; font-size: 0;">
             @foreach ($brand['mail_social_icons'] as $social)

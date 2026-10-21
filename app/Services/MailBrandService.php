@@ -3,11 +3,11 @@
 namespace App\Services;
 
 /**
- * Datos de marca para los correos: logo embebido y datos del pie
- * (contacto y redes sociales) leídos de la configuración.
+ * Datos de marca para los correos: logo y datos del pie (contacto y redes
+ * sociales) leídos de la configuración.
  *
- * Las imágenes se embeben en base64 como data-URI porque los clientes de
- * correo no cargan SVG ni rutas locales, y así el correo es autosuficiente.
+ * Las imágenes se referencian por URL absoluta pública. NO se usan data-URI
+ * base64 porque la mayoría de clientes (Gmail, Outlook) los bloquean.
  */
 class MailBrandService
 {
@@ -36,13 +36,13 @@ class MailBrandService
             $socialIcons[] = [
                 'name' => $net,
                 'url' => $url,
-                'icon' => self::embed('assets/images/invoice/mail/'.$net.'.png'),
+                'icon' => self::url('assets/images/invoice/mail/'.$net.'.png'),
             ];
         }
 
         return self::$cache = [
-            'mail_logo' => self::embed('assets/images/invoice/logo_omko_mail_green.png'),
-            'mail_footer_logo' => self::embed('assets/images/logo/Logo_white.png'),
+            'mail_logo' => self::url('assets/images/invoice/logo_omko_mail_green.png'),
+            'mail_footer_logo' => self::url('assets/images/logo/Logo_white.png'),
             'mail_company_name' => HelperService::getSettingData('company_name') ?: config('app.name'),
             'mail_company_email' => HelperService::getSettingData('company_email') ?: config('mail.from.address'),
             'mail_company_address' => HelperService::getSettingData('company_address'),
@@ -52,14 +52,12 @@ class MailBrandService
         ];
     }
 
-    private static function embed(string $relativePath): string
+    private static function url(string $relativePath): string
     {
-        $path = public_path($relativePath);
-
-        if (! is_file($path)) {
+        if (! is_file(public_path($relativePath))) {
             return '';
         }
 
-        return 'data:image/png;base64,'.base64_encode((string) file_get_contents($path));
+        return rtrim(config('app.url'), '/').'/'.$relativePath;
     }
 }
