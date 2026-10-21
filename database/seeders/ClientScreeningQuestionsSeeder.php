@@ -218,6 +218,16 @@ class ClientScreeningQuestionsSeeder extends Seeder
                 'weight' => 5,
                 'rank' => 17,
             ],
+            [
+                'question_key' => 'telefono_propietario_actual',
+                'question_text' => '¿Número de teléfono actual del propietario o encargado de la propiedad donde vive ahora?',
+                'field_type' => 'text',
+                'options' => null,
+                'placeholder' => 'Ej: 809-555-1234',
+                'weight' => 3,
+                'rank' => 18,
+                'is_required' => false,
+            ],
         ];
 
         foreach ($questions as $question) {
