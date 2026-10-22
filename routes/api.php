@@ -282,6 +282,12 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
 
         // Get price trends
         Route::get('trends', [PriceIntelligenceController::class, 'getTrends']);
+
+        // Real market analysis of the property zone (web search comparables)
+        Route::get('zone-analysis/{propertyId}', [PriceIntelligenceController::class, 'getZoneAnalysis']);
+
+        // Force a refresh of the zone analysis (1 refresh per zone per hour)
+        Route::post('refresh-zone', [PriceIntelligenceController::class, 'refreshZone']);
     });
     /*********************************************************************** */
 });

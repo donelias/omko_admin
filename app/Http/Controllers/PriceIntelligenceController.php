@@ -12,6 +12,7 @@ use App\Services\HelperService;
 use App\Services\PriceIntelligenceService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -113,6 +114,7 @@ class PriceIntelligenceController extends Controller
                 ],
                 'suggestion' => $suggestion,
                 'market_analysis' => $marketAnalysis,
+                'market_zone' => $this->zoneAnalysisPayload($property, true),
                 'investment_analysis' => $investment,
                 'market_position' => $marketPosition,
                 'comparable_properties' => $comparables->map(fn ($comparable) => [
@@ -426,6 +428,157 @@ class PriceIntelligenceController extends Controller
         } catch (Throwable $e) {
             return ApiResponseService::logErrorResponse($e, 'PriceIntelligenceController::exchangeRates error');
         }
+    }
+
+    /**
+     * 9. GET /api/price-intelligence/zone-analysis/{propertyId}
+     *
+     * Análisis real de la zona: comparables encontrados en la web, fuentes,
+     * precio de referencia por m², confianza y fecha de actualización.
+     */
+    public function getZoneAnalysis($propertyId)
+    {
+        try {
+            $property = Property::with('category')->find($propertyId);
+
+            if (! $property) {
+                return ApiResponseService::errorResponse('Property not found', '', null, 404);
+            }
+
+            $payload = $this->zoneAnalysisPayload($property, true);
+
+            if (! $payload) {
+                return ApiResponseService::errorResponse(
+                    'No hay análisis de mercado disponible para esta zona.',
+                    '',
+                    null,
+                    422
+                );
+            }
+
+            return ApiResponseService::successResponse('Zone market analysis retrieved', $payload);
+        } catch (Throwable $e) {
+            return ApiResponseService::logErrorResponse($e, 'PriceIntelligenceController::getZoneAnalysis error');
+        }
+    }
+
+    /**
+     * 10. POST /api/price-intelligence/refresh-zone
+     *
+     * Fuerza el refresco del análisis de la zona de una propiedad.
+     * Con cooldown de 1 hora por zona para no abusar de la cuota de Gemini.
+     */
+    public function refreshZone(Request $request)
+    {
+        try {
+            $propertyId = $request->input('property_id');
+
+            if (! $propertyId) {
+                return ApiResponseService::validationError('The property_id field is required.');
+            }
+
+            $property = Property::with('category')->find($propertyId);
+
+            if (! $property) {
+                return ApiResponseService::errorResponse('Property not found', '', null, 404);
+            }
+
+            $service = $this->service->marketAnalysisService();
+            $zoneKey = $service->zoneKeyForProperty($property);
+
+            if (! $zoneKey) {
+                return ApiResponseService::errorResponse(
+                    'This property has no valid coordinates, so its zone cannot be analyzed.',
+                    '',
+                    null,
+                    422
+                );
+            }
+
+            $cooldownKey = 'price_market_refresh_'.$zoneKey;
+
+            if (Cache::has($cooldownKey)) {
+                return ApiResponseService::errorResponse(
+                    'This zone was refreshed recently. Please try again later.',
+                    '',
+                    null,
+                    429
+                );
+            }
+
+            Cache::put($cooldownKey, true, 3600);
+
+            $result = $service->refreshZone($zoneKey, true);
+
+            if (($result['status'] ?? null) === 'failed') {
+                return ApiResponseService::errorResponse(
+                    'The market analysis could not be completed: '.($result['error'] ?? 'unknown error'),
+                    '',
+                    null,
+                    502
+                );
+            }
+
+            // La sugerencia de precio se recalcula con los datos nuevos
+            try {
+                $this->service->generatePriceSuggestion($property, true);
+            } catch (Throwable $ignored) {
+                // Sin comparables internos suficientes: se mantiene la sugerencia previa.
+            }
+
+            return ApiResponseService::successResponse(
+                'Zone market analysis refreshed',
+                $this->zoneAnalysisPayload($property, true)
+            );
+        } catch (Throwable $e) {
+            return ApiResponseService::logErrorResponse($e, 'PriceIntelligenceController::refreshZone error');
+        }
+    }
+
+    /**
+     * Payload del análisis de zona listo para el frontend.
+     */
+    protected function zoneAnalysisPayload(Property $property, bool $full = false): ?array
+    {
+        $service = $this->service->marketAnalysisService();
+        $analysis = $service->currentForProperty($property);
+
+        if (! $analysis) {
+            return null;
+        }
+
+        $payload = [
+            'zone_label' => $analysis->zone_label,
+            'radius_km' => (float) $analysis->radius_km,
+            'latitude' => (float) $analysis->latitude,
+            'longitude' => (float) $analysis->longitude,
+            'status' => $analysis->status,
+            'market_condition' => $analysis->market_condition,
+            'price_per_sqm' => (float) $analysis->price_per_sqm,
+            'median_price' => (float) $analysis->median_price,
+            'average_price' => (float) $analysis->average_price,
+            'min_price' => (float) $analysis->min_price,
+            'max_price' => (float) $analysis->max_price,
+            'comparable_count' => (int) $analysis->comparable_count,
+            'internal_comparable_count' => (int) $analysis->internal_comparable_count,
+            'confidence_score' => (float) $analysis->confidence_score,
+            'confidence_level' => $analysis->confidence_level,
+            'data_fetched_at' => $analysis->data_fetched_at?->toIso8601String(),
+            'freshness' => $analysis->freshness_label,
+            'is_stale' => $service->isStale($analysis),
+            'summary' => $analysis->summary,
+            'sources' => array_map(fn ($source) => [
+                'title' => $source['title'] ?? null,
+                'uri' => $source['uri'] ?? null,
+                'domain' => $source['domain'] ?? null,
+            ], (array) $analysis->sources),
+        ];
+
+        if ($full) {
+            $payload['comparables'] = $analysis->comparables_list;
+        }
+
+        return $payload;
     }
 
     /**

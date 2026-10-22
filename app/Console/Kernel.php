@@ -30,6 +30,9 @@ class Kernel extends ConsoleKernel
         $schedule->command('price:fetch-exchange-rates')->dailyAt('08:00')->withoutOverlapping();
         // Generate AI price suggestions for active properties (after exchange rates)
         $schedule->command('price:generate-suggestions --limit=100')->dailyAt('09:00')->withoutOverlapping();
+        // Monthly refresh of the real market analysis per zone (web search with
+        // Google Search Grounding). Uses the quota, so it runs once a month.
+        $schedule->command('price:refresh-market')->monthlyOn(1, '03:00')->withoutOverlapping();
         // Auto-cancel pending appointments based on preferences
         $schedule->command('appointments:auto-cancel')->everyFiveMinutes();
 

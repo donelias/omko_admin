@@ -14,13 +14,35 @@ use Illuminate\Support\Facades\Log;
 
 class PriceIntelligenceService
 {
-    const ALGORITHM_VERSION = '1.0';
+    const ALGORITHM_VERSION = '2.0';
 
-    // Pesos de los algoritmos (suma = 1.0)
+    // Pesos de los algoritmos (suma = 1.0) cuando NO hay análisis web de zona
     const WEIGHT_PRICE_PER_SQM = 0.35;
     const WEIGHT_FEATURE_REGRESSION = 0.35;
     const WEIGHT_HISTORY = 0.20;
     const WEIGHT_MARKET = 0.10;
+
+    // Pesos cuando existe un análisis real de mercado (búsqueda web con
+    // grounding). El dato externo pasa a ser la referencia principal.
+    const WEIGHT_WEB_PRICE_PER_SQM = 0.15;
+    const WEIGHT_WEB_FEATURE_REGRESSION = 0.15;
+    const WEIGHT_WEB_HISTORY = 0.05;
+    const WEIGHT_WEB_MARKET_ADJUSTMENT = 0.05;
+    const WEIGHT_WEB_MARKET = 0.60;
+
+    public function __construct(protected ?PriceMarketAnalysisService $marketAnalysisService = null) {}
+
+    /**
+     * Servicio de análisis de mercado por zona (puede no estar enlazado).
+     */
+    public function marketAnalysisService(): PriceMarketAnalysisService
+    {
+        if (! $this->marketAnalysisService) {
+            $this->marketAnalysisService = app(PriceMarketAnalysisService::class);
+        }
+
+        return $this->marketAnalysisService;
+    }
 
     /**
      * ---------------------------------------------------------------------
@@ -210,9 +232,13 @@ class PriceIntelligenceService
 
     public function generatePriceSuggestion($property, $forceRefresh = false)
     {
-        $existing = PriceSuggestion::where('property_id', $property->id)->first();
+        $existing = PriceSuggestion::withTrashed()->where('property_id', $property->id)->first();
 
         if (! $forceRefresh && $existing && ! $existing->is_expired) {
+            if ($existing->trashed()) {
+                $existing->restore();
+            }
+
             return $existing;
         }
 
@@ -230,47 +256,90 @@ class PriceIntelligenceService
             $transactionType
         );
 
-        $calculation = $this->calculateSuggestedPrice($property, $comparables, $targetMetrics, $marketAnalysis);
+        // Análisis real de la zona (precios web alrededor de la ubicación).
+        // Si falta o está vencido se encola su refresco en segundo plano.
+        $zoneAnalysis = null;
+        try {
+            $zoneAnalysis = $this->marketAnalysisService()->ensureForProperty($property);
+        } catch (Exception $e) {
+            Log::warning('No se pudo resolver el análisis de zona: '.$e->getMessage());
+        }
+
+        $calculation = $this->calculateSuggestedPrice($property, $comparables, $targetMetrics, $marketAnalysis, $zoneAnalysis);
 
         $confidence = $this->calculateConfidenceScore(
             $calculation['comparables_used'],
             $calculation['historical_data'],
-            $calculation['algorithms_count']
+            $calculation['algorithms_count'],
+            $zoneAnalysis
         );
         $salesProbability = $this->estimateSalesProbability($property, $calculation['suggested_price'], $marketAnalysis);
         $recommendation = $this->recommendationFor($property->price, $calculation['suggested_price'], $confidence);
-        $reasoning = $this->buildReasoning($calculation, $comparables->count());
+        $reasoning = $this->buildReasoning($calculation, $comparables->count(), $zoneAnalysis);
 
-        $suggestion = PriceSuggestion::updateOrCreate(
-            ['property_id' => $property->id],
-            [
-                'property_id' => $property->id,
-                'suggested_price' => round($calculation['suggested_price'], 2),
-                'suggested_price_per_sqm' => $targetMetrics['area'] > 0 ? round($calculation['suggested_price'] / $targetMetrics['area'], 2) : null,
-                'minimum_price' => round($calculation['minimum_price'], 2),
-                'maximum_price' => round($calculation['maximum_price'], 2),
-                'current_price' => $property->price,
-                'price_difference' => round($calculation['suggested_price'] - $property->price, 2),
-                'confidence_score' => round($confidence, 2),
-                'recommendation' => $recommendation,
-                'reasoning' => $reasoning,
-                'comparable_properties' => array_map('intval', $comparables->pluck('id')->toArray()),
-                'market_trend' => $marketAnalysis ? ($marketAnalysis->getMarketCondition() ?: 'balanced') : 'balanced',
-                'estimated_sales_probability' => round($salesProbability, 2),
-                'is_ai_generated' => true,
-                'algorithm_version' => self::ALGORITHM_VERSION,
-                'generated_by' => $this->currentUserId(),
-                'expires_at' => now()->addDays((int) config('global.PRICE_SUGGESTION_VALID_DAYS', 30)),
-            ]
-        );
+        $suggestion = $this->upsertSuggestion($property->id, [
+            'property_id' => $property->id,
+            'suggested_price' => round($calculation['suggested_price'], 2),
+            'suggested_price_per_sqm' => $targetMetrics['area'] > 0 ? round($calculation['suggested_price'] / $targetMetrics['area'], 2) : null,
+            'minimum_price' => round($calculation['minimum_price'], 2),
+            'maximum_price' => round($calculation['maximum_price'], 2),
+            'current_price' => $property->price,
+            'price_difference' => round($calculation['suggested_price'] - $property->price, 2),
+            'confidence_score' => round($confidence, 2),
+            'recommendation' => $recommendation,
+            'reasoning' => $reasoning,
+            'comparable_properties' => array_map('intval', $comparables->pluck('id')->toArray()),
+            'market_trend' => $this->resolveMarketTrend($zoneAnalysis, $marketAnalysis),
+            'estimated_sales_probability' => round($salesProbability, 2),
+            'is_ai_generated' => true,
+            'algorithm_version' => self::ALGORITHM_VERSION,
+            'generated_by' => $this->currentUserId(),
+            'market_analysis_id' => $zoneAnalysis?->id,
+            'market_zone_label' => $zoneAnalysis?->zone_label,
+            'market_data_fetched_at' => $zoneAnalysis?->data_fetched_at,
+            'market_comparable_count' => (int) ($zoneAnalysis?->comparable_count ?? 0),
+            'market_sources' => $zoneAnalysis ? array_slice((array) $zoneAnalysis->sources, 0, 10) : null,
+            'market_price_per_sqm' => $zoneAnalysis?->price_per_sqm,
+            'expires_at' => now()->addDays((int) config('global.PRICE_SUGGESTION_VALID_DAYS', 30)),
+        ]);
 
         return $suggestion;
     }
 
     /**
-     * Combina los 4 algoritmos ponderados.
+     * Guarda la sugerencia de precio.
+     *
+     * `price_suggestions` usa soft deletes y tiene un índice único por
+     * propiedad, así que `updateOrCreate()` de Laravel no encuentra el
+     * registro archivado e intenta insertar, lo que viola el índice. Aquí se
+     * busca incluyendo los eliminados y se restaura.
      */
-    protected function calculateSuggestedPrice($property, $comparables, array $targetMetrics, $marketAnalysis)
+    protected function upsertSuggestion(int $propertyId, array $attributes): PriceSuggestion
+    {
+        $suggestion = PriceSuggestion::withTrashed()->where('property_id', $propertyId)->first();
+
+        if ($suggestion) {
+            if ($suggestion->trashed()) {
+                $suggestion->restore();
+            }
+
+            $suggestion->fill($attributes);
+            $suggestion->save();
+
+            return $suggestion;
+        }
+
+        return PriceSuggestion::create($attributes);
+    }
+
+    /**
+     * Combina los algoritmos ponderados.
+     *
+     * Cuando existe un análisis real de la zona (precios web obtenidos con
+     * Google Search Grounding) sus pesos se activan y pasa a ser la fuente
+     * de referencia principal del precio.
+     */
+    protected function calculateSuggestedPrice($property, $comparables, array $targetMetrics, $marketAnalysis, $zoneAnalysis = null)
     {
         $currency = $property->currency ?: 'DOP';
 
@@ -278,25 +347,47 @@ class PriceIntelligenceService
         $algo2 = $this->featureRegressionAnalysis($property, $comparables, $targetMetrics);
         $algo3 = $this->propertyHistoryAnalysis($property, $currency);
         $algo4 = $this->marketAdjustment($property, $marketAnalysis);
+        $algo5 = $this->webMarketAnalysis($property, $zoneAnalysis, $targetMetrics);
+
+        $weights = $algo5 !== null
+            ? [
+                'price_per_sqm' => self::WEIGHT_WEB_PRICE_PER_SQM,
+                'feature_regression' => self::WEIGHT_WEB_FEATURE_REGRESSION,
+                'history' => self::WEIGHT_WEB_HISTORY,
+                'market' => self::WEIGHT_WEB_MARKET_ADJUSTMENT,
+                'web_market' => self::WEIGHT_WEB_MARKET,
+            ]
+            : [
+                'price_per_sqm' => self::WEIGHT_PRICE_PER_SQM,
+                'feature_regression' => self::WEIGHT_FEATURE_REGRESSION,
+                'history' => self::WEIGHT_HISTORY,
+                'market' => self::WEIGHT_MARKET,
+            ];
+
+        $values = [
+            'price_per_sqm' => $algo1,
+            'feature_regression' => $algo2,
+            'history' => $algo3,
+            'market' => $algo4,
+            'web_market' => $algo5,
+        ];
 
         $weightedBase = 0.0;
         $weightTotal = 0.0;
 
-        if ($algo1 !== null) {
-            $weightedBase += $this->toBaseCurrency($algo1['price'], $currency) * self::WEIGHT_PRICE_PER_SQM;
-            $weightTotal += self::WEIGHT_PRICE_PER_SQM;
-        }
-        if ($algo2 !== null) {
-            $weightedBase += $this->toBaseCurrency($algo2['price'], $currency) * self::WEIGHT_FEATURE_REGRESSION;
-            $weightTotal += self::WEIGHT_FEATURE_REGRESSION;
-        }
-        if ($algo3 !== null) {
-            $weightedBase += $this->toBaseCurrency($algo3['price'], $currency) * self::WEIGHT_HISTORY;
-            $weightTotal += self::WEIGHT_HISTORY;
-        }
-        if ($algo4 !== null) {
-            $weightedBase += $this->toBaseCurrency($algo4['price'], $currency) * self::WEIGHT_MARKET;
-            $weightTotal += self::WEIGHT_MARKET;
+        foreach ($values as $key => $algo) {
+            if ($algo === null) {
+                continue;
+            }
+
+            $weight = (float) ($weights[$key] ?? 0);
+
+            if ($weight <= 0) {
+                continue;
+            }
+
+            $weightedBase += $this->toBaseCurrency($algo['price'], $currency) * $weight;
+            $weightTotal += $weight;
         }
 
         if ($weightTotal <= 0) {
@@ -312,20 +403,81 @@ class PriceIntelligenceService
             $stdDevPrice = $this->fromBaseCurrency($algo1['std_deviation'] * $targetMetrics['area'], $currency);
         }
 
+        $minimumPrice = max(0, $suggestedPrice - abs($stdDevPrice));
+        $maximumPrice = $suggestedPrice + abs($stdDevPrice);
+
+        // Con análisis web el rango de la zona (percentiles 25-75 reales) es
+        // más representativo que la dispersión de las propiedades propias.
+        if ($algo5 !== null) {
+            $minimumPrice = min($algo5['minimum'], $suggestedPrice);
+            $maximumPrice = max($algo5['maximum'], $suggestedPrice);
+        }
+
         return [
             'suggested_price' => $suggestedPrice,
-            'minimum_price' => max(0, $suggestedPrice - abs($stdDevPrice)),
-            'maximum_price' => $suggestedPrice + abs($stdDevPrice),
-            'algorithms_count' => collect([$algo1, $algo2, $algo3, $algo4])->filter()->count(),
+            'minimum_price' => $minimumPrice,
+            'maximum_price' => $maximumPrice,
+            'algorithms_count' => collect($values)->filter()->count(),
             'comparables_used' => $comparables->count(),
             'historical_data' => ($algo3 !== null),
-            'algorithms' => [
-                'price_per_sqm' => $algo1,
-                'feature_regression' => $algo2,
-                'history' => $algo3,
-                'market' => $algo4,
-            ],
+            'algorithms' => $values,
         ];
+    }
+
+    /**
+     * Algoritmo 5: precio de referencia de la zona según búsqueda web real.
+     *
+     * Usa el precio por m² de los comparables de la zona (percentiles y
+     * mediana ajustada por número de dormitorios) y lo aplica al área de la
+     * propiedad evaluada.
+     */
+    protected function webMarketAnalysis($property, $zoneAnalysis, array $targetMetrics)
+    {
+        if (! $zoneAnalysis) {
+            return null;
+        }
+
+        $perSqm = (float) $zoneAnalysis->price_per_sqm;
+        $area = (float) ($targetMetrics['area'] ?? 0);
+
+        if ($perSqm <= 0 || $area <= 0) {
+            return null;
+        }
+
+        $currency = $property->currency ?: 'DOP';
+
+        $price = $this->fromBaseCurrency($perSqm * $area, $currency);
+        $minimum = $this->fromBaseCurrency(((float) $zoneAnalysis->price_per_sqm_min) * $area, $currency);
+        $maximum = $this->fromBaseCurrency(((float) $zoneAnalysis->price_per_sqm_max) * $area, $currency);
+
+        return [
+            'price' => round($price, 2),
+            'price_per_sqm' => $perSqm,
+            'minimum' => round($minimum, 2),
+            'maximum' => round($maximum, 2),
+            'comparables_used' => (int) $zoneAnalysis->comparable_count,
+            'sources' => count((array) $zoneAnalysis->sources),
+            'zone' => $zoneAnalysis->zone_label,
+            'data_fetched_at' => $zoneAnalysis->data_fetched_at?->toDateString(),
+            'confidence_score' => (float) $zoneAnalysis->confidence_score,
+        ];
+    }
+
+    /**
+     * Condición de mercado: la del análisis de zona (dato web real) si existe,
+     * si no la del análisis interno.
+     */
+    protected function resolveMarketTrend($zoneAnalysis, $marketAnalysis): string
+    {
+        if ($zoneAnalysis && ! empty($zoneAnalysis->market_condition)) {
+            return $zoneAnalysis->market_condition;
+        }
+
+        if ($marketAnalysis) {
+            return $marketAnalysis->getMarketCondition() ?: 'balanced';
+        }
+
+        return 'balanced';
     }
 
     /**
@@ -486,7 +638,7 @@ class PriceIntelligenceService
      * ---------------------------------------------------------------------
      */
 
-    public function calculateConfidenceScore($comparablesCount, $hasHistory, $algorithmsCount)
+    public function calculateConfidenceScore($comparablesCount, $hasHistory, $algorithmsCount, $zoneAnalysis = null)
     {
         $score = 50.0;
 
@@ -501,6 +653,22 @@ class PriceIntelligenceService
         // +5 si convergen ≥ 3 algoritmos
         if ($algorithmsCount >= 3) {
             $score += 5;
+        }
+
+        // El análisis real de zona (búsqueda web) refuerza la confianza
+        if ($zoneAnalysis) {
+            $zoneConfidence = (float) $zoneAnalysis->confidence_score;
+
+            if ($zoneConfidence >= 70) {
+                $score += 15;
+            } elseif ($zoneConfidence >= 45) {
+                $score += 8;
+            }
+
+            // Con datos web se penaliza la dispersión interna
+            if ((int) $zoneAnalysis->comparable_count >= 10) {
+                $score += 5;
+            }
         }
 
         return max(0, round(min(100, $score), 2));
@@ -561,7 +729,7 @@ class PriceIntelligenceService
         return 'maintain';
     }
 
-    protected function buildReasoning(array $calculation, $comparableCount)
+    protected function buildReasoning(array $calculation, $comparableCount, $zoneAnalysis = null)
     {
         $algorithms = $calculation['algorithms'];
         $parts = [];
@@ -578,8 +746,18 @@ class PriceIntelligenceService
         if (! empty($algorithms['market'])) {
             $parts[] = 'Ajuste de mercado x'.number_format($algorithms['market']['multiplier'], 3).' ('.implode(', ', $algorithms['market']['factors']).').';
         }
+        if (! empty($algorithms['web_market'])) {
+            $web = $algorithms['web_market'];
+            $parts[] = 'Análisis real de zona ('.$web['comparables_used'].' propiedades web, '.$web['sources'].' fuentes, datos del '.$web['data_fetched_at'].'): '.number_format($web['price'], 2).' ('.number_format($web['price_per_sqm'], 2).' por m²).';
+        }
 
-        return 'Sugerencia generada con '.$comparableCount.' propiedades comparables.'.PHP_EOL.implode(PHP_EOL, $parts);
+        $header = 'Sugerencia generada con '.$comparableCount.' propiedades comparables.';
+
+        if ($zoneAnalysis) {
+            $header = 'Análisis de zona '.$zoneAnalysis->zone_label.' con '.$zoneAnalysis->comparable_count.' comparables web (confianza '.$zoneAnalysis->confidence_level.').';
+        }
+
+        return $header.PHP_EOL.implode(PHP_EOL, $parts);
     }
 
     /**

@@ -68,9 +68,10 @@ class GeminiService
      *
      * @param  string  $prompt  The text prompt to send to the AI model
      * @param  array|null  $tools  Optional tools/functions for structured AI responses
+     * @param  array  $options  maxOutputTokens, temperature, timeout, attempts
      * @return array Response array with success status and data/error
      */
-    public function generateContent($prompt, $tools = null)
+    public function generateContent($prompt, $tools = null, array $options = [])
     {
         try {
             // Validate API key
@@ -80,6 +81,7 @@ class GeminiService
                 return [
                     'success' => false,
                     'error' => 'Missing Gemini API key',
+                    'error_code' => 'missing_api_key',
                 ];
             }
 
@@ -100,8 +102,8 @@ class GeminiService
                     ],
                 ],
                 'generationConfig' => [
-                    'maxOutputTokens' => 500, // Limit output to reduce tokens
-                    'temperature' => 0.7, // Balance creativity and consistency
+                    'maxOutputTokens' => (int) ($options['maxOutputTokens'] ?? 500),
+                    'temperature' => (float) ($options['temperature'] ?? 0.7),
                 ],
             ];
 
@@ -109,31 +111,7 @@ class GeminiService
                 $requestData['tools'] = $tools;
             }
 
-            $response = $this->client->post($endpoint, [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'x-goog-api-key' => $this->apiKey,
-                ],
-                'json' => $requestData,
-            ]);
-
-            $status = $response->getStatusCode();
-            $raw = $response->getBody()->getContents();
-            $body = json_decode($raw, true);
-
-            if ($status < 200 || $status >= 300) {
-                Log::error('Gemini API HTTP Error', ['status' => $status, 'body' => $raw]);
-
-                return [
-                    'success' => false,
-                    'error' => 'Content Generation currently not available please try again later.',
-                ];
-            }
-
-            return [
-                'success' => true,
-                'data' => $body,
-            ];
+            return $this->sendRequest($requestData, $options);
 
         } catch (RequestException $e) {
             Log::error('Gemini API Error: '.$e->getMessage());
@@ -141,8 +119,177 @@ class GeminiService
             return [
                 'success' => false,
                 'error' => 'Failed to generate content: '.$e->getMessage(),
+                'error_code' => 'request_failed',
             ];
         }
+    }
+
+    /**
+     * Generate content grounded on Google Search results.
+     *
+     * Enables the `google_search` tool so the model answers with live web
+     * results and returns the citations (groundingMetadata) that produced the
+     * answer. Used by the price engine to collect real comparable listings
+     * around a property location.
+     *
+     * @param  string  $prompt
+     * @param  array  $options  maxOutputTokens, temperature, timeout, attempts
+     * @return array ['success' => bool, 'text' => string, 'sources' => array, 'data' => array, 'error' => string|null]
+     */
+    public function searchGrounded(string $prompt, array $options = []): array
+    {
+        $options = array_merge([
+            'maxOutputTokens' => 4000,
+            'temperature' => 0.2,
+            'timeout' => 120,
+            'attempts' => 3,
+        ], $options);
+
+        $result = $this->generateContent(
+            $prompt,
+            [['google_search' => new \stdClass()]],
+            $options
+        );
+
+        if (empty($result['success'])) {
+            return $result + ['text' => '', 'sources' => []];
+        }
+
+        $body = $result['data'] ?? [];
+        $text = $this->getGeminiText($body);
+
+        return [
+            'success' => true,
+            'text' => $text,
+            'sources' => $this->extractGroundingSources($body),
+            'data' => $body,
+            'error' => null,
+        ];
+    }
+
+    /**
+     * Extract the web citations returned by Google Search grounding.
+     *
+     * @param  array  $body  Raw Gemini response body
+     * @return array List of ['title' => string, 'uri' => string]
+     */
+    private function extractGroundingSources(array $body): array
+    {
+        $sources = [];
+
+        foreach ((array) ($body['groundingMetadata']['groundingChunks'] ?? []) as $chunk) {
+            $web = $chunk['web'] ?? null;
+            if (! is_array($web)) {
+                continue;
+            }
+
+            $uri = trim((string) ($web['uri'] ?? ''));
+            $title = trim((string) ($web['title'] ?? ''));
+
+            if ($uri === '') {
+                continue;
+            }
+
+            $sources[] = [
+                'title' => $title !== '' ? $title : $uri,
+                'uri' => $uri,
+                'domain' => (string) (parse_url($uri, PHP_URL_HOST) ?: ''),
+            ];
+        }
+
+        // Deduplicate by URI keeping the first occurrence
+        $unique = [];
+        foreach ($sources as $source) {
+            $unique[$source['uri']] = $source;
+        }
+
+        return array_values($unique);
+    }
+
+    /**
+     * Perform the HTTP call against the Gemini API with retry on transient
+     * errors (429 / 5xx). Returns the same contract as generateContent().
+     */
+    private function sendRequest(array $requestData, array $options = []): array
+    {
+        $endpoint = $this->apiUrl;
+        if (strpos($endpoint, ':generateContent') === false && strpos($endpoint, ':streamGenerateContent') === false) {
+            $endpoint .= ':generateContent';
+        }
+
+        $timeout = (int) ($options['timeout'] ?? 15);
+        $attempts = max(1, (int) ($options['attempts'] ?? 1));
+        $backoff = (int) ($options['backoff'] ?? 5);
+
+        $lastStatus = 0;
+        $lastRaw = '';
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $response = $this->client->post($endpoint, [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'x-goog-api-key' => $this->apiKey,
+                    ],
+                    'json' => $requestData,
+                    'timeout' => $timeout,
+                ]);
+            } catch (RequestException $e) {
+                Log::error('Gemini API Request Error: '.$e->getMessage(), ['attempt' => $attempt]);
+
+                if ($attempt < $attempts) {
+                    sleep($backoff * $attempt);
+                    continue;
+                }
+
+                return [
+                    'success' => false,
+                    'error' => 'Failed to generate content: '.$e->getMessage(),
+                    'error_code' => 'request_failed',
+                ];
+            }
+
+            $status = $response->getStatusCode();
+            $raw = $response->getBody()->getContents();
+
+            if ($status >= 200 && $status < 300) {
+                $body = json_decode($raw, true);
+
+                return [
+                    'success' => true,
+                    'data' => is_array($body) ? $body : [],
+                ];
+            }
+
+            $lastStatus = $status;
+            $lastRaw = $raw;
+
+            // 429 (cuota) y 5xx son transitorios: reintentar con backoff
+            $retryable = $status === 429 || $status >= 500;
+
+            Log::error('Gemini API HTTP Error', [
+                'status' => $status,
+                'attempt' => $attempt,
+                'max_attempts' => $attempts,
+            ]);
+
+            if ($retryable && $attempt < $attempts) {
+                sleep($backoff * $attempt);
+                continue;
+            }
+
+            break;
+        }
+
+        $errorCode = $lastStatus === 429 ? 'quota_exceeded' : 'http_error';
+
+        return [
+            'success' => false,
+            'error' => 'Content Generation currently not available please try again later.',
+            'error_code' => $errorCode,
+            'status' => $lastStatus,
+            'body' => $lastRaw,
+        ];
     }
 
     /**

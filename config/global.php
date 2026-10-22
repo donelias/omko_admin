@@ -63,6 +63,27 @@ return [
     'PRICE_SUGGESTION_VALID_DAYS' => 30,
 
     // ============================================
+    // ANÁLISIS REAL DE MERCADO POR ZONA (búsqueda web con Gemini)
+    // ============================================
+    // La zona se define como un radio en kilómetros alrededor de las
+    // coordenadas (lat/lng) de la propiedad. Las propiedades que caen en la
+    // misma celda de la grilla comparten análisis.
+    'PRICE_MARKET_ENABLED' => env('PRICE_MARKET_ENABLED', true),
+    // Radio de búsqueda alrededor de la propiedad (km) que se indica al modelo
+    // y se usa como alcance del análisis de la zona.
+    'PRICE_MARKET_ZONE_RADIUS_KM' => (float) env('PRICE_MARKET_ZONE_RADIUS_KM', 3.0),
+    // Tamaño de la celda de la grilla de zonas, en grados (0.02° ≈ 2.2 km).
+    'PRICE_MARKET_CELL_DEGREES' => (float) env('PRICE_MARKET_CELL_DEGREES', 0.02),
+    // Mínimo de comparables que se exigen al modelo para dar el análisis por bueno.
+    'PRICE_MARKET_MIN_COMPARABLES' => (int) env('PRICE_MARKET_MIN_COMPARABLES', 10),
+    // Cada cuántos días se refresca el análisis de cada zona.
+    'PRICE_MARKET_REFRESH_DAYS' => (int) env('PRICE_MARKET_REFRESH_DAYS', 30),
+    // Tokens máximos de la respuesta con grounding (las respuestas son largas).
+    'PRICE_MARKET_MAX_OUTPUT_TOKENS' => (int) env('PRICE_MARKET_MAX_OUTPUT_TOKENS', 4000),
+    // Timeout (segundos) de la llamada con búsqueda web.
+    'PRICE_MARKET_TIMEOUT' => (int) env('PRICE_MARKET_TIMEOUT', 120),
+
+    // ============================================
     // INVESTMENT ANALYSIS (ROI / RENTA ESTIMADA)
     // ============================================
     // Yield bruto anualizado por mercado: cuando no hay propiedades de alquiler

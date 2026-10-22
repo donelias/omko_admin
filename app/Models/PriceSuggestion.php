@@ -32,6 +32,12 @@ class PriceSuggestion extends Model
         'is_ai_generated',
         'algorithm_version',
         'generated_by',
+        'market_analysis_id',
+        'market_zone_label',
+        'market_data_fetched_at',
+        'market_comparable_count',
+        'market_sources',
+        'market_price_per_sqm',
         'expires_at',
     ];
 
@@ -44,6 +50,8 @@ class PriceSuggestion extends Model
         'price_change_percentage',
         'is_expired',
         'is_valid',
+        'has_market_data',
+        'market_freshness',
     ];
 
     protected $casts = [
@@ -56,6 +64,10 @@ class PriceSuggestion extends Model
         'confidence_score' => 'decimal:2',
         'estimated_sales_probability' => 'decimal:2',
         'comparable_properties' => 'array',
+        'market_sources' => 'array',
+        'market_comparable_count' => 'integer',
+        'market_price_per_sqm' => 'decimal:2',
+        'market_data_fetched_at' => 'datetime',
         'is_ai_generated' => 'boolean',
         'expires_at' => 'datetime',
     ];
@@ -71,6 +83,14 @@ class PriceSuggestion extends Model
     public function generatedBy()
     {
         return $this->belongsTo(User::class, 'generated_by');
+    }
+
+    /**
+     * Snapshot del análisis de mercado de zona con el que se calculó.
+     */
+    public function marketAnalysis()
+    {
+        return $this->belongsTo(PriceMarketAnalysis::class, 'market_analysis_id');
     }
 
     /**
@@ -156,5 +176,39 @@ class PriceSuggestion extends Model
     public function getIsValidAttribute()
     {
         return ! $this->is_expired && $this->confidence_score >= 50;
+    }
+
+    /**
+     * ¿La sugerencia se apoya en datos reales de mercado (búsqueda web)?
+     */
+    public function getHasMarketDataAttribute(): bool
+    {
+        return (int) $this->market_comparable_count > 0;
+    }
+
+    /**
+     * Antigüedad de los datos de mercado en texto legible.
+     */
+    public function getMarketFreshnessAttribute(): ?string
+    {
+        if (! $this->market_data_fetched_at) {
+            return null;
+        }
+
+        $days = (int) $this->market_data_fetched_at->diffInDays(now());
+
+        if ($days <= 0) {
+            return 'actualizado hoy';
+        }
+        if ($days === 1) {
+            return 'actualizado ayer';
+        }
+        if ($days < 30) {
+            return 'actualizado hace '.$days.' días';
+        }
+
+        $months = (int) floor($days / 30);
+
+        return 'actualizado hace '.$months.' '.($months === 1 ? 'mes' : 'meses');
     }
 }

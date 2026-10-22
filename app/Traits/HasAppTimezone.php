@@ -54,11 +54,26 @@ trait HasAppTimezone
     }
 
     /**
+     * Campos de fecha que existen en el modelo.
+     *
+     * `$this->dates` es null en los modelos que no declaran la propiedad
+     * legacy, así que se recurre a `getDates()` (timestamps + casts de fecha).
+     */
+    protected function appTimezoneDateFields(): array
+    {
+        if (is_array($this->dates)) {
+            return $this->dates;
+        }
+
+        return method_exists($this, 'getDates') ? $this->getDates() : [];
+    }
+
+    /**
      * Convert dates to application timezone
      */
     protected function convertDatesToAppTimezone()
     {
-        foreach ($this->dates as $field) {
+        foreach ($this->appTimezoneDateFields() as $field) {
             if (in_array($field, $this->dateFields)) {
                 try {
                     if (isset($this->attributes[$field])) {
@@ -83,7 +98,7 @@ trait HasAppTimezone
      */
     protected function convertDatesToUTC()
     {
-        foreach ($this->dates as $field) {
+        foreach ($this->appTimezoneDateFields() as $field) {
             if (in_array($field, $this->dateFields)) {
                 try {
                     // For updates, never update created_at - remove it from dirty attributes
