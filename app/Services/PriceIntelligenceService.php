@@ -16,19 +16,13 @@ class PriceIntelligenceService
 {
     const ALGORITHM_VERSION = '2.0';
 
-    // Pesos de los algoritmos (suma = 1.0) cuando NO hay análisis web de zona
+    // Pesos de los algoritmos internos (suma = 1.0) cuando NO hay análisis
+    // web de zona. Con análisis web, estos pesos se reescalan al porcentaje
+    // que quede libre (ver webWeightFor()).
     const WEIGHT_PRICE_PER_SQM = 0.35;
     const WEIGHT_FEATURE_REGRESSION = 0.35;
     const WEIGHT_HISTORY = 0.20;
     const WEIGHT_MARKET = 0.10;
-
-    // Pesos cuando existe un análisis real de mercado (búsqueda web con
-    // grounding). El dato externo pasa a ser la referencia principal.
-    const WEIGHT_WEB_PRICE_PER_SQM = 0.15;
-    const WEIGHT_WEB_FEATURE_REGRESSION = 0.15;
-    const WEIGHT_WEB_HISTORY = 0.05;
-    const WEIGHT_WEB_MARKET_ADJUSTMENT = 0.05;
-    const WEIGHT_WEB_MARKET = 0.60;
 
     public function __construct(protected ?PriceMarketAnalysisService $marketAnalysisService = null) {}
 
@@ -349,20 +343,8 @@ class PriceIntelligenceService
         $algo4 = $this->marketAdjustment($property, $marketAnalysis);
         $algo5 = $this->webMarketAnalysis($property, $zoneAnalysis, $targetMetrics);
 
-        $weights = $algo5 !== null
-            ? [
-                'price_per_sqm' => self::WEIGHT_WEB_PRICE_PER_SQM,
-                'feature_regression' => self::WEIGHT_WEB_FEATURE_REGRESSION,
-                'history' => self::WEIGHT_WEB_HISTORY,
-                'market' => self::WEIGHT_WEB_MARKET_ADJUSTMENT,
-                'web_market' => self::WEIGHT_WEB_MARKET,
-            ]
-            : [
-                'price_per_sqm' => self::WEIGHT_PRICE_PER_SQM,
-                'feature_regression' => self::WEIGHT_FEATURE_REGRESSION,
-                'history' => self::WEIGHT_HISTORY,
-                'market' => self::WEIGHT_MARKET,
-            ];
+        // El peso del dato web depende de cuánto se pueda fiar de él.
+        $webWeight = $algo5 !== null ? $this->webWeightFor($zoneAnalysis) : 0.0;
 
         $values = [
             'price_per_sqm' => $algo1,
@@ -370,6 +352,13 @@ class PriceIntelligenceService
             'history' => $algo3,
             'market' => $algo4,
             'web_market' => $algo5,
+        ];
+
+        $baseWeights = [
+            'price_per_sqm' => self::WEIGHT_PRICE_PER_SQM,
+            'feature_regression' => self::WEIGHT_FEATURE_REGRESSION,
+            'history' => self::WEIGHT_HISTORY,
+            'market' => self::WEIGHT_MARKET,
         ];
 
         $weightedBase = 0.0;
@@ -380,7 +369,9 @@ class PriceIntelligenceService
                 continue;
             }
 
-            $weight = (float) ($weights[$key] ?? 0);
+            $weight = $key === 'web_market'
+                ? $webWeight
+                : $baseWeights[$key] * (1 - $webWeight);
 
             if ($weight <= 0) {
                 continue;
@@ -420,8 +411,43 @@ class PriceIntelligenceService
             'algorithms_count' => collect($values)->filter()->count(),
             'comparables_used' => $comparables->count(),
             'historical_data' => ($algo3 !== null),
+            'web_weight' => $webWeight,
             'algorithms' => $values,
         ];
+    }
+
+    /**
+     * Peso del análisis web en el precio final.
+     *
+     * Los precios de la base de datos no son una fuente de mercado fiable
+     * (mezclan monedas y hay áreas inconsistentes), así que cuando existe
+     * un análisis de zona con suficientes comparables y buena confianza, el
+     * precio web es la referencia y los algoritmos internos sólo se usan
+     * como referencia secundaria.
+     */
+    protected function webWeightFor($zoneAnalysis): float
+    {
+        if (! $zoneAnalysis) {
+            return 0.0;
+        }
+
+        $comparables = (int) $zoneAnalysis->comparable_count;
+        $confidence = (float) $zoneAnalysis->confidence_score;
+        $minComparables = max(5, (int) config('global.PRICE_MARKET_MIN_COMPARABLES', 10));
+
+        if ($comparables >= $minComparables && $confidence >= 70) {
+            return 1.0;
+        }
+
+        if ($comparables >= $minComparables) {
+            return 0.85;
+        }
+
+        if ($comparables >= max(5, (int) ($minComparables / 2))) {
+            return 0.60;
+        }
+
+        return 0.30;
     }
 
     /**
@@ -735,7 +761,8 @@ class PriceIntelligenceService
         $parts = [];
 
         if (! empty($algorithms['price_per_sqm'])) {
-            $parts[] = 'Precio por m² de '.$algorithms['price_per_sqm']['comparables_used'].' comparables: '.number_format($algorithms['price_per_sqm']['price'], 2).'.';
+            $algo = $algorithms['price_per_sqm'];
+            $parts[] = 'Precio por m² de '.$algo['comparables_used'].' comparables: '.number_format($algo['price'], 2).' ('.number_format($algo['price_per_sqm'] ?? 0, 2).' por m²).';
         }
         if (! empty($algorithms['feature_regression'])) {
             $parts[] = 'Regresión por características ('.number_format($algorithms['feature_regression']['price'], 2).') ponderada por similitud.';
@@ -750,11 +777,15 @@ class PriceIntelligenceService
             $web = $algorithms['web_market'];
             $parts[] = 'Análisis real de zona ('.$web['comparables_used'].' propiedades web, '.$web['sources'].' fuentes, datos del '.$web['data_fetched_at'].'): '.number_format($web['price'], 2).' ('.number_format($web['price_per_sqm'], 2).' por m²).';
         }
-
         $header = 'Sugerencia generada con '.$comparableCount.' propiedades comparables.';
 
         if ($zoneAnalysis) {
             $header = 'Análisis de zona '.$zoneAnalysis->zone_label.' con '.$zoneAnalysis->comparable_count.' comparables web (confianza '.$zoneAnalysis->confidence_level.').';
+
+            if (isset($calculation['web_weight'])) {
+                $weight = (int) round($calculation['web_weight'] * 100);
+                $header .= ' Referencia de mercado web: '.$weight.'% del precio sugerido.';
+            }
         }
 
         return $header.PHP_EOL.implode(PHP_EOL, $parts);
