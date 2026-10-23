@@ -237,7 +237,14 @@ class PriceMarketAnalysisService
             return null;
         }
 
-        return PriceMarketAnalysis::currentForZone($zoneKey, $this->propertyTypeSlug($property));
+        return PriceMarketAnalysis::query()
+            ->zone($zoneKey)
+            ->usable()
+            ->current()
+            ->where('transaction_type', $this->transactionTypeOf($property))
+            ->orderByDesc('data_fetched_at')
+            ->orderByDesc('id')
+            ->first();
     }
 
     public function isStale(?PriceMarketAnalysis $analysis): bool
