@@ -143,8 +143,9 @@ class PriceMarketAnalysis extends Model
     public function getSourcesListAttribute(): array
     {
         $list = [];
+        $sources = is_array($this->sources) ? $this->sources : [];
 
-        foreach ((array) $this->sources as $source) {
+        foreach ($sources as $source) {
             if (! is_array($source)) {
                 continue;
             }
@@ -176,7 +177,7 @@ class PriceMarketAnalysis extends Model
             return (int) $this->attributes['source_count'];
         }
 
-        return count($this->sources_list);
+        return count($this->sources_list ?? []);
     }
 
     /**
