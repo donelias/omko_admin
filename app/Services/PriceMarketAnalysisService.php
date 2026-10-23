@@ -341,7 +341,7 @@ class PriceMarketAnalysisService
 
         $payload = $this->parsePayload((string) ($result['text'] ?? ''));
         $comparables = $this->normalizeComparables((array) ($payload['comparables'] ?? []));
-        $sources = $this->normalizeSources((array) ($result['sources'] ?? []));
+        $sources = $this->normalizeSources($result['sources'] ?? []);
 
         $stats = $this->computeStats($comparables, $anchor, count($sources));
         $status = $stats['comparable_count'] >= $this->minComparables() ? 'completed' : 'partial';
@@ -752,20 +752,30 @@ class PriceMarketAnalysisService
                 continue;
             }
 
-            $uri = trim((string) ($source['uri'] ?? ($source['url'] ?? '')));
+            $uri = trim((string) ($source['uri'] ?? ($source['url'] ?? ($source['web']['uri'] ?? ''))));
             if ($uri === '') {
                 continue;
             }
 
-            if (isset($seen[$uri])) {
+            // Si solo hay chunks de grounding sin URL limpia, intentar extraer
+            $title = trim((string) ($source['title'] ?? ($source['web']['title'] ?? '')));
+            $domain = trim((string) ($source['domain'] ?? ''));
+
+            if ($domain === '' && preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i', $title)) {
+                $domain = $title;
+            }
+
+            $key = $domain !== '' ? mb_strtolower($domain) : $uri;
+
+            if (isset($seen[$key])) {
                 continue;
             }
-            $seen[$uri] = true;
+            $seen[$key] = true;
 
             $result[] = [
-                'title' => trim((string) ($source['title'] ?? '')) ?: $uri,
+                'title' => $title !== '' ? $title : ($domain !== '' ? $domain : $uri),
                 'uri' => $uri,
-                'domain' => trim((string) ($source['domain'] ?? '')) ?: (string) (parse_url($uri, PHP_URL_HOST) ?: ''),
+                'domain' => $domain !== '' ? $domain : (string) (parse_url($uri, PHP_URL_HOST) ?: ''),
                 'accessed_at' => now()->toIso8601String(),
             ];
         }

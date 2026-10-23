@@ -177,7 +177,13 @@ class GeminiService
     {
         $sources = [];
 
-        foreach ((array) ($body['groundingMetadata']['groundingChunks'] ?? []) as $chunk) {
+        // Gemini devuelve groundingMetadata dentro de cada candidato
+        // (candidates[0].groundingMetadata). Se acepta también a nivel raíz
+        // por compatibilidad con versiones anteriores de la API.
+        $metadata = $body['candidates'][0]['groundingMetadata']
+            ?? ($body['groundingMetadata'] ?? []);
+
+        foreach ((array) ($metadata['groundingChunks'] ?? []) as $chunk) {
             $web = $chunk['web'] ?? null;
             if (! is_array($web)) {
                 continue;
@@ -190,17 +196,32 @@ class GeminiService
                 continue;
             }
 
+            // En grounding el "title" suele ser el dominio del portal, y el
+            // "uri" un redirect de vertexaisearch: el dominio real hay que
+            // sacarlo del title cuando tiene forma de host.
+            $domain = trim((string) ($web['domain'] ?? ''));
+
+            if ($domain === '' && preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i', $title)) {
+                $domain = $title;
+            }
+
+            if ($domain === '') {
+                $domain = (string) (parse_url($uri, PHP_URL_HOST) ?: '');
+            }
+
             $sources[] = [
                 'title' => $title !== '' ? $title : $uri,
                 'uri' => $uri,
-                'domain' => (string) (parse_url($uri, PHP_URL_HOST) ?: ''),
+                'domain' => $domain,
             ];
         }
 
-        // Deduplicate by URI keeping the first occurrence
+        // Se deduplica por dominio (varias páginas del mismo portal no aportan
+        // fuentes distintas) y por URI cuando no hay dominio.
         $unique = [];
         foreach ($sources as $source) {
-            $unique[$source['uri']] = $source;
+            $key = $source['domain'] !== '' ? mb_strtolower($source['domain']) : $source['uri'];
+            $unique[$key] = $source;
         }
 
         return array_values($unique);

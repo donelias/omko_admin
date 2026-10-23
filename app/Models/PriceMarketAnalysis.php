@@ -138,6 +138,48 @@ class PriceMarketAnalysis extends Model
     }
 
     /**
+     * Fuentes web para el frontend.
+     */
+    public function getSourcesListAttribute(): array
+    {
+        $list = [];
+
+        foreach ((array) $this->sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+
+            $uri = $source['uri'] ?? ($source['url'] ?? null);
+            $domain = $source['domain'] ?? null;
+
+            if (! $domain && $uri) {
+                $domain = parse_url($uri, PHP_URL_HOST);
+            }
+
+            $list[] = [
+                'title' => $source['title'] ?? $domain ?? $uri,
+                'uri' => $uri,
+                'url' => $uri,
+                'domain' => $domain,
+            ];
+        }
+
+        return $list;
+    }
+
+    /**
+     * Contador de fuentes distintas.
+     */
+    public function getSourceCountAttribute(): int
+    {
+        if (isset($this->attributes['source_count'])) {
+            return (int) $this->attributes['source_count'];
+        }
+
+        return count($this->sources_list);
+    }
+
+    /**
      * Comparables web listos para el frontend.
      */
     public function getComparablesListAttribute(): array
